@@ -3,5 +3,8 @@
         <DummyNode foo="hi" bar="128" />
         <DummyNode foo="hi" />
         <CustomNode foo="hi" />
+        <SequenceNode>
+            <InnerNode foo="within inner sequence" />
+        </SequenceNode>
     </SequenceNode>
 </root>

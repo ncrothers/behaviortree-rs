@@ -1,4 +1,5 @@
 use bt_cpp_rust::{basic_types::{BTToString, NodeStatus, StringInto, PortDirection, PortInfo}, blackboard::Blackboard, tree::{DummyNode, Node, Factory}, register_node, nodes::DummyLeafNode};
+use log::{error, info};
 use quick_xml::{Reader, events::Event};
 
 struct Test;
@@ -54,22 +55,25 @@ fn blackboard_test() {
 
 
 fn main() {
+    pretty_env_logger::formatted_builder().filter_level(log::LevelFilter::Debug).init();
+
     let text = std::fs::read_to_string("./test.xml").unwrap();
     let mut factory = Factory::new();
 
     register_node!(factory, "DummyNode", DummyLeafNode);
     register_node!(factory, "CustomNode", DummyLeafNode);
+    register_node!(factory, "InnerNode", DummyLeafNode);
 
     let mut tree = match factory.parse_xml(text) {
         Ok(tree) => tree,
         Err(e) => {
-            println!("Error: {e}");
+            error!("Error: {e}");
             panic!("");
         }
     };
-    println!("{tree:?}");
+    info!("{tree:?}");
     
     let status = tree.tick_while_running();
-    println!("{status:?}");
+    info!("{status:?}");
 
 }

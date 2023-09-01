@@ -1,31 +1,32 @@
-use std::{collections::HashMap, any::Any, string::FromUtf8Error, process, sync::Arc, rc::Rc, cell::RefCell};
+use std::{collections::HashMap, any::Any, string::FromUtf8Error, process, sync::Arc, rc::Rc, cell::RefCell, io::Cursor};
 
+use log::{debug, info};
 use quick_xml::{events::{Event, attributes::Attributes}, Reader};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{basic_types::NodeStatus, nodes::{TreeNode, ControlNode, SequenceNode, DummyLeafNode, self, NodeClone, NodeConfig, TreeNodeBase}, blackboard::Blackboard};
+use crate::{basic_types::{NodeStatus, TreeNodeManifest, NodeType, PortsList, PortDirection}, nodes::{TreeNode, ControlNode, SequenceNode, DummyLeafNode, self, NodeClone, NodeConfig, TreeNodeBase, PortsRemapping, GetNodeType, TreeNodeDefaults}, blackboard::Blackboard};
 
 
 #[derive(Debug)]
 pub struct Tree {
     // xml: String,
-    root: Box<dyn TreeNodeBase>,
+    root: TreeNodePtr,
 }
 
 impl Tree {
-    pub fn new(root: Box<dyn TreeNodeBase>) -> Tree {
+    pub fn new(root: TreeNodePtr) -> Tree {
         Self {
             root
         }
     }
 
     pub fn tick_while_running(&mut self) -> NodeStatus {
-        let mut new_status = self.root.status();
+        let mut new_status = self.root.borrow().status();
 
         // Check pre conditions goes here
 
-        new_status = self.root.tick();
+        new_status = self.root.borrow_mut().tick();
 
         // Check post conditions here
 
@@ -55,7 +56,7 @@ macro_rules! register_node {
             let blackboard = $f.blackboard();
             let node_config = NodeConfig::new(blackboard);
             let node = <$t>::new($n, node_config);
-            $f.register_node($n, Box::new(node));
+            $f.register_node($n, std::rc::Rc::new(std::cell::RefCell::new(node)));
         }
     };
     ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
@@ -66,6 +67,7 @@ macro_rules! register_node {
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("Port name [{0}] did not match Node [{1}] port list: {2:?}")]
+    /// `(port_name, node_name, port_list)`
     InvalidPort(String, String, Vec<String>),
     #[error("Error occurred parsing XML attribute: {0}")]
     AttrError(#[from] quick_xml::events::attributes::AttrError),
@@ -81,26 +83,62 @@ pub enum ParseError {
     Utf8Error(#[from] FromUtf8Error),
     #[error("Attempted to parse node with unregistered name: {0}")]
     UnknownNode(String),
-    #[error("Placeholder")]
-    Empty
+    #[error("Errors like this shouldn't happen. {0}")]
+    InternalError(String),
+    #[error("{0}")]
+    MissingAttribute(String),
+    #[error("Can't find tree [{0}]")]
+    UnknownTree(String),
+}
+
+pub type TreeNodePtr = Rc<RefCell<dyn TreeNodeBase>>;
+// pub struct TreeNodePtr(Rc<RefCell<dyn TreeNodeBase>>);
+
+// impl Clone for TreeNodePtr {
+//     fn clone(&self) -> Self {
+//         let test = self.0.borrow();
+//         Self(self.0.borrow().clone_node())
+//     }
+// }
+
+trait AttrsToMap {
+    fn to_map(self) -> Result<HashMap<String, String>, ParseError>;
+}
+
+impl AttrsToMap for Attributes<'_> {
+    fn to_map(self) -> Result<HashMap<String, String>, ParseError> {
+        let mut map = HashMap::new();
+        for attr in self.into_iter() {
+            let attr = attr?;
+            let name = String::from_utf8(attr.key.0.into())?;
+            let value = String::from_utf8(attr.value.to_vec())?;
+
+            map.insert(name, value);
+        }
+
+        Ok(map)
+    }
 }
 
 pub struct Factory {
-    node_map: HashMap<String, Box<dyn TreeNodeBase>>,
+    node_map: HashMap<String, TreeNodePtr>,
     blackboard: Rc<RefCell<Blackboard>>,
+    tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
+    xmls: Vec<String>,
 }
 
 impl Factory {
     pub fn new() -> Factory {
-        let mut node_map = HashMap::<String, Box<dyn TreeNodeBase>>::new();
-        // node_map.insert("DummyNode".into(), Box::new(DummyLeafNode::new("DummyNode")));
-
-        let blackboard = Rc::new(RefCell::new(Blackboard::new()));
-
         Self {
-            node_map,
-            blackboard,
+            node_map: HashMap::new(),
+            blackboard: Rc::new(RefCell::new(Blackboard::new())),
+            tree_roots: HashMap::new(),
+            xmls: Vec::new(),
         }
+    }
+
+    fn get_node_type(&self, name: &String) -> Option<NodeType> {
+        self.node_map.get(name).map(|node| node.borrow().node_type())
     }
 
     pub fn set_blackboard(&mut self, blackboard: Rc<RefCell<Blackboard>>) {
@@ -111,12 +149,20 @@ impl Factory {
         Rc::clone(&self.blackboard)
     }
 
-    pub fn register_node(&mut self, name: impl AsRef<str>, node: Box<dyn TreeNodeBase>) {
+    pub fn register_node(&mut self, name: impl AsRef<str>, node: TreeNodePtr) {
         self.node_map.insert(name.as_ref().to_string(), node);
     }
 
-    pub fn parse_xml(&self, xml: String) -> Result<Tree, ParseError> {
-        let mut reader = Reader::from_str(&xml);
+    fn recursively_build_subtree(&mut self, tree_id: &String, tree_name: &String, path_prefix: &String, blackboard: Rc<RefCell<Blackboard>>) -> Result<(), ParseError> {
+        if !self.tree_roots.contains_key(tree_id) {
+            return Err(ParseError::UnknownTree(tree_id.clone()));
+        }
+
+        Ok(())
+    }
+
+    pub fn parse_xml(&mut self, xml: String) -> Result<Tree, ParseError> {
+        let mut reader = Reader::from_reader(Cursor::new(xml.as_bytes().to_vec()));
         reader.trim_text(true);
     
         let mut buf = Vec::new();
@@ -132,6 +178,35 @@ impl Factory {
             _ => return Err(ParseError::MissingRoot)
         }
 
+        buf.clear();
+
+        // Register each BehaviorTree in the XML
+        let mut reader_bt = reader.clone();
+        reader_bt.trim_text(true);
+
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(e)  => {
+                let name = String::from_utf8(e.name().0.into())?;
+                let attributes = e.attributes().to_map()?;
+
+                // Add error for missing BT
+                if name.as_str() != "BehaviorTree" {
+                    return Err(ParseError::ExpectedRoot(name));
+                }
+
+                // Save position of Reader for each BT
+                if let Some(id) = attributes.get("ID") {
+                    self.tree_roots.insert(id.clone(), reader_bt.clone());
+                }
+                else {
+                    return Err(ParseError::MissingAttribute(format!("Found BehaviorTree definition without ID. Cannot continue parsing.")));
+                }
+            }
+            _ => return Err(ParseError::MissingRoot)
+        };
+
+        buf.clear();
+
         // Try to match first parent tag
         match reader.read_event_into(&mut buf)? {
             Event::Start(e)  => {
@@ -141,12 +216,102 @@ impl Factory {
             _ => return Err(ParseError::MissingRoot)
         };
     }
+
+    fn build_leaf_node(node: TreeNodePtr, attributes: Attributes, node_name: String) -> Result<TreeNodePtr, ParseError> {
+        let mut node_mut = node.borrow_mut();
+        
+        // Get list of defined ports from node
+        let ports = node_mut.provided_ports();
+
+        let config = node_mut.config();
+        let manifest = config.manifest()?;
+
+        let mut remap = PortsRemapping::new();
+
+        for attr in attributes {
+            let attr = attr?;
+            let port_name = String::from_utf8(attr.key.0.into())?;
+            let port_value = String::from_utf8(attr.value.to_vec())?;
+
+            remap.insert(port_name, port_value);
+        }
+
+        // Check if all ports from XML match ports in manifest
+        for port_name in remap.keys() {
+            if !manifest.ports.contains_key(port_name) {
+                return Err(ParseError::InvalidPort(port_name.clone(), node_name, manifest.ports.to_owned().into_keys().into_iter().collect()));
+            }
+        }
+
+        // Add ports to NodeConfig
+        for (remap_name, remap_val) in remap {
+            if let Some(port) = manifest.ports.get(&remap_name) {
+                config.add_port(port.direction().clone(), remap_name, remap_val);
+            }
+        }
+
+        // Try to use defaults for unspecified port values
+        for (port_name, port_info) in manifest.ports.iter() {
+            let direction = port_info.direction();
+
+            if !matches!(direction, PortDirection::Output) 
+                && config.has_port(direction, &port_name) 
+                && port_info.default_value().is_some()
+            {
+                config.add_port(PortDirection::Input, port_name.clone(), port_info.default_value_str().unwrap());
+            }
+        }
+
+        drop(node_mut);
+
+        Ok(node)
+    }
     
-    fn process_node_with_children(&self, reader: &mut Reader<&[u8]>, name: String, attributes: Attributes) -> Result<Box<dyn TreeNodeBase>, ParseError> {
+    fn process_node_with_children(&self, reader: &mut Reader<Cursor<Vec<u8>>>, name: String, attributes: Attributes) -> Result<TreeNodePtr, ParseError> {
+
+        // Handle SubTree separately, then check NodeType
+
+        let node_type = match self.get_node_type(&name) {
+            Some(node_type) => node_type,
+            None => return Err(ParseError::UnknownNode(name))
+        };
+
+        match node_type {
+            NodeType::SubTree => {
+
+            }
+            // TODO: fill in other node type handling
+            _ => {}
+        }
+
         let mut root_node = match name.as_str() {
+            "SubTree" => {
+                for attr in attributes {
+                    let attr = attr?;
+                    let attr_name = String::from_utf8(attr.key.0.into())?;
+                    let attr_value = String::from_utf8(attr.value.into())?;
+
+                    if attr_name == "ID" {
+                        debug!("Found BehaviorTree [ID: {attr_value}");
+                    }
+                }
+                return Err(ParseError::UnknownNode(name))
+            }
             "SequenceNode" => {
+                debug!("Node: SequenceNode");
                 let node_config = NodeConfig::new(Rc::clone(&self.blackboard));
-                Box::new(SequenceNode::new(node_config))
+                let mut node = SequenceNode::new(node_config);
+                
+                let manifest = TreeNodeManifest {
+                    node_type: node.node_type(),
+                    ports: node.provided_ports(),
+                    registration_id: String::new(),
+                    description: String::new(),
+                };
+
+                node.config().set_manifest(Rc::new(manifest));
+
+                Rc::new(RefCell::new(node))
             }
             // Add other possibilities here
             _ => return Err(ParseError::UnknownNode(name)),
@@ -166,7 +331,7 @@ impl Factory {
                 Ok(Event::End(_)) => return Ok(root_node),
                 // exits the loop when reaching end of file
                 Ok(Event::Eof) => {
-                    println!("EOF");
+                    debug!("EOF");
                     return Err(ParseError::UnexpectedEof);
                 }
                 // Node with Children
@@ -174,43 +339,26 @@ impl Factory {
                     let name = String::from_utf8(e.name().0.into())?;
 
                     let child_node = self.process_node_with_children(reader, name, e.attributes())?;
-                    root_node.add_child(child_node);
+                    root_node.borrow_mut().add_child(child_node);
                 }
                 // Leaf Node
                 Ok(Event::Empty(e)) => {
-                    let name = String::from_utf8(e.name().0.into())?;
+                    let node_name = String::from_utf8(e.name().0.into())?;
+                    debug!("[Child node]: {name}");
                     
-                    let child_node = match self.node_map.get(&name) {
+                    // Get clone of node from node_map based on tag name
+                    let child_node = match self.node_map.get(&node_name) {
                         Some(node) => (*node).clone(),
-                        None => return Err(ParseError::UnknownNode(name))
+                        None => return Err(ParseError::UnknownNode(node_name))
                     };
 
-                    let ports = child_node.provided_ports();
+                    let child_node = Self::build_leaf_node(child_node, e.attributes(), node_name)?;
 
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        let port_name = String::from_utf8(attr.key.0.into())?;
-                        if !ports.contains_key(&port_name) {
-                            return Err(ParseError::InvalidPort(port_name, name, ports.into_keys().collect()));
-                        }
-
-                        let port_value = String::from_utf8(attr.value.to_vec())?;
-
-                        self.blackboard.borrow_mut().write(&port_name, port_value);
-                    }
-
-                    root_node.add_child(child_node);
-                    
-                    // println!("Empty");
-                    // println!("- Name: {}", String::from_utf8_lossy(e.name().0));
-                    // println!("- Attributes:");
-                    // for attr in e.attributes() {
-                    //     println!("  - {:?}", attr.unwrap());
-                    // }
+                    root_node.borrow_mut().add_child(child_node);   
                 }
                 Ok(e) => {
-                    println!("Other - SHOULDN'T BE HERE");
-                    println!("{e:?}");
+                    debug!("Other - SHOULDN'T BE HERE");
+                    debug!("{e:?}");
                 },
             }
             // if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low

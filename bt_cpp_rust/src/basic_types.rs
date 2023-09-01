@@ -6,7 +6,7 @@ use std::{
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
-use crate::macros::{impl_string_into, impl_into_string};
+use crate::{macros::{impl_string_into, impl_into_string}, nodes::PortClone};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
@@ -291,12 +291,12 @@ impl_into_string!(
 
 pub type PortsList = HashMap<String, PortInfo>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TreeNodeManifest {
-    node_type: NodeType,
-    registration_id: String,
-    ports: PortsList,
-    description: String,
+    pub node_type: NodeType,
+    pub registration_id: String,
+    pub ports: PortsList,
+    pub description: String,
 }
 
 // pub trait PortInfoTrait {
@@ -309,11 +309,13 @@ pub struct TreeNodeManifest {
 //     }
 // }
 
-#[derive(Debug)]
+pub trait PortValue: Any + PortClone + Debug + BTToString {}
+
+#[derive(Clone, Debug)]
 pub struct PortInfo {
     r#type: PortDirection,
     description: String,
-    default_value: Option<Box<dyn Any>>,
+    default_value: Option<Box<dyn PortValue>>,
 }
 
 impl PortInfo {
@@ -325,7 +327,21 @@ impl PortInfo {
         }
     }
 
-    pub fn set_default(&mut self, default: impl Any) {
+    pub fn default_value(&self) -> Option<&Box<dyn PortValue>> {
+        match &self.default_value {
+            Some(v) => Some(&v),
+            None => None,
+        }
+    }
+
+    pub fn default_value_str(&self) -> Option<String> {
+        match &self.default_value {
+            Some(v) => Some(v.bt_to_string()),
+            None => None,
+        }
+    }
+
+    pub fn set_default(&mut self, default: impl PortValue) {
         self.default_value = Some(Box::new(default))
     }
 
@@ -348,7 +364,7 @@ impl Port {
         Port(name.to_string(), port_info)
     }
 
-    pub fn default(mut self, default: impl Any) -> Port {
+    pub fn default(mut self, default: impl PortValue) -> Port {
         self.1.set_default(default);
         self
     }

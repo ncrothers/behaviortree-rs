@@ -35,9 +35,33 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
             fn reset_status(&mut self) {
                 self.status = NodeStatus::Idle
             }
+
+            fn config(&mut self) -> &mut NodeConfig {
+                &mut self.config
+            }
         }
 
         impl TreeNodeBase for #ident {}
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(ActionNode)]
+/// Test docstring
+pub fn derive_action_node(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let ident = input.ident;
+
+    let expanded = quote! {
+        impl ActionNode for #ident {}
+
+        impl GetNodeType for #ident {
+            fn node_type(&self) -> NodeType {
+                NodeType::Action
+            }
+        }
     };
 
     TokenStream::from(expanded)
@@ -62,17 +86,17 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ControlNode for #ident {
-            fn add_child(&mut self, child: Box<dyn TreeNodeBase>) {
+            fn add_child(&mut self, child: TreeNodePtr) {
                 self.children.push(child);
             }
 
-            fn children(&self) -> &Vec<Box<dyn TreeNodeBase>> {
+            fn children(&self) -> &Vec<TreeNodePtr> {
                 &self.children
             }
 
             fn halt_child(&mut self, index: usize) -> Result<(), NodeError> {
                 match self.children.get_mut(index) {
-                    Some(child) => Ok(child.halt()),
+                    Some(child) => Ok(child.borrow_mut().halt()),
                     None => Err(NodeError::IndexError),
                 }
             }
@@ -82,7 +106,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                     return Err(NodeError::IndexError);
                 }
         
-                self.children[start..].iter_mut().for_each(|child| child.halt());
+                self.children[start..].iter_mut().for_each(|child| child.borrow_mut().halt());
                 Ok(())
             }
 
@@ -90,7 +114,13 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 self
                     .children
                     .iter_mut()
-                    .for_each(|child| child.reset_status());
+                    .for_each(|child| child.borrow_mut().reset_status());
+            }
+        }
+
+        impl GetNodeType for #ident {
+            fn node_type(&self) -> NodeType {
+                NodeType::Control
             }
         }
     };
