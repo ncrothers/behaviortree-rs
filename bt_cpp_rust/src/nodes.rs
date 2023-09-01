@@ -1,10 +1,18 @@
 use std::{collections::HashMap, sync::Arc, rc::Rc, cell::RefCell};
 
+use bt_derive::{ControlNode, TreeNodeDefaults};
 use thiserror::Error;
 
-use crate::{blackboard::Blackboard, basic_types::{TreeNodeManifest, NodeStatus, PortsList}, define_ports, input_port};
+use crate::{blackboard::Blackboard, basic_types::{TreeNodeManifest, NodeStatus, PortsList}, macros::{get_input, define_ports, input_port}};
 
 pub type PortsRemapping = HashMap<String, String>;
+
+pub trait TreeNodeBase: TreeNode + TreeNodeDefaults + NodeClone {}
+
+pub trait TreeNodeDefaults: NodeClone {
+    fn status(&self) -> NodeStatus;
+    fn reset_status(&mut self);
+}
 
 #[derive(Debug, Error)]
 pub enum NodeError {
@@ -82,20 +90,20 @@ impl TreeNodeData {
 }
 
 pub trait NodeClone {
-    fn clone_node(&self) -> Box<dyn TreeNode>;
+    fn clone_node(&self) -> Box<dyn TreeNodeBase>;
 }
 
 impl<T> NodeClone for T
 where
-    T: 'static + TreeNode + Clone,
+    T: 'static + TreeNodeBase + Clone,
 {
-    fn clone_node(&self) -> Box<dyn TreeNode> {
+    fn clone_node(&self) -> Box<dyn TreeNodeBase> {
         Box::new(self.clone())
     }
 }
 
-impl Clone for Box<dyn TreeNode> {
-    fn clone(&self) -> Box<dyn TreeNode> {
+impl Clone for Box<dyn TreeNodeBase> {
+    fn clone(&self) -> Box<dyn TreeNodeBase> {
         self.clone_node()
     }
 }
@@ -103,31 +111,30 @@ impl Clone for Box<dyn TreeNode> {
 pub trait TreeNode: std::fmt::Debug + NodeClone {
     fn tick(&mut self) -> NodeStatus;
     fn halt(&mut self) {}
-    fn status(&self) -> NodeStatus;
-    fn reset_status(&mut self);
-    fn provided_ports(&self) -> PortsList;
+    fn provided_ports(&self) -> PortsList {
+        HashMap::new()
+    }
 }
 
 // pub trait LeafNode: TreeNode + NodeClone {}
 
-pub trait ControlNode: TreeNode {
+pub trait ControlNode {
     /// Add child to `ControlNode`
-    fn add_child(&mut self, child: Box<dyn TreeNode>);
+    fn add_child(&mut self, child: Box<dyn TreeNodeBase>);
     /// Return reference to `Vec` of children nodes
-    fn children(&self) -> &Vec<Box<dyn TreeNode>>;
+    fn children(&self) -> &Vec<Box<dyn TreeNodeBase>>;
     /// Call `halt()` on child at index
-    fn halt_child(&mut self, child_idx: usize) -> Result<(), NodeError>;
+    fn halt_child(&mut self, index: usize) -> Result<(), NodeError>;
     /// Halt all children at and after index
     fn halt_children(&mut self, start: usize) -> Result<(), NodeError>;
     /// Reset status of all child nodes
     fn reset_children(&mut self);
-    fn as_treenode_ref(&self) -> &dyn TreeNode;
 }
 
-#[derive(Debug, Clone)]
+#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
 pub struct SequenceNode {
     config: NodeConfig,
-    children: Vec<Box<dyn TreeNode>>,
+    children: Vec<Box<dyn TreeNodeBase>>,
     status: NodeStatus,
     child_idx: usize,
     all_skipped: bool
@@ -182,69 +189,12 @@ impl TreeNode for SequenceNode {
         NodeStatus::Success
     }
 
-    fn status(&self) -> NodeStatus {
-        self.status.clone()
-    }
-
-    fn reset_status(&mut self) {
-        self.status = NodeStatus::Idle;
-    }
-
     fn halt(&mut self) {
         self.reset_children()
     }
-
-    fn provided_ports(&self) -> PortsList {
-        todo!()
-    }
 }
 
-impl ControlNode for SequenceNode {
-    fn add_child(&mut self, child: Box<dyn TreeNode>) {
-        self.children.push(child);
-    }
-
-    fn children(&self) -> &Vec<Box<dyn TreeNode>> {
-        &self.children
-    }
-
-    fn halt_child(&mut self, index: usize) -> Result<(), NodeError> {
-        match self.children.get_mut(index) {
-            Some(child) => Ok(child.halt()),
-            None => Err(NodeError::IndexError),
-        }
-    }
-
-    fn halt_children(&mut self, start: usize) -> Result<(), NodeError> {
-        if start >= self.children.len() {
-            return Err(NodeError::IndexError);
-        }
-
-        self.children[start..].iter_mut().for_each(|child| child.halt());
-        Ok(())
-    }
-
-    fn reset_children(&mut self) {
-        self
-            .children
-            .iter_mut()
-            .for_each(|child| child.reset_status());
-    }
-
-    fn as_treenode_ref(&self) -> &dyn TreeNode {
-        self
-    }
-}
-
-#[derive(Debug)]
-pub enum Node {
-    SubTree(String),
-    ControlNode(Box<dyn ControlNode>),
-    LeafNode(Box<dyn TreeNode>),
-    Empty,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, TreeNodeDefaults)]
 pub struct DummyLeafNode {
     name: String,
     config: NodeConfig,
@@ -265,7 +215,11 @@ impl DummyLeafNode {
 
 impl TreeNode for DummyLeafNode {
     fn tick(&mut self) -> NodeStatus {
-        println!("{} tick! Counter: {}, blackboard value: {}", self.name, self.counter, self.config.blackboard.borrow().read::<String>("foo").unwrap());
+        let foo = get_input!(self, String, "foo");
+        println!("{} tick! Counter: {}, blackboard value: {}", self.name, self.counter, foo.unwrap());
+
+        let bar = get_input!(self, u32, "bar");
+        println!("- Blackboard [bar]: {}", bar.unwrap());
 
         self.counter += 1;
         
@@ -278,17 +232,11 @@ impl TreeNode for DummyLeafNode {
         }
     }
 
-    fn status(&self) -> NodeStatus {
-        self.status.clone()
-    }
-
-    fn reset_status(&mut self) {
-        self.status = NodeStatus::Idle;
-    }
-
     fn provided_ports(&self) -> PortsList {
         define_ports!(
-            input_port!("foo")
+            input_port!("foo"),
+            input_port!("bar")
         )
     }
 }
+

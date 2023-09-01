@@ -6,6 +6,8 @@ use std::{
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
+use crate::macros::{impl_string_into, impl_into_string};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
     Undefined,
@@ -152,43 +154,6 @@ pub trait StringInto<T> {
     fn string_into(&self) -> Result<T, Self::Err>;
 }
 
-/// Macro for simplifying implementation of `StringInto<T>` for any type that implements `FromStr`.
-///
-/// Also implements the trait for `Vec<T>`, with a delimiter of `;`.
-///
-/// The macro-based implementation works for any type that implements `FromStr`; 
-/// it calls `parse()` under the hood.
-#[macro_export]
-macro_rules! impl_string_into {
-    ( $($t:ty),* ) => {
-        $(
-            impl<T> StringInto<$t> for T
-            where T: AsRef<str>
-            {
-                type Err = <$t as FromStr>::Err;
-
-                fn string_into(&self) -> Result<$t, Self::Err> {
-                    self.as_ref().parse()
-                }
-            }
-
-            impl<T> StringInto<Vec<$t>> for T
-            where T: AsRef<str>
-            {
-                type Err = <$t as FromStr>::Err;
-
-                fn string_into(&self) -> Result<Vec<$t>, Self::Err> {
-                    self
-                        .as_ref()
-                        .split(";")
-                        .map(|x| Ok(x.parse()?))
-                        .collect()
-                }
-            }
-        ) *
-    };
-}
-
 impl_string_into!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
 
 impl StringInto<String> for String {
@@ -297,35 +262,6 @@ impl BTToString for String {
     }
 }
 
-/// Macro for simplifying implementation of `IntoString` for any type implementing `Display`.
-///
-/// Also implements the trait for `Vec<T>` for each type, creating a `;` delimited string,
-/// calling `into_string()` on the item type.
-///
-/// Implementation works for any type that implements `Display`; it calls `to_string()`.
-/// However, for custom implementations, don't include in this macro.
-macro_rules! impl_into_string {
-    ( $($t:ty),* ) => {
-        $(
-            impl BTToString for $t {
-                fn bt_to_string(&self) -> String {
-                    self.to_string()
-                }
-            }
-
-            impl BTToString for Vec<$t> {
-                fn bt_to_string(&self) -> String {
-                    self
-                        .iter()
-                        .map(|x| x.bt_to_string())
-                        .collect::<Vec<String>>()
-                        .join(";")
-                }
-            }
-        ) *
-    };
-}
-
 impl_into_string!(
     u8,
     u16,
@@ -352,45 +288,6 @@ impl_into_string!(
 // ===========================
 // End of String Conversions
 // ===========================
-
-#[macro_export]
-macro_rules! define_ports {
-    ( $($tu:expr)* ) => {
-        {
-            let mut ports = PortsList::new();
-            $(
-                let (name, port_info) = $tu;
-                ports.insert(String::from(name), port_info);
-            )*
-    
-            ports
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! input_port {
-    ($n:tt) => {
-        {
-            use crate::basic_types::{PortInfo, PortDirection};
-            let port_info = PortInfo::new(PortDirection::Input);
-    
-            ($n, port_info)
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! output_port {
-    ($n:tt) => {
-        {
-            use crate::basic_types::{PortInfo, PortDirection};
-            let port_info = PortInfo::new(PortDirection::Output);
-    
-            ($n, port_info)
-        }
-    };
-}
 
 pub type PortsList = HashMap<String, PortInfo>;
 

@@ -4,17 +4,17 @@ use quick_xml::{events::{Event, attributes::Attributes}, Reader};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{basic_types::NodeStatus, nodes::{TreeNode, ControlNode, SequenceNode, DummyLeafNode, self, NodeClone, NodeConfig}, blackboard::Blackboard};
+use crate::{basic_types::NodeStatus, nodes::{TreeNode, ControlNode, SequenceNode, DummyLeafNode, self, NodeClone, NodeConfig, TreeNodeBase}, blackboard::Blackboard};
 
 
 #[derive(Debug)]
 pub struct Tree {
     // xml: String,
-    root: Box<dyn TreeNode>,
+    root: Box<dyn TreeNodeBase>,
 }
 
 impl Tree {
-    pub fn new(root: Box<dyn TreeNode>) -> Tree {
+    pub fn new(root: Box<dyn TreeNodeBase>) -> Tree {
         Self {
             root
         }
@@ -86,13 +86,13 @@ pub enum ParseError {
 }
 
 pub struct Factory {
-    node_map: HashMap<String, Box<dyn TreeNode>>,
+    node_map: HashMap<String, Box<dyn TreeNodeBase>>,
     blackboard: Rc<RefCell<Blackboard>>,
 }
 
 impl Factory {
     pub fn new() -> Factory {
-        let mut node_map = HashMap::<String, Box<dyn TreeNode>>::new();
+        let mut node_map = HashMap::<String, Box<dyn TreeNodeBase>>::new();
         // node_map.insert("DummyNode".into(), Box::new(DummyLeafNode::new("DummyNode")));
 
         let blackboard = Rc::new(RefCell::new(Blackboard::new()));
@@ -111,7 +111,7 @@ impl Factory {
         Rc::clone(&self.blackboard)
     }
 
-    pub fn register_node(&mut self, name: impl AsRef<str>, node: Box<dyn TreeNode>) {
+    pub fn register_node(&mut self, name: impl AsRef<str>, node: Box<dyn TreeNodeBase>) {
         self.node_map.insert(name.as_ref().to_string(), node);
     }
 
@@ -142,7 +142,7 @@ impl Factory {
         };
     }
     
-    fn process_node_with_children(&self, reader: &mut Reader<&[u8]>, name: String, attributes: Attributes) -> Result<Box<dyn TreeNode>, ParseError> {
+    fn process_node_with_children(&self, reader: &mut Reader<&[u8]>, name: String, attributes: Attributes) -> Result<Box<dyn TreeNodeBase>, ParseError> {
         let mut root_node = match name.as_str() {
             "SequenceNode" => {
                 let node_config = NodeConfig::new(Rc::clone(&self.blackboard));
