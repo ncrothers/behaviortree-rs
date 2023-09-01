@@ -6,7 +6,7 @@ use std::{
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
     Undefined,
     Action,
@@ -31,7 +31,7 @@ impl std::fmt::Display for NodeType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NodeStatus {
     Idle,
     Running,
@@ -291,6 +291,12 @@ pub trait BTToString {
     fn bt_to_string(&self) -> String;
 }
 
+impl BTToString for String {
+    fn bt_to_string(&self) -> String {
+        self.clone()
+    }
+}
+
 /// Macro for simplifying implementation of `IntoString` for any type implementing `Display`.
 ///
 /// Also implements the trait for `Vec<T>` for each type, creating a `;` delimited string,
@@ -347,17 +353,53 @@ impl_into_string!(
 // End of String Conversions
 // ===========================
 
+#[macro_export]
+macro_rules! define_ports {
+    ( $($tu:expr)* ) => {
+        {
+            let mut ports = PortsList::new();
+            $(
+                let (name, port_info) = $tu;
+                ports.insert(String::from(name), port_info);
+            )*
+    
+            ports
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! input_port {
+    ($n:tt) => {
+        {
+            use crate::basic_types::{PortInfo, PortDirection};
+            let port_info = PortInfo::new(PortDirection::Input);
+    
+            ($n, port_info)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! output_port {
+    ($n:tt) => {
+        {
+            use crate::basic_types::{PortInfo, PortDirection};
+            let port_info = PortInfo::new(PortDirection::Output);
+    
+            ($n, port_info)
+        }
+    };
+}
+
 pub type PortsList = HashMap<String, PortInfo>;
 
+#[derive(Debug)]
 pub struct TreeNodeManifest {
     node_type: NodeType,
     registration_id: String,
     ports: PortsList,
     description: String,
-}
-
-pub trait PortType: BTToString {
-
 }
 
 // pub trait PortInfoTrait {
@@ -370,6 +412,7 @@ pub trait PortType: BTToString {
 //     }
 // }
 
+#[derive(Debug)]
 pub struct PortInfo {
     r#type: PortDirection,
     description: String,

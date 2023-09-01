@@ -4,6 +4,7 @@ use crate::basic_types::{StringInto, BTToString};
 
 
 
+#[derive(Debug)]
 pub struct Blackboard {
     map: HashMap<String, Box<dyn Any>>,
 }

@@ -1,0 +1,7 @@
+<root>
+    <SequenceNode>
+        <DummyNode foo="hi" />
+        <DummyNode foo="hi" />
+        <CustomNode foo="hi" />
+    </SequenceNode>
+</root>

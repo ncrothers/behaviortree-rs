@@ -1,3 +1,4 @@
 pub mod basic_types;
 pub mod blackboard;
-pub mod tree_node;
+pub mod nodes;
+pub mod tree;
