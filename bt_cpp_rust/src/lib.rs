@@ -5,12 +5,15 @@ pub mod blackboard;
 pub mod nodes {
     mod nodes;
     mod control {
-        pub mod sequence;
+        pub mod parallel;
         pub mod reactive_sequence;
+        pub mod sequence;
     }
 
-    pub use nodes::*;
+    pub use control::parallel::*;
+    pub use control::reactive_sequence::*;
     pub use control::sequence::*;
+    pub use nodes::*;
 }
-pub mod tree;
 pub mod macros;
+pub mod tree;

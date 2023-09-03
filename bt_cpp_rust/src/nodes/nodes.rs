@@ -1,16 +1,22 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
 
-use log::{info, error};
+use log::{error, info};
 use thiserror::Error;
 
-use crate::{blackboard::Blackboard, basic_types::{TreeNodeManifest, NodeStatus, PortsList, self, PortDirection, PortValue, PortsRemapping}, tree::ParseError};
-
+use crate::{
+    basic_types::{
+        self, get_remapped_key, BTToString, NodeStatus, PortDirection, PortValue, PortsList,
+        PortsRemapping, StringInto, TreeNodeManifest,
+    },
+    blackboard::Blackboard,
+    tree::ParseError,
+};
 
 // =============================
 // Trait Definitions
 // =============================
 
-pub trait TreeNodeBase: TreeNode + TreeNodeDefaults + GetNodeType {}
+pub trait TreeNodeBase: TreeNode + TreeNodeDefaults + GetNodeType + NodeTick {}
 pub trait ControlNodeBase: TreeNodeBase + ControlNode {}
 pub trait ActionNodeBase: TreeNodeBase + ActionNode {}
 
@@ -34,11 +40,17 @@ pub trait TreeNodeDefaults {
     fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase>;
 }
 
+pub trait NodeTick {
+    fn execute_tick(&mut self) -> NodeStatus;
+}
+
 pub trait ControlNode: TreeNodeBase {
     /// Add child to `ControlNode`
     fn add_child(&mut self, child: TreeNodePtr);
     /// Return reference to `Vec` of children nodes
     fn children(&self) -> &Vec<TreeNodePtr>;
+    /// Control-specific implementation of `halt()`
+    fn halt_control(&mut self);
     /// Call `halt()` on child at index
     fn halt_child(&self, index: usize) -> Result<(), NodeError>;
     /// Halt all children at and after index
@@ -146,26 +158,75 @@ impl NodeConfig {
 
     pub fn has_port(&self, direction: &PortDirection, name: &String) -> bool {
         match direction {
-            PortDirection::Input => {
-                self.input_ports.contains_key(name)
-            }
-            PortDirection::Output => {
-                self.output_ports.contains_key(name)
-
-            }
-            _ => false
+            PortDirection::Input => self.input_ports.contains_key(name),
+            PortDirection::Output => self.output_ports.contains_key(name),
+            _ => false,
         }
     }
 
     pub fn manifest(&self) -> Result<Rc<TreeNodeManifest>, ParseError> {
         match self.manifest.as_ref() {
             Some(manifest) => Ok(Rc::clone(manifest)),
-            None => Err(ParseError::InternalError(format!("Missing manifest. This shouldn't happen; please report this.")))
+            None => Err(ParseError::InternalError(format!(
+                "Missing manifest. This shouldn't happen; please report this."
+            ))),
         }
     }
 
     pub fn set_manifest(&mut self, manifest: Rc<TreeNodeManifest>) {
         let _ = self.manifest.insert(manifest);
+    }
+
+    pub fn get_input<T>(&self, port: &str) -> Result<T, NodeError>
+    where
+        T: BTToString + Clone + 'static,
+        String: StringInto<T>,
+    {
+        match self.input_ports.get(port) {
+            Some(val) => {
+                // TODO: Check if default is needed
+                if val.is_empty() {
+                    match self.manifest() {
+                        Ok(manifest) => {
+                            let port_info = manifest.ports.get(port).unwrap();
+                            match port_info.default_value() {
+                                Some(default) => match default.bt_to_string().string_into() {
+                                    Ok(value) => Ok(value),
+                                    Err(e) => Err(NodeError::PortError(String::from(port))),
+                                },
+                                None => Err(NodeError::PortError(String::from(port))),
+                            }
+                        }
+                        Err(e) => Err(NodeError::PortError(String::from(port))),
+                    }
+                } else {
+                    match get_remapped_key(port, val) {
+                        Some(key) => match self.blackboard.borrow().read::<T>(&key) {
+                            Some(val) => Ok(val),
+                            None => Err(NodeError::BlackboardError(key)),
+                        },
+                        // Just a normal string
+                        None => match val.string_into() {
+                            Ok(val) => Ok(val),
+                            Err(_) => Err(NodeError::PortValueParseError(
+                                String::from(port),
+                                format!("{:?}", TypeId::of::<T>()),
+                            )),
+                        },
+                    }
+                }
+            }
+            // Port not found
+            None => Err(NodeError::PortError(String::from(port))),
+        }
+    }
+
+    pub fn set_output<T>(&self, port: &str, value: T) -> Result<(), NodeError>
+    where
+        T: BTToString + Clone + 'static,
+    {
+        self.blackboard.borrow_mut().write(port, value);
+        Ok(())
     }
 }
 

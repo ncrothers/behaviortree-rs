@@ -1,79 +1,8 @@
-
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __get_input {
-    ($self:ident, $t:ident, $k:tt) => {
-        {
-            use $crate::blackboard::BlackboardString;
-            use $crate::basic_types::StringInto;
-            use std::any::TypeId;
-
-            let value: Result<$t, $crate::nodes::NodeError> = match $self.config().input_ports.get($k) {
-                Some(val) => {
-                    // TODO: Check if default is needed
-                    if val.is_empty() {
-                        match $self.config().manifest() {
-                            Ok(manifest) => {
-                                let port_info = manifest.ports.get($k).unwrap();
-                                match port_info.default_value() {
-                                    Some(default) => {
-                                        match default.bt_to_string().string_into() {
-                                            Ok(value) => Ok(value),
-                                            Err(e) => Err($crate::nodes::NodeError::PortError(String::from($k)))
-                                        }
-                                    },
-                                    None => Err($crate::nodes::NodeError::PortError(String::from($k)))
-                                }
-                            }
-                            Err(e) => {
-                                Err($crate::nodes::NodeError::PortError(String::from($k)))
-                            }
-                        }
-                    }
-                    else {
-                        match $crate::basic_types::get_remapped_key($k, val) {
-                            Some(key) => {
-                                match $self.config().blackboard.borrow().read::<$t>(&key) {
-                                    Some(val) => Ok(val),
-                                    None => Err($crate::nodes::NodeError::BlackboardError(key))
-                                }
-                            }
-                            // Just a normal string
-                            None => {
-                                match val.string_into() {
-                                    Ok(val) => Ok(val),
-                                    Err(_) => Err($crate::nodes::NodeError::PortValueParseError(String::from($k), format!("{:?}", TypeId::of::<$t>())))
-                                }
-                            }
-                        }
-                    }
-                }
-                // Port not found
-                None => Err($crate::nodes::NodeError::PortError(String::from($k)))
-            };
-
-            value
-        }
-    };
-}
-#[doc(inline)]
-pub use __get_input as get_input;
-
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __set_output {
-    ($k:tt, $v:expr) => {
-        self.config.blackboard.borrow_mut().write($k, $v)
-    };
-}
-#[doc(inline)]
-pub use __set_output as set_output;
-
 /// Macro for simplifying implementation of `StringInto<T>` for any type that implements `FromStr`.
 ///
 /// Also implements the trait for `Vec<T>`, with a delimiter of `;`.
 ///
-/// The macro-based implementation works for any type that implements `FromStr`; 
+/// The macro-based implementation works for any type that implements `FromStr`;
 /// it calls `parse()` under the hood.
 #[doc(hidden)]
 macro_rules! __impl_string_into {
@@ -124,7 +53,7 @@ macro_rules! __impl_into_string {
                     self.to_string()
                 }
             }
-            
+
             impl $crate::basic_types::BTToString for Vec<$t> {
                 fn bt_to_string(&self) -> String {
                     self
@@ -145,12 +74,12 @@ pub(crate) use __impl_into_string as impl_into_string;
 macro_rules! __define_ports {
     ( $($tu:expr),* ) => {
         {
-            let mut ports = PortsList::new();
+            let mut ports = $crate::basic_types::PortsList::new();
             $(
                 let (name, port_info) = $tu;
                 ports.insert(String::from(name), port_info);
             )*
-            
+
             ports
         }
     };
@@ -161,24 +90,20 @@ pub use __define_ports as define_ports;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __input_port {
-    ($n:tt) => {
-        {
-            use $crate::basic_types::{PortInfo, PortDirection};
-            let port_info = PortInfo::new(PortDirection::Input);
-            
-            ($n, port_info)
-        }
-    };
-    ($n:tt, $d:expr) => {
-        {
-            use $crate::basic_types::{PortInfo, PortDirection};
-            let mut port_info = PortInfo::new(PortDirection::Input);
-            
-            port_info.set_default($d);
-            
-            ($n, port_info)
-        }
-    };
+    ($n:tt) => {{
+        use $crate::basic_types::{PortDirection, PortInfo};
+        let port_info = PortInfo::new(PortDirection::Input);
+
+        ($n, port_info)
+    }};
+    ($n:tt, $d:expr) => {{
+        use $crate::basic_types::{PortDirection, PortInfo};
+        let mut port_info = PortInfo::new(PortDirection::Input);
+
+        port_info.set_default($d);
+
+        ($n, port_info)
+    }};
 }
 #[doc(inline)]
 pub use __input_port as input_port;
@@ -186,17 +111,40 @@ pub use __input_port as input_port;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __output_port {
-    ($n:tt) => {
-        {
-            use $crate::basic_types::{PortInfo, PortDirection};
-            let port_info = PortInfo::new(PortDirection::Output);
-            
-            ($n, port_info)
-        }
-    };
+    ($n:tt) => {{
+        use $crate::basic_types::{PortDirection, PortInfo};
+        let port_info = PortInfo::new(PortDirection::Output);
+
+        ($n, port_info)
+    }};
 }
 #[doc(inline)]
 pub use __output_port as output_port;
+
+#[doc(hidden)]
+macro_rules! __build_node_ptr {
+    ($b:expr, $n:expr, $t:ty) => {
+        {
+            use $crate::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
+            use $crate::tree::NodePtrType;
+
+            let node_config = NodeConfig::new(::std::rc::Rc::clone(&$b));
+            let mut node = <$t>::new(node_config);
+            let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_type(), $n, node.provided_ports(), "");
+            node.config().set_manifest(Rc::new(manifest));
+            let node = Box::new(node);
+            match node.node_type() {
+                _ => NodePtrType::Control(node),
+            }
+            // $npt(Box::new(node))
+        }
+    };
+    ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
+        <$t>::new($n, $($x),*)
+    };
+}
+#[doc(inline)]
+pub(crate) use __build_node_ptr as build_node_ptr;
 
 #[macro_export]
 #[doc(hidden)]
@@ -206,7 +154,7 @@ macro_rules! __register_node {
             use bt_cpp_rust::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
             use bt_cpp_rust::basic_types::{NodeType, TreeNodeManifest};
             use bt_cpp_rust::tree::NodePtrType;
-            
+
             let blackboard = $f.blackboard();
             let node_config = NodeConfig::new(blackboard);
             let mut node = <$t>::new($n, node_config);

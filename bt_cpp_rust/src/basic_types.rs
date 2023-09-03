@@ -1,12 +1,16 @@
 use std::{
-    fmt::Debug,
-    str::FromStr, collections::HashMap, any::Any, ffi::IntoStringError, convert::Infallible,
+    any::Any, collections::HashMap, convert::Infallible, ffi::IntoStringError, fmt::Debug,
+    str::FromStr,
 };
 
 use quick_xml::events::attributes::Attributes;
 use thiserror::Error;
 
-use crate::{macros::{impl_string_into, impl_into_string}, tree::ParseError, blackboard::BlackboardString};
+use crate::{
+    blackboard::BlackboardString,
+    macros::{impl_into_string, impl_string_into},
+    tree::ParseError,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
@@ -166,13 +170,13 @@ impl StringInto<String> for String {
 }
 
 impl<T> StringInto<Vec<String>> for T
-where T: AsRef<str>
+where
+    T: AsRef<str>,
 {
     type Err = Infallible;
 
     fn string_into(&self) -> Result<Vec<String>, Self::Err> {
-        self
-            .as_ref()
+        self.as_ref()
             .split(";")
             .map(|x| Ok(x.to_string()))
             .collect()
@@ -300,6 +304,22 @@ pub struct TreeNodeManifest {
     pub description: String,
 }
 
+impl TreeNodeManifest {
+    pub fn new(
+        node_type: NodeType,
+        registration_id: impl AsRef<str>,
+        ports: PortsList,
+        description: impl AsRef<str>,
+    ) -> TreeNodeManifest {
+        Self {
+            node_type,
+            registration_id: registration_id.as_ref().to_string(),
+            ports,
+            description: description.as_ref().to_string(),
+        }
+    }
+}
+
 // ===========================
 // Ports
 // ===========================
@@ -321,9 +341,7 @@ where
     }
 }
 
-impl<T> PortValue for T
-where T: Any + PortClone + Debug + BTToString
-{}
+impl<T> PortValue for T where T: Any + PortClone + Debug + BTToString {}
 
 #[derive(Clone, Debug)]
 pub struct PortInfo {
@@ -401,11 +419,13 @@ impl Port {
     }
 }
 
-pub fn get_remapped_key(port_name: impl AsRef<str>, remapped_port: impl AsRef<str>) -> Option<String> {
+pub fn get_remapped_key(
+    port_name: impl AsRef<str>,
+    remapped_port: impl AsRef<str>,
+) -> Option<String> {
     if port_name.as_ref() == "=" {
         Some(port_name.as_ref().to_string())
-    }
-    else {
+    } else {
         remapped_port.as_ref().strip_bb_pointer()
     }
 }

@@ -1,10 +1,22 @@
-use std::{collections::HashMap, string::FromUtf8Error, rc::Rc, cell::RefCell, io::Cursor};
+use std::{cell::RefCell, collections::HashMap, io::Cursor, rc::Rc, string::FromUtf8Error};
 
 use log::{debug, info};
-use quick_xml::{events::{Event, attributes::Attributes}, Reader, name::QName};
+use quick_xml::{
+    events::{attributes::Attributes, Event},
+    name::QName,
+    Reader,
+};
 use thiserror::Error;
 
-use crate::{basic_types::{NodeStatus, TreeNodeManifest, PortDirection, PortsRemapping, AttrsToMap}, nodes::{TreeNode, SequenceNode, NodeConfig, TreeNodeBase, GetNodeType, TreeNodeDefaults, ControlNodeBase, ActionNodeBase, TreeNodePtr}, blackboard::Blackboard};
+use crate::{
+    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, TreeNodeManifest},
+    blackboard::Blackboard,
+    macros::build_node_ptr,
+    nodes::{
+        ActionNodeBase, ControlNodeBase, GetNodeType, NodeConfig, ParallelNode, SequenceNode,
+        TreeNode, TreeNodeBase, TreeNodeDefaults, TreeNodePtr,
+    },
+};
 
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -50,9 +62,7 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(root: TreeNodePtr) -> Tree {
-        Self {
-            root
-        }
+        Self { root }
     }
 
     pub fn tick_while_running(&mut self) -> NodeStatus {
@@ -60,7 +70,7 @@ impl Tree {
 
         // Check pre conditions goes here
 
-        new_status = self.root.borrow_mut().tick();
+        new_status = self.root.borrow_mut().execute_tick();
 
         // Check post conditions here
 
@@ -77,22 +87,10 @@ pub struct Factory {
 impl Factory {
     pub fn new() -> Factory {
         let blackboard = Rc::new(RefCell::new(Blackboard::new()));
-        let mut node_map = HashMap::new();
-
-        let config = NodeConfig::new(Rc::clone(&blackboard));
-        let mut node = SequenceNode::new(config);
-        let manifest = TreeNodeManifest {
-            node_type: node.node_type(),
-            registration_id: "SequenceNode".to_string(),
-            ports: node.provided_ports(),
-            description: String::new(),
-        };
-        node.config().set_manifest(Rc::new(manifest));
-        node_map.insert(String::from("SequenceNode"), NodePtrType::Control(Box::new(node)));
 
         Self {
-            node_map: node_map,
-            blackboard: blackboard,
+            node_map: builtin_nodes(Rc::clone(&blackboard)),
+            blackboard,
             tree_roots: HashMap::new(),
         }
     }
@@ -112,11 +110,17 @@ impl Factory {
     fn get_node(&self, name: &String) -> Result<&NodePtrType, ParseError> {
         match self.node_map.get(name) {
             Some(node) => Ok(node),
-            None => Err(ParseError::UnknownNode(name.clone()))
+            None => Err(ParseError::UnknownNode(name.clone())),
         }
     }
 
-    fn recursively_build_subtree(&self, tree_id: &String, tree_name: &String, path_prefix: &String, blackboard: &Rc<RefCell<Blackboard>>) -> Result<TreeNodePtr, ParseError> {
+    fn recursively_build_subtree(
+        &self,
+        tree_id: &String,
+        tree_name: &String,
+        path_prefix: &String,
+        blackboard: &Rc<RefCell<Blackboard>>,
+    ) -> Result<TreeNodePtr, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
             None => {
@@ -126,49 +130,87 @@ impl Factory {
 
         match self.build_child(&mut reader)? {
             Some(child) => Ok(child),
-            None => Err(ParseError::NodeTypeMismatch(format!("SubTree")))
+            None => Err(ParseError::NodeTypeMismatch(format!("SubTree"))),
         }
     }
 
-    pub fn instantiate_tree(&self, blackboard: &Rc<RefCell<Blackboard>>, main_tree_id: &str) -> Result<Tree, ParseError> {
+    pub fn instantiate_tree(
+        &self,
+        blackboard: &Rc<RefCell<Blackboard>>,
+        main_tree_id: &str,
+    ) -> Result<Tree, ParseError> {
         let main_tree_id = String::from(main_tree_id);
 
-        let root_node = self.recursively_build_subtree(&main_tree_id, &String::new(), &String::new(), blackboard)?;
-        
+        let root_node = self.recursively_build_subtree(
+            &main_tree_id,
+            &String::new(),
+            &String::new(),
+            blackboard,
+        )?;
+
         Ok(Tree::new(root_node))
     }
 
-    fn build_leaf_node(&self, node_name: &String, attributes: Attributes) -> Result<TreeNodePtr, ParseError> {
+    fn build_leaf_node(
+        &self,
+        node_name: &String,
+        attributes: Attributes,
+    ) -> Result<TreeNodePtr, ParseError> {
         // Get clone of node from node_map based on tag name
         let node_ref = self.get_node(node_name)?;
 
         let mut node = match node_ref {
-            NodePtrType::Action(node) => {
-                node.clone()
-            }
+            NodePtrType::Action(node) => node.clone(),
             // TODO: expand more
-            x @ _ => return Err(ParseError::NodeTypeMismatch(format!("{x:?}")))
+            x @ _ => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
         };
 
         // Get list of defined ports from node
 
+        let node = node.into_tree_node_ptr();
+
+        self.add_ports_to_node(&node, node_name, attributes)?;
+
+        Ok(node)
+    }
+
+    fn build_children(
+        &self,
+        reader: &mut Reader<Cursor<Vec<u8>>>,
+    ) -> Result<Vec<TreeNodePtr>, ParseError> {
+        let mut nodes = Vec::new();
+
+        while let Some(node) = self.build_child(reader)? {
+            nodes.push(node);
+        }
+
+        Ok(nodes)
+    }
+
+    fn add_ports_to_node(
+        &self,
+        node_ptr: &TreeNodePtr,
+        node_name: &String,
+        attributes: Attributes,
+    ) -> Result<(), ParseError> {
+        let mut node = node_ptr.borrow_mut();
         let config = node.config();
         let manifest = config.manifest()?;
 
         let mut remap = PortsRemapping::new();
 
-        for attr in attributes {
-            let attr = attr?;
-            let port_name = String::from_utf8(attr.key.0.into())?;
-            let port_value = String::from_utf8(attr.value.to_vec())?;
-
+        for (port_name, port_value) in attributes.to_map()? {
             remap.insert(port_name, port_value);
         }
 
         // Check if all ports from XML match ports in manifest
         for port_name in remap.keys() {
             if !manifest.ports.contains_key(port_name) {
-                return Err(ParseError::InvalidPort(port_name.clone(), node_name.clone(), manifest.ports.to_owned().into_keys().into_iter().collect()));
+                return Err(ParseError::InvalidPort(
+                    port_name.clone(),
+                    node_name.clone(),
+                    manifest.ports.to_owned().into_keys().into_iter().collect(),
+                ));
             }
         }
 
@@ -183,29 +225,25 @@ impl Factory {
         for (port_name, port_info) in manifest.ports.iter() {
             let direction = port_info.direction();
 
-            if !matches!(direction, PortDirection::Output) 
-                && !config.has_port(direction, &port_name) 
+            if !matches!(direction, PortDirection::Output)
+                && !config.has_port(direction, &port_name)
                 && port_info.default_value().is_some()
             {
-                config.add_port(PortDirection::Input, port_name.clone(), port_info.default_value_str().unwrap());
+                config.add_port(
+                    PortDirection::Input,
+                    port_name.clone(),
+                    port_info.default_value_str().unwrap(),
+                );
             }
         }
 
-        Ok(node.into_tree_node_ptr())
+        Ok(())
     }
 
-    fn build_children(&self, reader: &mut Reader<Cursor<Vec<u8>>>) -> Result<Vec<TreeNodePtr>, ParseError> {
-        let mut nodes = Vec::new();
-
-        while let Some(node) = self.build_child(reader)? {
-            nodes.push(node);
-        }
-
-        Ok(nodes)
-    }
-
-    fn build_child(&self, reader: &mut Reader<Cursor<Vec<u8>>>) -> Result<Option<TreeNodePtr>, ParseError> {
-
+    fn build_child(
+        &self,
+        reader: &mut Reader<Cursor<Vec<u8>>>,
+    ) -> Result<Option<TreeNodePtr>, ParseError> {
         let blackboard = Rc::clone(&self.blackboard);
         let config = NodeConfig::new(blackboard);
         let test = NodePtrType::General(Box::new(SequenceNode::new(config)));
@@ -221,6 +259,7 @@ impl Factory {
             // Node with Children
             Event::Start(e) => {
                 let node_name = String::from_utf8(e.name().0.into())?;
+                let attributes = e.attributes();
 
                 debug!("build_child Start: {node_name}");
 
@@ -236,7 +275,11 @@ impl Factory {
                             node.add_child(child);
                         }
 
-                        node.into_tree_node_ptr()
+                        let node = node.into_tree_node_ptr();
+
+                        self.add_ports_to_node(&node, &node_name, attributes)?;
+
+                        node
                     }
                     NodePtrType::Decorator(node) => {
                         let mut node = node.clone();
@@ -250,10 +293,14 @@ impl Factory {
 
                         node.add_child(child);
 
-                        node.into_tree_node_ptr()
+                        let node = node.into_tree_node_ptr();
+
+                        self.add_ports_to_node(&node, &node_name, attributes)?;
+
+                        node
                     }
                     // TODO: expand more
-                    x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}")))
+                    x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
                 };
 
                 Some(node)
@@ -268,24 +315,29 @@ impl Factory {
                     "SubTree" => {
                         let attributes = attributes.to_map()?;
                         match attributes.get("ID") {
-                            Some(id) => self.recursively_build_subtree(id, &String::new(), &String::new(), &self.blackboard)?,
-                            None => return Err(ParseError::MissingAttribute("ID".to_string()))
+                            Some(id) => self.recursively_build_subtree(
+                                id,
+                                &String::new(),
+                                &String::new(),
+                                &self.blackboard,
+                            )?,
+                            None => return Err(ParseError::MissingAttribute("ID".to_string())),
                         }
                     }
-                    _ => self.build_leaf_node(&node_name, attributes)?
+                    _ => self.build_leaf_node(&node_name, attributes)?,
                 };
 
                 Some(node)
             }
-            Event::End(e) => {
-                None
-            }
+            Event::End(e) => None,
             e => {
                 debug!("Other - SHOULDN'T BE HERE");
                 debug!("{e:?}");
 
-                return Err(ParseError::InternalError("Didn't match one of the expected XML tag types.".to_string()));
-            },
+                return Err(ParseError::InternalError(
+                    "Didn't match one of the expected XML tag types.".to_string(),
+                ));
+            }
         };
 
         Ok(node)
@@ -296,72 +348,83 @@ impl Factory {
         reader.trim_text(true);
 
         let mut buf = Vec::new();
-        
+
         // TODO: Check includes
 
         // TODO: Parse for correctness
 
         // Try to match root tag
         match reader.read_event_into(&mut buf)? {
-            Event::Start(e)  => {
+            Event::Start(e) => {
                 let name = String::from_utf8(e.name().0.into())?;
                 if name.as_str() != "root" {
                     return Err(ParseError::ExpectedRoot(name));
                 }
             }
-            _ => return Err(ParseError::MissingRoot)
+            _ => return Err(ParseError::MissingRoot),
         }
 
         buf.clear();
 
         // Register each BehaviorTree in the XML
         loop {
-            let event = {
-                reader.read_event_into(&mut buf)?
-            };
+            let event = { reader.read_event_into(&mut buf)? };
 
             match event {
-                Event::Start(e)  => {
+                Event::Start(e) => {
                     let name = String::from_utf8(e.name().0.into())?;
                     let attributes = e.attributes().to_map()?;
-                    
+
                     // Add error for missing BT
                     if name.as_str() != "BehaviorTree" {
                         return Err(ParseError::ExpectedRoot(name));
                     }
-                    
+
                     // Save position of Reader for each BT
                     if let Some(id) = attributes.get("ID") {
                         self.tree_roots.insert(id.clone(), reader.clone());
+                    } else {
+                        return Err(ParseError::MissingAttribute(format!(
+                            "Found BehaviorTree definition without ID. Cannot continue parsing."
+                        )));
                     }
-                    else {
-                        return Err(ParseError::MissingAttribute(format!("Found BehaviorTree definition without ID. Cannot continue parsing.")));
-                    }
-                    
+
                     let end = e.to_end();
                     let name = end.name();
                     let name = name.as_ref().to_vec().clone();
                     let name = QName(name.as_slice());
-        
+
                     reader.read_to_end_into(name, &mut buf)?;
                 }
                 Event::End(e) => {
                     let name = String::from_utf8(e.name().0.into())?;
                     if name != "root" {
-                        return Err(ParseError::InternalError(format!("A non-root end tag was found. This should not happen. Please report this.")))
-                    }
-                    else {
+                        return Err(ParseError::InternalError(format!("A non-root end tag was found. This should not happen. Please report this.")));
+                    } else {
                         break;
                     }
                 }
-                _ => return Err(ParseError::InternalError(format!("Something bad has happened. Please report this.")))
+                _ => {
+                    return Err(ParseError::InternalError(format!(
+                        "Something bad has happened. Please report this."
+                    )))
+                }
             };
         }
-
 
         buf.clear();
 
         Ok(())
     }
+}
 
+fn builtin_nodes(blackboard: Rc<RefCell<Blackboard>>) -> HashMap<String, NodePtrType> {
+    let mut node_map = HashMap::new();
+
+    let node = build_node_ptr!(blackboard, "SequenceNode", SequenceNode);
+    node_map.insert(String::from("SequenceNode"), node);
+    let node = build_node_ptr!(blackboard, "ParallelNode", ParallelNode);
+    node_map.insert(String::from("ParallelNode"), node);
+
+    node_map
 }

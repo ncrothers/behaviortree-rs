@@ -1,14 +1,17 @@
-use bt_derive::{TreeNodeDefaults, ControlNode};
+use bt_derive::{ControlNode, TreeNodeDefaults};
 use log::error;
 
-use crate::{nodes::{NodeConfig, TreeNodePtr, TreeNode, ControlNode}, basic_types::NodeStatus};
+use crate::{
+    basic_types::NodeStatus,
+    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr},
+};
 
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
 pub struct ReactiveSequenceNode {
     config: NodeConfig,
     children: Vec<TreeNodePtr>,
     status: NodeStatus,
-    running_child: i32
+    running_child: i32,
 }
 
 impl ReactiveSequenceNode {
@@ -31,7 +34,7 @@ impl TreeNode for ReactiveSequenceNode {
         let mut counter: i32 = 0;
 
         for child in self.children.iter() {
-            let child_status = child.borrow_mut().tick();
+            let child_status = child.borrow_mut().execute_tick();
 
             all_skipped &= child_status == NodeStatus::Skipped;
 
@@ -44,8 +47,7 @@ impl TreeNode for ReactiveSequenceNode {
                     }
                     if self.running_child == -1 {
                         self.running_child = counter;
-                    }
-                    else if self.running_child != counter {
+                    } else if self.running_child != counter {
                         // Multiple children running at the same time
                     }
                     return NodeStatus::Running;
@@ -55,7 +57,7 @@ impl TreeNode for ReactiveSequenceNode {
                     return NodeStatus::Failure;
                 }
                 // Do nothing on Success
-                NodeStatus::Success => {},
+                NodeStatus::Success => {}
                 NodeStatus::Skipped => {
                     // Halt current child
                     child.borrow_mut().halt();
@@ -72,7 +74,7 @@ impl TreeNode for ReactiveSequenceNode {
 
         match all_skipped {
             true => NodeStatus::Skipped,
-            false => NodeStatus::Success
+            false => NodeStatus::Success,
         }
     }
 

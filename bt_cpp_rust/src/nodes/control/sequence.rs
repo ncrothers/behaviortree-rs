@@ -1,6 +1,9 @@
-use bt_derive::{TreeNodeDefaults, ControlNode};
+use bt_derive::{ControlNode, TreeNodeDefaults};
 
-use crate::{nodes::{NodeConfig, TreeNodePtr, TreeNode, ControlNode}, basic_types::NodeStatus};
+use crate::{
+    basic_types::NodeStatus,
+    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr},
+};
 
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
 pub struct SequenceNode {
@@ -8,7 +11,7 @@ pub struct SequenceNode {
     children: Vec<TreeNodePtr>,
     status: NodeStatus,
     child_idx: usize,
-    all_skipped: bool
+    all_skipped: bool,
 }
 
 impl SequenceNode {
@@ -35,7 +38,7 @@ impl TreeNode for SequenceNode {
             let cur_child = &mut self.children[self.child_idx];
 
             let _prev_status = cur_child.borrow().status();
-            let child_status = cur_child.borrow_mut().tick();
+            let child_status = cur_child.borrow_mut().execute_tick();
 
             self.all_skipped &= child_status == NodeStatus::Skipped;
 

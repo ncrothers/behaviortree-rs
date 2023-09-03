@@ -1,8 +1,14 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
-use bt_cpp_rust::{nodes::{NodeConfig, TreeNodeDefaults, ActionNode, TreeNode}, basic_types::{NodeStatus, PortsList}, macros::{define_ports, get_input, input_port, register_node}, tree::Factory, blackboard::Blackboard};
+use bt_cpp_rust::{
+    basic_types::{NodeStatus, PortsList},
+    blackboard::Blackboard,
+    macros::{define_ports, input_port, register_node},
+    nodes::{ActionNode, NodeConfig, TreeNode, TreeNodeDefaults},
+    tree::Factory,
+};
 use bt_derive::{ActionNode, TreeNodeDefaults};
-use log::{info, error};
+use log::{error, info};
 
 #[derive(Debug, Clone, TreeNodeDefaults, ActionNode)]
 pub struct DummyActionNode {
@@ -25,39 +31,49 @@ impl DummyActionNode {
 
 impl TreeNode for DummyActionNode {
     fn tick(&mut self) -> NodeStatus {
-        let foo = get_input!(self, String, "foo");
-        info!("{} tick! Counter: {}, blackboard value: {}", self.name, self.counter, foo.unwrap());
+        let foo = self.config.get_input::<String>("foo");
+        info!(
+            "{} tick! Counter: {}, blackboard value: {}",
+            self.name,
+            self.counter,
+            foo.unwrap()
+        );
 
-        let bar = get_input!(self, u32, "bar");
+        let bar = self.config.get_input::<u32>("bar");
         match bar {
             Ok(bar) => info!("- Blackboard [bar]: {}", bar),
-            Err(e) => error!("{e:?}")
+            Err(e) => error!("{e:?}"),
         }
 
         self.counter += 1;
 
-        self.config.blackboard.borrow_mut().write("bb_test", String::from("this value comes from the blackboard!"));
-        
+        self.config.blackboard.borrow_mut().write(
+            "bb_test",
+            String::from("this value comes from the blackboard!"),
+        );
+
         match self.counter > 2 {
             true => NodeStatus::Success,
             false => {
-                self.config.blackboard.borrow_mut().write("foo", String::from("new value!"));
+                self.config
+                    .blackboard
+                    .borrow_mut()
+                    .write("foo", String::from("new value!"));
                 NodeStatus::Running
-            },
+            }
         }
     }
 
     fn provided_ports(&self) -> PortsList {
-        define_ports!(
-            input_port!("foo"),
-            input_port!("bar", 16)
-        )
+        define_ports!(input_port!("foo"), input_port!("bar", 16))
     }
 }
 
 #[test]
 fn tree_test() {
-    pretty_env_logger::formatted_builder().filter_level(log::LevelFilter::Debug).init();
+    pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Debug)
+        .init();
 
     let text = std::fs::read_to_string("./test.xml").unwrap();
     let mut factory = Factory::new();
@@ -78,10 +94,9 @@ fn tree_test() {
         }
     };
     info!("{tree:?}");
-    
+
     let status = tree.tick_while_running();
     info!("{status:?}");
-
 }
 
 #[test]
@@ -92,17 +107,17 @@ fn blackboard_test() {
     println!("{}", status.into_string_color());
     let status = NodeStatus::Idle;
     println!("{}", status.into_string_color());
-    
+
     // let dir = PortDirection::Input;
     // let port_info = PortInfo::new(PortDirection::Input, "hello");
-    
+
     let mut blackboard = Blackboard::new();
-    
+
     blackboard.write("test", "foo");
     blackboard.write("test int", 500u64);
     blackboard.write("test custom", status);
     blackboard.write("test string_into", "1;2;3;4");
-    
+
     let val = blackboard.read::<String>("test");
     println!("{:?}", val.unwrap());
     let val = blackboard.read::<u64>("test int");

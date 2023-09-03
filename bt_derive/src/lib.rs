@@ -69,6 +69,12 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
                 ::bt_cpp_rust::basic_types::NodeType::Action
             }
         }
+
+        impl ::bt_cpp_rust::nodes::NodeTick for #ident {
+            fn execute_tick(&mut self) -> NodeStatus {
+                self.tick()
+            }
+        }
     };
 
     TokenStream::from(expanded)
@@ -88,6 +94,10 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
 
             fn children(&self) -> &Vec<TreeNodePtr> {
                 &self.children
+            }
+
+            fn halt_control(&mut self) {
+                self.reset_children();
             }
 
             fn halt_child(&self, index: usize) -> Result<(), ::bt_cpp_rust::nodes::NodeError> {
@@ -122,6 +132,12 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
 
             fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ControlNodeBase> {
                 Box::new(self.clone())
+            }
+        }
+
+        impl ::bt_cpp_rust::nodes::NodeTick for #ident {
+            fn execute_tick(&mut self) -> NodeStatus {
+                self.tick()
             }
         }
 

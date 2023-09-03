@@ -23,6 +23,9 @@
         <SequenceNode>
             <DummyNode foo="hi" bar="128" />
             <DummyNode foo="last node!" />
+            <ParallelNode>
+                <DummyNode foo="parallel node!" />
+            </ParallelNode>
         </SequenceNode>
     </BehaviorTree>
 </root>
