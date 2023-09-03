@@ -1,19 +1,24 @@
 use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
 use bt_derive::{ControlNode, TreeNodeDefaults, ActionNode};
-use log::info;
+use log::{info, error};
 use thiserror::Error;
 
-use crate::{blackboard::Blackboard, basic_types::{TreeNodeManifest, NodeStatus, PortsList, self, PortDirection, NodeType, PortValue}, macros::{get_input, define_ports, input_port}, tree::{ParseError, TreeNodePtr}};
+use crate::{blackboard::Blackboard, basic_types::{TreeNodeManifest, NodeStatus, PortsList, self, PortDirection, NodeType, PortValue}, macros::{get_input, define_ports, input_port}, tree::{ParseError, TreeNodePtr, ControlNodePtr}};
 
 pub type PortsRemapping = HashMap<String, String>;
 
-pub trait TreeNodeBase: TreeNode + TreeNodeDefaults + NodeClone + GetNodeType {}
+pub trait TreeNodeBase: TreeNode + TreeNodeDefaults + GetNodeType {}
+pub trait ControlNodeBase: TreeNodeBase + ControlNode {}
+pub trait ActionNodeBase: TreeNodeBase + ActionNode {}
 
-pub trait TreeNodeDefaults: NodeClone {
+pub trait TreeNodeDefaults {
     fn status(&self) -> NodeStatus;
     fn reset_status(&mut self);
     fn config(&mut self) -> &mut NodeConfig;
+    fn into_boxed(self) -> Box<dyn TreeNodeBase>;
+    fn into_tree_node_ptr(&self) -> TreeNodePtr;
+    fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase>;
 }
 pub trait GetNodeType {
     fn node_type(&self) -> basic_types::NodeType;
@@ -23,6 +28,12 @@ pub trait GetNodeType {
 pub enum NodeError {
     #[error("Out of bounds index")]
     IndexError,
+    #[error("Couldn't find port [{0}]")]
+    PortError(String),
+    #[error("Couldn't parse port [{0}] value into specified type [{1}]")]
+    PortValueParseError(String, String),
+    #[error("Couldn't find entry in blackboard [{0}]")]
+    BlackboardError(String),
 }
 
 #[derive(Clone, Debug)]
@@ -128,14 +139,14 @@ pub trait PortClone {
     fn clone_port(&self) -> Box<dyn PortValue>;
 }
 
-impl<T> PortClone for T
-where
-    T: 'static + PortValue + Clone,
-{
-    fn clone_port(&self) -> Box<dyn PortValue> {
-        Box::new(self.clone())
-    }
-}
+// impl<T> PortClone for T
+// where
+//     T: 'static + PortValue + Clone,
+// {
+//     fn clone_port(&self) -> Box<dyn PortValue> {
+//         Box::new(self.clone())
+//     }
+// }
 
 impl Clone for Box<dyn PortValue> {
     fn clone(&self) -> Box<dyn PortValue> {
@@ -143,36 +154,25 @@ impl Clone for Box<dyn PortValue> {
     }
 }
 
-pub trait NodeClone {
-    fn clone_node(&self) -> TreeNodePtr;
-}
-
-impl<T> NodeClone for T
-where
-    T: 'static + TreeNodeBase + Clone,
-{
-    fn clone_node(&self) -> TreeNodePtr {
-        Rc::new(RefCell::new(self.clone()))
+impl Clone for Box<dyn TreeNodeBase> {
+    fn clone(&self) -> Box<dyn TreeNodeBase> {
+        self.clone_node_boxed()
     }
 }
 
-// pub trait RcDeepClone {
-//     fn rc_deep_clone(&self) -> Self;
-// }
+impl Clone for Box<dyn ActionNodeBase> {
+    fn clone(&self) -> Box<dyn ActionNodeBase> {
+        self.clone_boxed()
+    }
+}
 
-// impl RcDeepClone for TreeNodePtr {
-//     fn rc_deep_clone(&self) -> Self {
-//         Rc::new(self.borrow().clone_node())
-//     }
-// }
+impl Clone for Box<dyn ControlNodeBase> {
+    fn clone(&self) -> Box<dyn ControlNodeBase> {
+        self.clone_boxed()
+    }
+}
 
-// impl Clone for TreeNodePtr {
-//     fn clone(&self) -> TreeNodePtr {
-//         self.clone_node()
-//     }
-// }
-
-pub trait TreeNode: std::fmt::Debug + NodeClone {
+pub trait TreeNode: std::fmt::Debug {
     fn tick(&mut self) -> NodeStatus;
     fn halt(&mut self) {}
     fn provided_ports(&self) -> PortsList {
@@ -182,7 +182,7 @@ pub trait TreeNode: std::fmt::Debug + NodeClone {
 
 // pub trait LeafNode: TreeNode + NodeClone {}
 
-pub trait ControlNode {
+pub trait ControlNode: TreeNodeBase {
     /// Add child to `ControlNode`
     fn add_child(&mut self, child: TreeNodePtr);
     /// Return reference to `Vec` of children nodes
@@ -193,9 +193,12 @@ pub trait ControlNode {
     fn halt_children(&mut self, start: usize) -> Result<(), NodeError>;
     /// Reset status of all child nodes
     fn reset_children(&mut self);
+    fn clone_boxed(&self) -> Box<dyn ControlNodeBase>;
 }
 
-pub trait ActionNode {}
+pub trait ActionNode {
+    fn clone_boxed(&self) -> Box<dyn ActionNodeBase>;
+}
 
 pub trait ConditionNode {}
 
@@ -267,15 +270,15 @@ impl TreeNode for SequenceNode {
 }
 
 #[derive(Debug, Clone, TreeNodeDefaults, ActionNode)]
-pub struct DummyLeafNode {
+pub struct DummyActionNode {
     name: String,
     config: NodeConfig,
     status: NodeStatus,
     counter: u32,
 }
 
-impl DummyLeafNode {
-    pub fn new(name: &str, config: NodeConfig) -> DummyLeafNode {
+impl DummyActionNode {
+    pub fn new(name: &str, config: NodeConfig) -> DummyActionNode {
         Self {
             name: name.to_string(),
             config,
@@ -285,15 +288,20 @@ impl DummyLeafNode {
     }
 }
 
-impl TreeNode for DummyLeafNode {
+impl TreeNode for DummyActionNode {
     fn tick(&mut self) -> NodeStatus {
         let foo = get_input!(self, String, "foo");
         info!("{} tick! Counter: {}, blackboard value: {}", self.name, self.counter, foo.unwrap());
 
         let bar = get_input!(self, u32, "bar");
-        info!("- Blackboard [bar]: {}", bar.unwrap());
+        match bar {
+            Ok(bar) => info!("- Blackboard [bar]: {}", bar),
+            Err(e) => error!("{e:?}")
+        }
 
         self.counter += 1;
+
+        self.config.blackboard.borrow_mut().write("bb_test", String::from("this value comes from the blackboard!"));
         
         match self.counter > 2 {
             true => NodeStatus::Success,
@@ -307,7 +315,7 @@ impl TreeNode for DummyLeafNode {
     fn provided_ports(&self) -> PortsList {
         define_ports!(
             input_port!("foo"),
-            input_port!("bar")
+            input_port!("bar", 16)
         )
     }
 }

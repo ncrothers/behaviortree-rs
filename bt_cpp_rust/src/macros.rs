@@ -1,7 +1,40 @@
 
 macro_rules! get_input {
     ($self:ident, $t:ident, $k:tt) => {
-        $self.config.blackboard.borrow().read::<$t>($k)
+        {
+            use crate::blackboard::BlackboardString;
+            use crate::basic_types::StringInto;
+            use std::any::TypeId;
+
+            let value: Result<$t, NodeError> = match $self.config().input_ports.get($k) {
+                Some(val) => {
+                    // TODO: Check if default is needed
+
+                    // TODO: Check if a blackboard key
+                    match val.strip_bb_pointer() {
+                        Some(key) => {
+                            match $self.config().blackboard.borrow().read::<$t>(&key) {
+                                Some(val) => Ok(val),
+                                None => Err(NodeError::BlackboardError(key))
+                            }
+                        }
+                        // Just a normal string
+                        None => {
+                            match val.string_into() {
+                                Ok(val) => Ok(val),
+                                Err(_) => Err(NodeError::PortValueParseError(String::from($k), format!("{:?}", TypeId::of::<$t>())))
+                            }
+                        }
+                    }
+                }
+                // Port not found
+                None => Err(NodeError::PortError(String::from($k)))
+            };
+
+            // $self.config.blackboard.borrow().read::<$t>($k)
+            value
+        }
+
     };
 }
 pub(crate) use get_input;
@@ -100,6 +133,16 @@ macro_rules! input_port {
         {
             use crate::basic_types::{PortInfo, PortDirection};
             let port_info = PortInfo::new(PortDirection::Input);
+    
+            ($n, port_info)
+        }
+    };
+    ($n:tt, $d:expr) => {
+        {
+            use crate::basic_types::{PortInfo, PortDirection};
+            let mut port_info = PortInfo::new(PortDirection::Input);
+
+            port_info.set_default($d);
     
             ($n, port_info)
         }

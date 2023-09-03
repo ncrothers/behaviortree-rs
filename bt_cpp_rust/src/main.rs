@@ -1,4 +1,6 @@
-use bt_cpp_rust::{basic_types::{BTToString, NodeStatus, StringInto, PortDirection, PortInfo}, blackboard::Blackboard, tree::{DummyNode, Node, Factory}, register_node, nodes::DummyLeafNode};
+use std::{rc::Rc, cell::RefCell};
+
+use bt_cpp_rust::{basic_types::{BTToString, NodeStatus, StringInto, PortDirection, PortInfo}, blackboard::Blackboard, tree::{DummyNode, Node, Factory}, register_node, nodes::DummyActionNode};
 use log::{error, info};
 use quick_xml::{Reader, events::Event};
 
@@ -60,11 +62,15 @@ fn main() {
     let text = std::fs::read_to_string("./test.xml").unwrap();
     let mut factory = Factory::new();
 
-    register_node!(factory, "DummyNode", DummyLeafNode);
-    register_node!(factory, "CustomNode", DummyLeafNode);
-    register_node!(factory, "InnerNode", DummyLeafNode);
+    register_node!(factory, "DummyNode", DummyActionNode);
+    register_node!(factory, "CustomNode", DummyActionNode);
+    register_node!(factory, "InnerNode", DummyActionNode);
 
-    let mut tree = match factory.parse_xml(text) {
+    let blackboard = Rc::new(RefCell::new(Blackboard::new()));
+
+    factory.register_bt_from_text(text).unwrap();
+
+    let mut tree = match factory.instantiate_tree(&blackboard, "main") {
         Ok(tree) => tree,
         Err(e) => {
             error!("Error: {e}");

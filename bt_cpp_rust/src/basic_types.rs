@@ -311,6 +311,19 @@ pub struct TreeNodeManifest {
 
 pub trait PortValue: Any + PortClone + Debug + BTToString {}
 
+impl<T> PortClone for T
+where
+    T: 'static + Any + Clone + Debug + BTToString,
+{
+    fn clone_port(&self) -> Box<dyn PortValue> {
+        Box::new(self.clone())
+    }
+}
+
+impl<T> PortValue for T
+where T: Any + PortClone + Debug + BTToString
+{}
+
 #[derive(Clone, Debug)]
 pub struct PortInfo {
     r#type: PortDirection,

@@ -1,10 +1,28 @@
 <root>
-    <SequenceNode>
-        <DummyNode foo="hi" bar="128" />
-        <DummyNode foo="hi" />
-        <CustomNode foo="hi" />
+    <BehaviorTree ID="main">
         <SequenceNode>
-            <InnerNode foo="within inner sequence" />
+            <DummyNode foo="hi" bar="128" />
+            <DummyNode foo="hi" />
+            <CustomNode foo="{bb_test}" />
+            <SequenceNode>
+                <InnerNode foo="within inner sequence" />
+            </SequenceNode>
+            <SubTree ID="sub1" />
         </SequenceNode>
-    </SequenceNode>
+    </BehaviorTree>
+
+    <BehaviorTree ID="sub1">
+        <SequenceNode>
+            <DummyNode foo="hi" bar="128" />
+            <DummyNode foo="last node!" />
+            <SubTree ID="sub2" />
+        </SequenceNode>
+    </BehaviorTree>
+
+    <BehaviorTree ID="sub2">
+        <SequenceNode>
+            <DummyNode foo="hi" bar="128" />
+            <DummyNode foo="last node!" />
+        </SequenceNode>
+    </BehaviorTree>
 </root>

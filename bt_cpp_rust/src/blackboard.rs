@@ -2,7 +2,25 @@ use std::{collections::HashMap, any::Any};
 
 use crate::basic_types::{StringInto, BTToString};
 
+pub trait BlackboardString {
+    fn strip_bb_pointer(&self) -> Option<String>;
+}
 
+impl<'a, T> BlackboardString for T
+where T: AsRef<str> + Clone
+{
+    fn strip_bb_pointer(&self) -> Option<String> {
+        let str_ref = self.as_ref();
+
+        // Is bb pointer
+        if str_ref.starts_with("{") && str_ref.ends_with("}") {
+            Some(str_ref.strip_prefix("{").unwrap().strip_suffix("}").unwrap().to_string())
+        }
+        else {
+            None
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Blackboard {

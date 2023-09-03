@@ -39,6 +39,18 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
             fn config(&mut self) -> &mut NodeConfig {
                 &mut self.config
             }
+
+            fn into_boxed(self) -> Box<dyn TreeNodeBase> {
+                Box::new(self)
+            }
+
+            fn into_tree_node_ptr(&self) -> TreeNodePtr {
+                Rc::new(RefCell::new(self.clone()))
+            }
+
+            fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase> {
+                Box::new(self.clone())
+            }
         }
 
         impl TreeNodeBase for #ident {}
@@ -55,7 +67,19 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
     let ident = input.ident;
 
     let expanded = quote! {
-        impl ActionNode for #ident {}
+        impl ActionNode for #ident {
+            fn clone_boxed(&self) -> Box<dyn ActionNodeBase> {
+                Box::new(self.clone())
+            }
+        }
+
+        // impl ActionClone for #ident {
+        //     fn clone_action(&self) -> Box<dyn ActionNodeBase> {
+        //         Box::new(self.clone())
+        //     }
+        // }
+
+        impl ActionNodeBase for #ident {}
 
         impl GetNodeType for #ident {
             fn node_type(&self) -> NodeType {
@@ -116,7 +140,19 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                     .iter_mut()
                     .for_each(|child| child.borrow_mut().reset_status());
             }
+
+            fn clone_boxed(&self) -> Box<dyn ControlNodeBase> {
+                Box::new(self.clone())
+            }
         }
+
+        impl ControlNodeBase for #ident {}
+
+        // impl ControlClone for #ident {
+        //     fn clone_control(&self) -> Box<dyn ControlNodeBase> {
+        //         Box::new(self.clone())
+        //     }
+        // }
 
         impl GetNodeType for #ident {
             fn node_type(&self) -> NodeType {
