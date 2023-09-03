@@ -1,83 +1,10 @@
-use std::{collections::HashMap, any::Any, string::FromUtf8Error, process::{self, Child}, sync::Arc, rc::Rc, cell::RefCell, io::Cursor, hash::Hash};
+use std::{collections::HashMap, string::FromUtf8Error, rc::Rc, cell::RefCell, io::Cursor};
 
 use log::{debug, info};
 use quick_xml::{events::{Event, attributes::Attributes}, Reader, name::QName};
-use serde::{Deserialize, Serialize};
-use serde_json::de::Read;
 use thiserror::Error;
 
-use crate::{basic_types::{NodeStatus, TreeNodeManifest, NodeType, PortsList, PortDirection}, nodes::{TreeNode, ControlNode, SequenceNode, DummyActionNode, NodeConfig, TreeNodeBase, PortsRemapping, GetNodeType, TreeNodeDefaults, ControlNodeBase, ActionNodeBase}, blackboard::Blackboard};
-
-
-#[derive(Debug)]
-pub struct Tree {
-    // xml: String,
-    root: TreeNodePtr,
-}
-
-impl Tree {
-    pub fn new(root: TreeNodePtr) -> Tree {
-        Self {
-            root
-        }
-    }
-
-    pub fn tick_while_running(&mut self) -> NodeStatus {
-        let mut new_status = self.root.borrow().status();
-
-        // Check pre conditions goes here
-
-        new_status = self.root.borrow_mut().tick();
-
-        // Check post conditions here
-
-        new_status
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Node {
-    DummyNode(DummyNode),
-    #[serde(other)]
-    Other
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct DummyNode {
-    #[serde(rename = "@value")]
-    pub value: String,
-}
-
-#[macro_export]
-macro_rules! register_node {
-    ($f:ident, $n:expr, $t:ty) => {
-        {
-            use bt_cpp_rust::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
-            use bt_cpp_rust::basic_types::{NodeType, TreeNodeManifest};
-            use bt_cpp_rust::tree::NodePtrType;
-    
-            let blackboard = $f.blackboard();
-            let node_config = NodeConfig::new(blackboard);
-            let mut node = <$t>::new($n, node_config);
-            let manifest = TreeNodeManifest {
-                node_type: node.node_type(),
-                registration_id: $n.to_string(),
-                ports: node.provided_ports(),
-                description: String::new(),
-            };
-            node.config().set_manifest(Rc::new(manifest));
-            match node.node_type() {
-                NodeType::Action => {
-                    $f.register_node($n, NodePtrType::Action(Box::new(node)));
-                }
-                _ => panic!("Currently unsupported NodeType")
-            };
-        }
-    };
-    ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
-        <$t>::new($n, $($x),*)
-    };
-}
+use crate::{basic_types::{NodeStatus, TreeNodeManifest, PortDirection, PortsRemapping, AttrsToMap}, nodes::{TreeNode, SequenceNode, NodeConfig, TreeNodeBase, GetNodeType, TreeNodeDefaults, ControlNodeBase, ActionNodeBase, TreeNodePtr}, blackboard::Blackboard};
 
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -108,36 +35,6 @@ pub enum ParseError {
     NodeTypeMismatch(String),
 }
 
-pub type TreeNodePtr = Rc<RefCell<dyn TreeNodeBase>>;
-pub type ControlNodePtr = Rc<RefCell<dyn ControlNodeBase>>;
-// pub struct TreeNodePtr(Rc<RefCell<dyn TreeNodeBase>>);
-
-// impl Clone for TreeNodePtr {
-//     fn clone(&self) -> Self {
-//         let test = self.0.borrow();
-//         Self(self.0.borrow().clone_node())
-//     }
-// }
-
-trait AttrsToMap {
-    fn to_map(self) -> Result<HashMap<String, String>, ParseError>;
-}
-
-impl AttrsToMap for Attributes<'_> {
-    fn to_map(self) -> Result<HashMap<String, String>, ParseError> {
-        let mut map = HashMap::new();
-        for attr in self.into_iter() {
-            let attr = attr?;
-            let name = String::from_utf8(attr.key.0.into())?;
-            let value = String::from_utf8(attr.value.to_vec())?;
-
-            map.insert(name, value);
-        }
-
-        Ok(map)
-    }
-}
-
 #[derive(Debug)]
 pub enum NodePtrType {
     General(Box<dyn TreeNodeBase>),
@@ -146,11 +43,35 @@ pub enum NodePtrType {
     Action(Box<dyn ActionNodeBase>),
 }
 
+#[derive(Debug)]
+pub struct Tree {
+    root: TreeNodePtr,
+}
+
+impl Tree {
+    pub fn new(root: TreeNodePtr) -> Tree {
+        Self {
+            root
+        }
+    }
+
+    pub fn tick_while_running(&mut self) -> NodeStatus {
+        let mut new_status = self.root.borrow().status();
+
+        // Check pre conditions goes here
+
+        new_status = self.root.borrow_mut().tick();
+
+        // Check post conditions here
+
+        new_status
+    }
+}
+
 pub struct Factory {
     node_map: HashMap<String, NodePtrType>,
     blackboard: Rc<RefCell<Blackboard>>,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
-    xmls: Vec<String>,
 }
 
 impl Factory {
@@ -173,7 +94,6 @@ impl Factory {
             node_map: node_map,
             blackboard: blackboard,
             tree_roots: HashMap::new(),
-            xmls: Vec::new(),
         }
     }
 
@@ -395,14 +315,10 @@ impl Factory {
         buf.clear();
 
         // Register each BehaviorTree in the XML
-        // let reader = ();
-
         loop {
-            // let buf_ref = &mut buf;
             let event = {
                 reader.read_event_into(&mut buf)?
             };
-            // drop(buf_ref);
 
             match event {
                 Event::Start(e)  => {

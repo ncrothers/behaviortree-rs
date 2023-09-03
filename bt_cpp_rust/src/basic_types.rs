@@ -3,10 +3,10 @@ use std::{
     str::FromStr, collections::HashMap, any::Any, ffi::IntoStringError, convert::Infallible,
 };
 
-use serde::{de::DeserializeOwned, Serialize};
+use quick_xml::events::attributes::Attributes;
 use thiserror::Error;
 
-use crate::{macros::{impl_string_into, impl_into_string}, nodes::PortClone};
+use crate::{macros::{impl_string_into, impl_into_string}, tree::ParseError, blackboard::BlackboardString};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
@@ -125,6 +125,7 @@ impl std::fmt::Display for PortDirection {
 // Converting string to types
 // ===========================
 
+///
 /// Trait for custom conversion into String
 ///
 /// Out of the box, `StringInto<T>` is implemented on all numeric types, `bool`,
@@ -133,7 +134,7 @@ impl std::fmt::Display for PortDirection {
 /// To implement `StringInto<T>` on your own type, it is recommended to implement `FromStr` on your type,
 /// then call the `impl_string_into!` macro and pass your custom type in. Here's an example:
 ///
-/// ```rust
+/// ```ignore
 /// struct MyType {
 ///     foo: String
 /// }
@@ -299,15 +300,15 @@ pub struct TreeNodeManifest {
     pub description: String,
 }
 
-// pub trait PortInfoTrait {
-//     fn set_description(&mut self, description: String) {
-//         self.description = description
-//     }
+// ===========================
+// Ports
+// ===========================
 
-//     fn direction(&self) -> &PortDirection {
-//         &self.r#type
-//     }
-// }
+pub type PortsRemapping = HashMap<String, String>;
+
+pub trait PortClone {
+    fn clone_port(&self) -> Box<dyn PortValue>;
+}
 
 pub trait PortValue: Any + PortClone + Debug + BTToString {}
 
@@ -355,6 +356,7 @@ impl PortInfo {
     }
 
     pub fn set_default(&mut self, default: impl PortValue) {
+        // let test = <Box<dyn Any>>::downcast::<u32>(self.default_value().unwrap().bt_to_string()).unwrap();
         self.default_value = Some(Box::new(default))
     }
 
@@ -396,5 +398,37 @@ impl Port {
 
     pub fn output_description(name: &str, description: &str) -> Port {
         Self::create_port(PortDirection::Output, name, description)
+    }
+}
+
+pub fn get_remapped_key(port_name: impl AsRef<str>, remapped_port: impl AsRef<str>) -> Option<String> {
+    if port_name.as_ref() == "=" {
+        Some(port_name.as_ref().to_string())
+    }
+    else {
+        remapped_port.as_ref().strip_bb_pointer()
+    }
+}
+
+// ===========================
+// Private Helpers
+// ===========================
+
+pub trait AttrsToMap {
+    fn to_map(self) -> Result<HashMap<String, String>, ParseError>;
+}
+
+impl AttrsToMap for Attributes<'_> {
+    fn to_map(self) -> Result<HashMap<String, String>, ParseError> {
+        let mut map = HashMap::new();
+        for attr in self.into_iter() {
+            let attr = attr?;
+            let name = String::from_utf8(attr.key.0.into())?;
+            let value = String::from_utf8(attr.value.to_vec())?;
+
+            map.insert(name, value);
+        }
+
+        Ok(map)
     }
 }

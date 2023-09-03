@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::{DeriveInput, PathArguments, GenericArgument, Type, TypeParamBound};
+use syn::DeriveInput;
 
 #[macro_use]
 extern crate quote;
@@ -15,45 +15,34 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
 
     let ident = input.ident;
 
-    let attributes = input.attrs;
-
-    let fields = if let syn::Data::Struct(syn::DataStruct {
-        fields: syn::Fields::Named(syn::FieldsNamed {ref named, ..}),
-        ..
-    }) = input.data {
-        named
-    } else {
-        panic!("You can derive only on struct!")
-    };
-
     let expanded = quote! {
-        impl TreeNodeDefaults for #ident {
-            fn status(&self) -> NodeStatus {
+        impl ::bt_cpp_rust::nodes::TreeNodeDefaults for #ident {
+            fn status(&self) -> ::bt_cpp_rust::basic_types::NodeStatus {
                 self.status.clone()
             }
 
             fn reset_status(&mut self) {
-                self.status = NodeStatus::Idle
+                self.status = ::bt_cpp_rust::basic_types::NodeStatus::Idle
             }
 
-            fn config(&mut self) -> &mut NodeConfig {
+            fn config(&mut self) -> &mut ::bt_cpp_rust::nodes::NodeConfig {
                 &mut self.config
             }
 
-            fn into_boxed(self) -> Box<dyn TreeNodeBase> {
+            fn into_boxed(self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
                 Box::new(self)
             }
 
-            fn into_tree_node_ptr(&self) -> TreeNodePtr {
-                Rc::new(RefCell::new(self.clone()))
+            fn into_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
+                std::rc::Rc::new(std::cell::RefCell::new(self.clone()))
             }
 
-            fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase> {
+            fn clone_node_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
                 Box::new(self.clone())
             }
         }
 
-        impl TreeNodeBase for #ident {}
+        impl ::bt_cpp_rust::nodes::TreeNodeBase for #ident {}
     };
 
     TokenStream::from(expanded)
@@ -67,23 +56,17 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
     let ident = input.ident;
 
     let expanded = quote! {
-        impl ActionNode for #ident {
-            fn clone_boxed(&self) -> Box<dyn ActionNodeBase> {
+        impl ::bt_cpp_rust::nodes::ActionNode for #ident {
+            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ActionNodeBase> {
                 Box::new(self.clone())
             }
         }
 
-        // impl ActionClone for #ident {
-        //     fn clone_action(&self) -> Box<dyn ActionNodeBase> {
-        //         Box::new(self.clone())
-        //     }
-        // }
+        impl ::bt_cpp_rust::nodes::ActionNodeBase for #ident {}
 
-        impl ActionNodeBase for #ident {}
-
-        impl GetNodeType for #ident {
-            fn node_type(&self) -> NodeType {
-                NodeType::Action
+        impl ::bt_cpp_rust::nodes::GetNodeType for #ident {
+            fn node_type(&self) -> ::bt_cpp_rust::basic_types::NodeType {
+                ::bt_cpp_rust::basic_types::NodeType::Action
             }
         }
     };
@@ -97,20 +80,9 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
 
     let ident = input.ident;
 
-    let attributes = input.attrs;
-
-    let fields = if let syn::Data::Struct(syn::DataStruct {
-        fields: syn::Fields::Named(syn::FieldsNamed {ref named, ..}),
-        ..
-    }) = input.data {
-        named
-    } else {
-        panic!("You can derive only on struct!")
-    };
-
     let expanded = quote! {
-        impl ControlNode for #ident {
-            fn add_child(&mut self, child: TreeNodePtr) {
+        impl ::bt_cpp_rust::nodes::ControlNode for #ident {
+            fn add_child(&mut self, child: ::bt_cpp_rust::nodes::TreeNodePtr) {
                 self.children.push(child);
             }
 
@@ -118,45 +90,46 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 &self.children
             }
 
-            fn halt_child(&mut self, index: usize) -> Result<(), NodeError> {
-                match self.children.get_mut(index) {
-                    Some(child) => Ok(child.borrow_mut().halt()),
-                    None => Err(NodeError::IndexError),
+            fn halt_child(&self, index: usize) -> Result<(), ::bt_cpp_rust::nodes::NodeError> {
+                match self.children.get(index) {
+                    Some(child) => {
+                        if child.borrow().status() == NodeStatus::Running {
+                            child.borrow_mut().halt();
+                        }
+                        Ok(child.borrow_mut().reset_status())
+                    }
+                    None => Err(::bt_cpp_rust::nodes::NodeError::IndexError),
                 }
             }
 
-            fn halt_children(&mut self, start: usize) -> Result<(), NodeError> {
+            fn halt_children(&self, start: usize) -> Result<(), ::bt_cpp_rust::nodes::NodeError> {
                 if start >= self.children.len() {
-                    return Err(NodeError::IndexError);
+                    return Err(::bt_cpp_rust::nodes::NodeError::IndexError);
                 }
-        
-                self.children[start..].iter_mut().for_each(|child| child.borrow_mut().halt());
+
+                let end = self.children.len();
+
+                for i in start..end {
+                    self.halt_child(i)?;
+                }
+
                 Ok(())
             }
 
-            fn reset_children(&mut self) {
-                self
-                    .children
-                    .iter_mut()
-                    .for_each(|child| child.borrow_mut().reset_status());
+            fn reset_children(&self) {
+                self.halt_children(0).unwrap();
             }
 
-            fn clone_boxed(&self) -> Box<dyn ControlNodeBase> {
+            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ControlNodeBase> {
                 Box::new(self.clone())
             }
         }
 
-        impl ControlNodeBase for #ident {}
+        impl ::bt_cpp_rust::nodes::ControlNodeBase for #ident {}
 
-        // impl ControlClone for #ident {
-        //     fn clone_control(&self) -> Box<dyn ControlNodeBase> {
-        //         Box::new(self.clone())
-        //     }
-        // }
-
-        impl GetNodeType for #ident {
-            fn node_type(&self) -> NodeType {
-                NodeType::Control
+        impl ::bt_cpp_rust::nodes::GetNodeType for #ident {
+            fn node_type(&self) -> ::bt_cpp_rust::basic_types::NodeType {
+                ::bt_cpp_rust::basic_types::NodeType::Control
             }
         }
     };
