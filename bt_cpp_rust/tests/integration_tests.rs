@@ -4,18 +4,19 @@ use bt_cpp_rust::{
     basic_types::{NodeStatus, PortsList},
     blackboard::Blackboard,
     macros::{define_ports, input_port, register_node},
-    nodes::{ActionNode, NodeConfig, TreeNode, TreeNodeDefaults},
+    nodes::{NodeConfig, TreeNode, TreeNodeDefaults, NodeError, StatefulActionNode},
     tree::Factory,
 };
-use bt_derive::{ActionNode, TreeNodeDefaults};
+use bt_derive::{ActionNode, TreeNodeDefaults, StatefulActionNode};
 use log::{error, info};
 
-#[derive(Debug, Clone, TreeNodeDefaults, ActionNode)]
+#[derive(Debug, Clone, TreeNodeDefaults, ActionNode, StatefulActionNode)]
 pub struct DummyActionNode {
     name: String,
     config: NodeConfig,
     status: NodeStatus,
     counter: u32,
+    halt_requested: RefCell<bool>,
 }
 
 impl DummyActionNode {
@@ -25,12 +26,27 @@ impl DummyActionNode {
             config,
             status: NodeStatus::Idle,
             counter: 0,
+            halt_requested: RefCell::new(false),
         }
     }
 }
 
+impl StatefulActionNode for DummyActionNode {
+    fn on_start(&mut self) -> NodeStatus {
+        info!("Starting!");
+
+        NodeStatus::Running
+    }
+
+    fn on_running(&mut self) -> NodeStatus {
+        info!("Running!");
+
+        NodeStatus::Success
+    }
+}
+
 impl TreeNode for DummyActionNode {
-    fn tick(&mut self) -> NodeStatus {
+    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         let foo = self.config.get_input::<String>("foo");
         info!(
             "{} tick! Counter: {}, blackboard value: {}",
@@ -53,13 +69,13 @@ impl TreeNode for DummyActionNode {
         );
 
         match self.counter > 2 {
-            true => NodeStatus::Success,
+            true => Ok(NodeStatus::Success),
             false => {
                 self.config
                     .blackboard
                     .borrow_mut()
                     .write("foo", String::from("new value!"));
-                NodeStatus::Running
+                Ok(NodeStatus::Running)
             }
         }
     }
@@ -95,8 +111,11 @@ fn tree_test() {
     };
     info!("{tree:?}");
 
-    let status = tree.tick_while_running();
-    info!("{status:?}");
+    match tree.tick_while_running() {
+        Ok(status) => info!("{status:?}"),
+        Err(e) => error!("{e}")
+    }
+    
 }
 
 #[test]

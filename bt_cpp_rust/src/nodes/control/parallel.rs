@@ -5,7 +5,7 @@ use bt_derive::{ControlNode, TreeNodeDefaults};
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodeDefaults, TreeNodePtr},
+    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodeDefaults, TreeNodePtr, NodeError, NodeHalt},
 };
 
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
@@ -58,7 +58,7 @@ impl ParallelNode {
 }
 
 impl TreeNode for ParallelNode {
-    fn tick(&mut self) -> NodeStatus {
+    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         self.success_threshold = self.config().get_input("success_count").unwrap();
         self.failure_threshold = self.config().get_input("failure_count").unwrap();
 
@@ -77,7 +77,7 @@ impl TreeNode for ParallelNode {
         for i in 0..children_count {
             if !self.completed_list.contains(&i) {
                 let mut child = self.children[i].borrow_mut();
-                match child.execute_tick() {
+                match child.execute_tick()? {
                     NodeStatus::Skipped => skipped_count += 1,
                     NodeStatus::Success => {
                         self.completed_list.insert(i);
@@ -102,7 +102,7 @@ impl TreeNode for ParallelNode {
             {
                 self.clear();
                 self.reset_children();
-                return NodeStatus::Success;
+                return Ok(NodeStatus::Success);
             }
 
             if (children_count - self.failure_count) < required_success_count
@@ -110,20 +110,16 @@ impl TreeNode for ParallelNode {
             {
                 self.clear();
                 self.reset_children();
-                return NodeStatus::Failure;
+                return Ok(NodeStatus::Failure);
             }
         }
 
         // If all children were skipped, return Skipped
         // Otherwise return Running
         match skipped_count == children_count {
-            true => NodeStatus::Skipped,
-            false => NodeStatus::Running,
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Running),
         }
-    }
-
-    fn halt(&mut self) {
-        self.halt_control();
     }
 
     fn provided_ports(&self) -> crate::basic_types::PortsList {
@@ -131,5 +127,11 @@ impl TreeNode for ParallelNode {
             input_port!("success_count", -1),
             input_port!("failure_count", 1)
         )
+    }
+}
+
+impl NodeHalt for ParallelNode {
+    fn halt(&mut self) {
+        self.halt_control()
     }
 }

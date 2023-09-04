@@ -2,8 +2,23 @@ use std::{any::Any, collections::HashMap};
 
 use crate::basic_types::{BTToString, StringInto};
 
+/// Trait that provides `strip_bb_pointer()` for all `AsRef<str>`,
+/// which includes `String` and `&str`. 
 pub trait BlackboardString {
+    /// If not a blackboard pointer (i.e. `"value"`, instead of `"{value}"`), return
+    /// `None`. If a blackboard pointer, remove brackets.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::BlackboardString;
+    /// 
+    /// assert_eq!("value".strip_bb_pointer(), None);
+    /// 
+    /// assert_eq!("{value}".strip_bb_pointer(), Some(String::from("value")));
+    /// ```
     fn strip_bb_pointer(&self) -> Option<String>;
+    fn is_bb_pointer(&self) -> bool;
 }
 
 impl<'a, T> BlackboardString for T
@@ -27,9 +42,31 @@ where
             None
         }
     }
+
+    fn is_bb_pointer(&self) -> bool {
+        let str_ref = self.as_ref();
+        str_ref.starts_with("{") && str_ref.ends_with("}")
+    }
 }
 
 #[derive(Debug)]
+/// Struct that stores arbitrary data in a `HashMap<String, Box<dyn Any>>`.
+/// Data types must be compatible with `BTToString` and `StringInto<T>`.
+/// 
+/// Provides methods `read<T>()` and `write<T>()`.
+/// 
+/// # Read
+/// 
+/// When reading from the Blackboard, a String will attempt to be coerced to
+/// `T` by calling `string_into()`. `read<T>()` will return `None` if:
+/// - No key matches the provided key
+/// - The value type doesn't match the stored type (`.downcast<T>()`)
+/// - Value is a string but `to_string()` returns `Err`
+/// 
+/// # Write
+/// 
+/// `write()` returns an `Option<T>` which contains the previous value.
+/// If there was no previous value, it returns `None`.
 pub struct Blackboard {
     map: HashMap<String, Box<dyn Any>>,
 }
@@ -41,6 +78,29 @@ impl Blackboard {
         }
     }
 
+    /// When reading from the Blackboard, a String will attempt to be coerced to
+    /// `T` by calling `string_into()`. `read<T>()` will return `None` if:
+    /// - No key matches the provided key
+    /// - The value type doesn't match the stored type (`.downcast<T>()`)
+    /// - Value is a string but `to_string()` returns `Err`
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// 
+    /// let mut blackboard = Blackboard::new();
+    /// 
+    /// assert_eq!(blackboard.write("foo", 132u32), None);
+    /// assert_eq!(blackboard.read::<u32>("foo"), Some(132u32));
+    /// 
+    /// assert_eq!(blackboard.write("foo", 0u32), Some(132u32));
+    /// 
+    /// blackboard.write("bar", "100");
+    /// 
+    /// assert_eq!(blackboard.read::<String>("bar"), Some(String::from("100")));
+    /// assert_eq!(blackboard.read::<u32>("bar"), Some(100u32));
+    /// ```
     pub fn read<T>(&self, key: impl AsRef<str>) -> Option<T>
     where
         T: Any + Clone,
@@ -72,6 +132,26 @@ impl Blackboard {
         None
     }
 
+    /// `write()` returns an `Option<T>` which contains the previous value.
+    /// If there was no previous value, it returns `None`.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// 
+    /// let mut blackboard = Blackboard::new();
+    /// 
+    /// assert_eq!(blackboard.write("foo", 132u32), None);
+    /// assert_eq!(blackboard.read::<u32>("foo"), Some(132u32));
+    /// 
+    /// assert_eq!(blackboard.write("foo", 0u32), Some(132u32));
+    /// 
+    /// blackboard.write("bar", "100");
+    /// 
+    /// assert_eq!(blackboard.read::<String>("bar"), Some(String::from("100")));
+    /// assert_eq!(blackboard.read::<u32>("bar"), Some(100u32));
+    /// ```
     pub fn write<'a, T: Any + BTToString + 'static>(
         &mut self,
         key: impl AsRef<str>,

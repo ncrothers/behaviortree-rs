@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, io::Cursor, rc::Rc, string::FromUtf8Error};
 
-use log::{debug, info};
+use log::debug;
 use quick_xml::{
     events::{attributes::Attributes, Event},
     name::QName,
@@ -9,12 +9,11 @@ use quick_xml::{
 use thiserror::Error;
 
 use crate::{
-    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, TreeNodeManifest},
+    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping},
     blackboard::Blackboard,
     macros::build_node_ptr,
     nodes::{
-        ActionNodeBase, ControlNodeBase, GetNodeType, NodeConfig, ParallelNode, SequenceNode,
-        TreeNode, TreeNodeBase, TreeNodeDefaults, TreeNodePtr,
+        ActionNodeBase, ControlNodeBase, NodeConfig, ParallelNode, SequenceNode, TreeNodeBase, TreeNodePtr, NodeError, ReactiveSequenceNode,
     },
 };
 
@@ -65,16 +64,16 @@ impl Tree {
         Self { root }
     }
 
-    pub fn tick_while_running(&mut self) -> NodeStatus {
+    pub fn tick_while_running(&mut self) -> Result<NodeStatus, NodeError> {
         let mut new_status = self.root.borrow().status();
 
         // Check pre conditions goes here
 
-        new_status = self.root.borrow_mut().execute_tick();
+        new_status = self.root.borrow_mut().execute_tick()?;
 
         // Check post conditions here
 
-        new_status
+        Ok(new_status)
     }
 }
 
@@ -159,7 +158,7 @@ impl Factory {
         // Get clone of node from node_map based on tag name
         let node_ref = self.get_node(node_name)?;
 
-        let mut node = match node_ref {
+        let node = match node_ref {
             NodePtrType::Action(node) => node.clone(),
             // TODO: expand more
             x @ _ => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
@@ -244,10 +243,6 @@ impl Factory {
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
     ) -> Result<Option<TreeNodePtr>, ParseError> {
-        let blackboard = Rc::clone(&self.blackboard);
-        let config = NodeConfig::new(blackboard);
-        let test = NodePtrType::General(Box::new(SequenceNode::new(config)));
-
         let mut buf = Vec::new();
 
         let node = match reader.read_event_into(&mut buf)? {
@@ -329,7 +324,7 @@ impl Factory {
 
                 Some(node)
             }
-            Event::End(e) => None,
+            Event::End(_e) => None,
             e => {
                 debug!("Other - SHOULDN'T BE HERE");
                 debug!("{e:?}");
@@ -421,10 +416,12 @@ impl Factory {
 fn builtin_nodes(blackboard: Rc<RefCell<Blackboard>>) -> HashMap<String, NodePtrType> {
     let mut node_map = HashMap::new();
 
-    let node = build_node_ptr!(blackboard, "SequenceNode", SequenceNode);
-    node_map.insert(String::from("SequenceNode"), node);
-    let node = build_node_ptr!(blackboard, "ParallelNode", ParallelNode);
-    node_map.insert(String::from("ParallelNode"), node);
+    let node = build_node_ptr!(blackboard, "Sequence", SequenceNode);
+    node_map.insert(String::from("Sequence"), node);
+    let node = build_node_ptr!(blackboard, "ReactiveSequence", ReactiveSequenceNode);
+    node_map.insert(String::from("ReactiveSequence"), node);
+    let node = build_node_ptr!(blackboard, "Parallel", ParallelNode);
+    node_map.insert(String::from("Parallel"), node);
 
     node_map
 }

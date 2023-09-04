@@ -1,5 +1,5 @@
 use std::{
-    any::Any, collections::HashMap, convert::Infallible, ffi::IntoStringError, fmt::Debug,
+    any::Any, collections::HashMap, convert::Infallible, fmt::Debug,
     str::FromStr,
 };
 
@@ -12,13 +12,20 @@ use crate::{
     tree::ParseError,
 };
 
+/// Specifies all types of nodes that can be used in a behavior tree.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
     Undefined,
+    /// Leaf node that executes an action
     Action,
+    /// Node with children that executes a certain child based on a condition
     Condition,
+    /// Node with multiple children that executes them in some way.
+    /// Examples like `Sequence`, `Parallel`.
     Control,
+    /// Node with one child that modifies the execution or result of the node.
     Decorator,
+    /// Leaf node that is a reference to another BehaviorTree.
     SubTree,
 }
 
@@ -37,6 +44,8 @@ impl std::fmt::Display for NodeType {
     }
 }
 
+/// Specifies the status of a node's execution. Returned from 
+/// functions `execute_tick()` and `tick()`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeStatus {
     Idle,
@@ -286,7 +295,6 @@ impl_into_string!(
     NodeStatus,
     NodeType,
     PortDirection,
-    serde_json::Value,
     &str
 );
 

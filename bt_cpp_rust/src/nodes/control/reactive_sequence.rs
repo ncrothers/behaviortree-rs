@@ -3,7 +3,7 @@ use log::error;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr},
+    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
@@ -26,7 +26,7 @@ impl ReactiveSequenceNode {
 }
 
 impl TreeNode for ReactiveSequenceNode {
-    fn tick(&mut self) -> NodeStatus {
+    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         let mut all_skipped = true;
 
         self.status = NodeStatus::Running;
@@ -34,7 +34,7 @@ impl TreeNode for ReactiveSequenceNode {
         let mut counter: i32 = 0;
 
         for child in self.children.iter() {
-            let child_status = child.borrow_mut().execute_tick();
+            let child_status = child.borrow_mut().execute_tick()?;
 
             all_skipped &= child_status == NodeStatus::Skipped;
 
@@ -50,11 +50,11 @@ impl TreeNode for ReactiveSequenceNode {
                     } else if self.running_child != counter {
                         // Multiple children running at the same time
                     }
-                    return NodeStatus::Running;
+                    return Ok(NodeStatus::Running);
                 }
                 NodeStatus::Failure => {
                     self.reset_children();
-                    return NodeStatus::Failure;
+                    return Ok(NodeStatus::Failure);
                 }
                 // Do nothing on Success
                 NodeStatus::Success => {}
@@ -63,7 +63,7 @@ impl TreeNode for ReactiveSequenceNode {
                     child.borrow_mut().halt();
                 }
                 NodeStatus::Idle => {
-                    panic!("A child should never return NodeStatus::Idle");
+                    return Err(NodeError::StatusError(child.borrow_mut().config().path.clone(), "Idle".to_string()));
                 }
             }
 
@@ -73,11 +73,13 @@ impl TreeNode for ReactiveSequenceNode {
         self.reset_children();
 
         match all_skipped {
-            true => NodeStatus::Skipped,
-            false => NodeStatus::Success,
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Success),
         }
     }
+}
 
+impl NodeHalt for ReactiveSequenceNode {
     fn halt(&mut self) {
         self.reset_children()
     }
