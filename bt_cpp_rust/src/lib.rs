@@ -9,6 +9,7 @@ pub mod nodes {
         pub mod parallel;
         pub mod reactive_sequence;
         pub mod sequence;
+        pub mod fallback;
 
         pub use control::*;
     }
@@ -18,6 +19,7 @@ pub mod nodes {
     }
 
     pub use control::*;
+    pub use control::fallback::*;
     pub use control::parallel::*;
     pub use control::reactive_sequence::*;
     pub use control::sequence::*;

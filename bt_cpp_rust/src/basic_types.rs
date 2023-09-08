@@ -57,17 +57,11 @@ pub enum NodeStatus {
 
 impl NodeStatus {
     pub fn is_active(&self) -> bool {
-        match self {
-            Self::Idle | Self::Skipped => false,
-            _ => true,
-        }
+        matches!(self, Self::Idle | Self::Skipped)
     }
 
     pub fn is_completed(&self) -> bool {
-        match self {
-            Self::Success | Self::Failure => true,
-            _ => false,
-        }
+        matches!(self, Self::Success | Self::Failure)
     }
 
     pub fn into_string_color(&self) -> String {
@@ -79,7 +73,7 @@ impl NodeStatus {
             Self::Skipped => "\x1b[34m",
         };
 
-        String::from(color_start.to_string() + &self.bt_to_string() + "\x1b[0m")
+        color_start.to_string() + &self.bt_to_string() + "\x1b[0m"
     }
 }
 
@@ -186,7 +180,7 @@ where
 
     fn string_into(&self) -> Result<Vec<String>, Self::Err> {
         self.as_ref()
-            .split(";")
+            .split(';')
             .map(|x| Ok(x.to_string()))
             .collect()
     }
@@ -369,16 +363,13 @@ impl PortInfo {
 
     pub fn default_value(&self) -> Option<&Box<dyn PortValue>> {
         match &self.default_value {
-            Some(v) => Some(&v),
+            Some(v) => Some(v),
             None => None,
         }
     }
 
     pub fn default_value_str(&self) -> Option<String> {
-        match &self.default_value {
-            Some(v) => Some(v.bt_to_string()),
-            None => None,
-        }
+        self.default_value.as_ref().map(|v| v.bt_to_string())
     }
 
     pub fn set_default(&mut self, default: impl PortValue) {

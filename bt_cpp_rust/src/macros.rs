@@ -27,7 +27,7 @@ macro_rules! __impl_string_into {
                     self
                         .as_ref()
                         .split(";")
-                        .map(|x| Ok(x.parse()?))
+                        .map(|x| x.parse())
                         .collect()
                 }
             }

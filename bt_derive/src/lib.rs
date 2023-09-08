@@ -37,7 +37,7 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
                 Box::new(self)
             }
 
-            fn into_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
+            fn to_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
                 std::rc::Rc::new(std::cell::RefCell::new(self.clone()))
             }
 

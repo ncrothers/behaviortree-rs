@@ -1,5 +1,4 @@
 use bt_derive::{ControlNode, TreeNodeDefaults};
-use log::error;
 
 use crate::{
     basic_types::NodeStatus,
@@ -31,9 +30,7 @@ impl TreeNode for ReactiveSequenceNode {
 
         self.status = NodeStatus::Running;
 
-        let mut counter: i32 = 0;
-
-        for child in self.children.iter() {
+        for (counter, child) in self.children.iter().enumerate() {
             let child_status = child.borrow_mut().execute_tick()?;
 
             all_skipped &= child_status == NodeStatus::Skipped;
@@ -41,13 +38,14 @@ impl TreeNode for ReactiveSequenceNode {
             match child_status {
                 NodeStatus::Running => {
                     for i in 0..counter {
-                        if let Err(e) = self.halt_child(i as usize) {
-                            error!("Unexpected error in ReactiveSequenceNode.tick(): {e:?}");
-                        }
+                        self.halt_child(i)?;
+                        // if let Err(e) = self.halt_child(i as usize) {
+                        //     error!("Unexpected error in ReactiveSequenceNode.tick(): {e:?}");
+                        // }
                     }
                     if self.running_child == -1 {
-                        self.running_child = counter;
-                    } else if self.running_child != counter {
+                        self.running_child = counter as i32;
+                    } else if self.running_child != counter as i32 {
                         // Multiple children running at the same time
                     }
                     return Ok(NodeStatus::Running);
@@ -66,8 +64,6 @@ impl TreeNode for ReactiveSequenceNode {
                     return Err(NodeError::StatusError(child.borrow_mut().config().path.clone(), "Idle".to_string()));
                 }
             }
-
-            counter += 1;
         }
 
         self.reset_children();

@@ -13,4 +13,4 @@ quote = "1.0.33"
 syn = "2.0.29"
 
 [dev-dependencies]
-bt-cpp-rust = { path = "../bt_cpp_rust" }
+bt_cpp_rust = { path = "../bt_cpp_rust" }

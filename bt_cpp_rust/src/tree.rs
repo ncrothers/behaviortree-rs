@@ -13,7 +13,7 @@ use crate::{
     blackboard::Blackboard,
     macros::build_node_ptr,
     nodes::{
-        ActionNodeBase, ControlNodeBase, NodeConfig, ParallelNode, SequenceNode, TreeNodeBase, TreeNodePtr, NodeError, ReactiveSequenceNode,
+        ActionNodeBase, ControlNodeBase, ParallelNode, SequenceNode, TreeNodeBase, TreeNodePtr, NodeError, ReactiveSequenceNode,
     },
 };
 
@@ -129,7 +129,7 @@ impl Factory {
 
         match self.build_child(&mut reader)? {
             Some(child) => Ok(child),
-            None => Err(ParseError::NodeTypeMismatch(format!("SubTree"))),
+            None => Err(ParseError::NodeTypeMismatch("SubTree".to_string())),
         }
     }
 
@@ -161,12 +161,12 @@ impl Factory {
         let node = match node_ref {
             NodePtrType::Action(node) => node.clone(),
             // TODO: expand more
-            x @ _ => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
+            x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
         };
 
         // Get list of defined ports from node
 
-        let node = node.into_tree_node_ptr();
+        let node = node.to_tree_node_ptr();
 
         self.add_ports_to_node(&node, node_name, attributes)?;
 
@@ -189,7 +189,7 @@ impl Factory {
     fn add_ports_to_node(
         &self,
         node_ptr: &TreeNodePtr,
-        node_name: &String,
+        node_name: &str,
         attributes: Attributes,
     ) -> Result<(), ParseError> {
         let mut node = node_ptr.borrow_mut();
@@ -207,8 +207,8 @@ impl Factory {
             if !manifest.ports.contains_key(port_name) {
                 return Err(ParseError::InvalidPort(
                     port_name.clone(),
-                    node_name.clone(),
-                    manifest.ports.to_owned().into_keys().into_iter().collect(),
+                    node_name.to_owned(),
+                    manifest.ports.to_owned().into_keys().collect(),
                 ));
             }
         }
@@ -225,7 +225,7 @@ impl Factory {
             let direction = port_info.direction();
 
             if !matches!(direction, PortDirection::Output)
-                && !config.has_port(direction, &port_name)
+                && !config.has_port(direction, port_name)
                 && port_info.default_value().is_some()
             {
                 config.add_port(
@@ -270,7 +270,7 @@ impl Factory {
                             node.add_child(child);
                         }
 
-                        let node = node.into_tree_node_ptr();
+                        let node = node.to_tree_node_ptr();
 
                         self.add_ports_to_node(&node, &node_name, attributes)?;
 
@@ -282,13 +282,13 @@ impl Factory {
                         let child = match self.build_child(reader)? {
                             Some(node) => node,
                             None => {
-                                return Err(ParseError::NodeTypeMismatch(format!("Decorator")));
+                                return Err(ParseError::NodeTypeMismatch("Decorator".to_string()));
                             }
                         };
 
                         node.add_child(child);
 
-                        let node = node.into_tree_node_ptr();
+                        let node = node.to_tree_node_ptr();
 
                         self.add_ports_to_node(&node, &node_name, attributes)?;
 
@@ -379,9 +379,7 @@ impl Factory {
                     if let Some(id) = attributes.get("ID") {
                         self.tree_roots.insert(id.clone(), reader.clone());
                     } else {
-                        return Err(ParseError::MissingAttribute(format!(
-                            "Found BehaviorTree definition without ID. Cannot continue parsing."
-                        )));
+                        return Err(ParseError::MissingAttribute("Found BehaviorTree definition without ID. Cannot continue parsing.".to_string()));
                     }
 
                     let end = e.to_end();
@@ -394,15 +392,13 @@ impl Factory {
                 Event::End(e) => {
                     let name = String::from_utf8(e.name().0.into())?;
                     if name != "root" {
-                        return Err(ParseError::InternalError(format!("A non-root end tag was found. This should not happen. Please report this.")));
+                        return Err(ParseError::InternalError("A non-root end tag was found. This should not happen. Please report this.".to_string()));
                     } else {
                         break;
                     }
                 }
                 _ => {
-                    return Err(ParseError::InternalError(format!(
-                        "Something bad has happened. Please report this."
-                    )))
+                    return Err(ParseError::InternalError("Something bad has happened. Please report this.".to_string()))
                 }
             };
         }
@@ -410,6 +406,12 @@ impl Factory {
         buf.clear();
 
         Ok(())
+    }
+}
+
+impl Default for Factory {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -70,7 +70,7 @@ pub trait TreeNodeDefaults {
     fn set_status(&mut self, status: NodeStatus);
     fn config(&mut self) -> &mut NodeConfig;
     fn into_boxed(self) -> Box<dyn TreeNodeBase>;
-    fn into_tree_node_ptr(&self) -> TreeNodePtr;
+    fn to_tree_node_ptr(&self) -> TreeNodePtr;
     fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase>;
 }
 
@@ -196,9 +196,7 @@ impl NodeConfig {
     pub fn manifest(&self) -> Result<Rc<TreeNodeManifest>, ParseError> {
         match self.manifest.as_ref() {
             Some(manifest) => Ok(Rc::clone(manifest)),
-            None => Err(ParseError::InternalError(format!(
-                "Missing manifest. This shouldn't happen; please report this."
-            ))),
+            None => Err(ParseError::InternalError("Missing manifest. This shouldn't happen; please report this.".to_string())),
         }
     }
 

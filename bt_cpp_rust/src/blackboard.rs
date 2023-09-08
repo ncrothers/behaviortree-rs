@@ -21,7 +21,7 @@ pub trait BlackboardString {
     fn is_bb_pointer(&self) -> bool;
 }
 
-impl<'a, T> BlackboardString for T
+impl<T> BlackboardString for T
 where
     T: AsRef<str> + Clone,
 {
@@ -29,12 +29,12 @@ where
         let str_ref = self.as_ref();
 
         // Is bb pointer
-        if str_ref.starts_with("{") && str_ref.ends_with("}") {
+        if str_ref.starts_with('{') && str_ref.ends_with('}') {
             Some(
                 str_ref
-                    .strip_prefix("{")
+                    .strip_prefix('{')
                     .unwrap()
-                    .strip_suffix("}")
+                    .strip_suffix('}')
                     .unwrap()
                     .to_string(),
             )
@@ -45,7 +45,7 @@ where
 
     fn is_bb_pointer(&self) -> bool {
         let str_ref = self.as_ref();
-        str_ref.starts_with("{") && str_ref.ends_with("}")
+        str_ref.starts_with('{') && str_ref.ends_with('}')
     }
 }
 
@@ -152,7 +152,7 @@ impl Blackboard {
     /// assert_eq!(blackboard.read::<String>("bar"), Some(String::from("100")));
     /// assert_eq!(blackboard.read::<u32>("bar"), Some(100u32));
     /// ```
-    pub fn write<'a, T: Any + BTToString + 'static>(
+    pub fn write<T: Any + BTToString + 'static>(
         &mut self,
         key: impl AsRef<str>,
         value: T,
@@ -166,5 +166,11 @@ impl Blackboard {
             },
             None => None,
         }
+    }
+}
+
+impl Default for Blackboard {
+    fn default() -> Self {
+        Self::new()
     }
 }
