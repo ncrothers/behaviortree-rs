@@ -7,7 +7,7 @@ use crate::{
         self, get_remapped_key, BTToString, NodeStatus, PortDirection, PortValue, PortsList,
         PortsRemapping, StringInto, TreeNodeManifest,
     },
-    blackboard::{Blackboard, BlackboardString, BlackboardPtr},
+    blackboard::{BlackboardString, BlackboardPtr},
     tree::ParseError,
 };
 

@@ -54,6 +54,12 @@ pub enum NodePtrType {
     Action(Box<dyn ActionNodeBase>),
 }
 
+enum TickOption {
+    WhileRunning,
+    ExactlyOnce,
+    OnceUnlessWokenUp,
+}
+
 #[derive(Debug)]
 pub struct Tree {
     root: TreeNodePtr,
@@ -64,22 +70,32 @@ impl Tree {
         Self { root }
     }
 
-    pub fn tick_while_running(&mut self) -> Result<NodeStatus, NodeError> {
-        let mut new_status = self.root.borrow().status();
+    fn tick_root(&mut self, opt: TickOption) -> Result<NodeStatus, NodeError> {
+        let mut status = NodeStatus::Idle;
 
-        // Check pre conditions goes here
+        while status == NodeStatus::Idle || (matches!(opt, TickOption::WhileRunning) && matches!(status, NodeStatus::Running)) {
+            status = self.root.borrow_mut().execute_tick()?;
 
-        loop {
-            new_status = self.root.borrow_mut().execute_tick()?;
+            // Not implemented: Check for wake-up conditions and tick again if so
 
-            if new_status != NodeStatus::Running {
-                break;
+            if status.is_completed() {
+                self.root.borrow_mut().reset_status();
             }
         }
 
-        // Check post conditions here
+        Ok(status)
+    }
 
-        Ok(new_status)
+    pub fn tick_exactly_once(&mut self) -> Result<NodeStatus, NodeError> {
+        self.tick_root(TickOption::ExactlyOnce)
+    }
+
+    pub fn tick_once(&mut self) -> Result<NodeStatus, NodeError> {
+        self.tick_root(TickOption::OnceUnlessWokenUp)
+    }
+
+    pub fn tick_while_running(&mut self) -> Result<NodeStatus, NodeError> {
+        self.tick_root(TickOption::WhileRunning)
     }
 }
 
