@@ -126,17 +126,13 @@ macro_rules! __build_node_ptr {
     ($b:expr, $n:expr, $t:ty) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
-            use $crate::tree::NodePtrType;
 
             let node_config = NodeConfig::new(::std::rc::Rc::clone(&$b));
             let mut node = <$t>::new(node_config);
             let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_type(), $n, node.provided_ports(), "");
             node.config().set_manifest(Rc::new(manifest));
             let node = Box::new(node);
-            match node.node_type() {
-                _ => NodePtrType::Control(node),
-            }
-            // $npt(Box::new(node))
+            node
         }
     };
     ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {

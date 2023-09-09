@@ -1,3 +1,5 @@
+use std::{rc::Rc, cell::RefCell};
+
 use crate::{nodes::{TreeNodeBase, NodeError}, basic_types::NodeStatus};
 
 pub trait ActionNodeBase: TreeNodeBase + ActionNode {}
@@ -15,6 +17,8 @@ impl Clone for Box<dyn ActionNodeBase> {
 }
 
 pub trait SyncActionNode {}
+
+pub type ActionNodePtr = Rc<RefCell<dyn ActionNodeBase>>;
 
 pub trait StatefulActionNode {
     fn on_start(&mut self) -> Result<NodeStatus, NodeError>;

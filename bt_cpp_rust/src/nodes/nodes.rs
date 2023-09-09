@@ -111,6 +111,8 @@ pub enum NodeError {
     UserError(#[from] anyhow::Error),
     #[error("{0}")]
     NodeStructureError(String),
+    #[error("Decorator node does not have a child.")]
+    ChildMissing,
 }
 
 /// TODO: Not currently used

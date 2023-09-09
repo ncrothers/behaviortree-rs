@@ -13,7 +13,7 @@ use crate::{
     blackboard::{Blackboard, BlackboardPtr},
     macros::build_node_ptr,
     nodes::{
-        ActionNodeBase, ControlNodeBase, ParallelNode, SequenceNode, TreeNodeBase, TreeNodePtr, NodeError, ReactiveSequenceNode, self,
+        ActionNodeBase, ControlNodeBase, TreeNodeBase, TreeNodePtr, NodeError, self, DecoratorNodeBase,
     },
 };
 
@@ -50,7 +50,7 @@ pub enum ParseError {
 pub enum NodePtrType {
     General(Box<dyn TreeNodeBase>),
     Control(Box<dyn ControlNodeBase>),
-    Decorator(Box<dyn ControlNodeBase>),
+    Decorator(Box<dyn DecoratorNodeBase>),
     Action(Box<dyn ActionNodeBase>),
 }
 
@@ -292,7 +292,7 @@ impl Factory {
                             }
                         };
 
-                        node.add_child(child);
+                        node.set_child(child);
 
                         let node = node.to_tree_node_ptr();
 
@@ -424,24 +424,41 @@ impl Default for Factory {
 fn builtin_nodes(blackboard: BlackboardPtr) -> HashMap<String, NodePtrType> {
     let mut node_map = HashMap::new();
 
-    let node = build_node_ptr!(blackboard, "Sequence", nodes::SequenceNode);
+    // Control nodes
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "Sequence", nodes::control::SequenceNode));
     node_map.insert(String::from("Sequence"), node);
-    let node = build_node_ptr!(blackboard, "ReactiveSequence", nodes::ReactiveSequenceNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "ReactiveSequence", nodes::control::ReactiveSequenceNode));
     node_map.insert(String::from("ReactiveSequence"), node);
-    let node = build_node_ptr!(blackboard, "SequenceStar", nodes::SequenceWithMemoryNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "SequenceStar", nodes::control::SequenceWithMemoryNode));
     node_map.insert(String::from("SequenceStar"), node);
-    let node = build_node_ptr!(blackboard, "Parallel", nodes::ParallelNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "Parallel", nodes::control::ParallelNode));
     node_map.insert(String::from("Parallel"), node);
-    let node = build_node_ptr!(blackboard, "ParallelAll", nodes::ParallelAllNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "ParallelAll", nodes::control::ParallelAllNode));
     node_map.insert(String::from("ParallelAll"), node);
-    let node = build_node_ptr!(blackboard, "Fallback", nodes::FallbackNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "Fallback", nodes::control::FallbackNode));
     node_map.insert(String::from("Fallback"), node);
-    let node = build_node_ptr!(blackboard, "ReactiveFallback", nodes::ReactiveFallbackNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "ReactiveFallback", nodes::control::ReactiveFallbackNode));
     node_map.insert(String::from("ReactiveFallback"), node);
-    let node = build_node_ptr!(blackboard, "IfThenElse", nodes::IfThenElseNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "IfThenElse", nodes::control::IfThenElseNode));
     node_map.insert(String::from("IfThenElse"), node);
-    let node = build_node_ptr!(blackboard, "WhileDoElse", nodes::WhileDoElseNode);
+    let node = NodePtrType::Control(build_node_ptr!(blackboard, "WhileDoElse", nodes::control::WhileDoElseNode));
     node_map.insert(String::from("WhileDoElse"), node);
+    
+    // Decorator nodes
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "ForceFailure", nodes::decorator::ForceFailureNode));
+    node_map.insert(String::from("ForceFailure"), node);
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "ForceSuccess", nodes::decorator::ForceSuccessNode));
+    node_map.insert(String::from("ForceSuccess"), node);
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "Inverter", nodes::decorator::InverterNode));
+    node_map.insert(String::from("Inverter"), node);
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "KeepRunningUntilFailure", nodes::decorator::KeepRunningUntilFailureNode));
+    node_map.insert(String::from("KeepRunningUntilFailure"), node);
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "Repeat", nodes::decorator::RepeatNode));
+    node_map.insert(String::from("Repeat"), node);
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "Retry", nodes::decorator::RetryNode));
+    node_map.insert(String::from("Retry"), node);
+    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "RunOnce", nodes::decorator::RunOnceNode));
+    node_map.insert(String::from("RunOnce"), node);
 
     node_map
 }

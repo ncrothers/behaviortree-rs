@@ -141,7 +141,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
         }
 
         impl ::bt_cpp_rust::nodes::NodeTick for #ident {
-            fn execute_tick(&mut self) -> Result<NodeStatus, NodeError> {
+            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
                 self.tick()
             }
         }
@@ -151,6 +151,70 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
         impl ::bt_cpp_rust::nodes::GetNodeType for #ident {
             fn node_type(&self) -> ::bt_cpp_rust::basic_types::NodeType {
                 ::bt_cpp_rust::basic_types::NodeType::Control
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(DecoratorNode)]
+pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let ident = input.ident;
+
+    let expanded = quote! {
+        impl ::bt_cpp_rust::nodes::DecoratorNode for #ident {
+            fn set_child(&mut self, child: ::bt_cpp_rust::nodes::TreeNodePtr) {
+                self.child = Some(child);
+            }
+
+            fn child(&self) -> Result<&::bt_cpp_rust::nodes::TreeNodePtr, ::bt_cpp_rust::nodes::NodeError> {
+                match &self.child {
+                    Some(child) => Ok(child),
+                    None => Err(::bt_cpp_rust::nodes::NodeError::ChildMissing)
+                }
+            }
+
+            fn halt_decorator(&mut self) {
+                self.reset_child();
+            }
+
+            fn halt_child(&self) {
+                self.reset_child();
+            }
+
+            fn reset_child(&self) {
+                if let Some(child) = self.child.as_ref() {
+                    if matches!(child.borrow().status(), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
+                        child.borrow_mut().halt();
+                    }
+    
+                    child.borrow_mut().reset_status();
+                }
+            }
+
+            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::DecoratorNodeBase> {
+                Box::new(self.clone())
+            }
+        }
+
+        impl ::bt_cpp_rust::nodes::NodeTick for #ident {
+            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                if self.child.is_none() {
+                    return Err(::bt_cpp_rust::nodes::NodeError::ChildMissing);
+                }
+                
+                self.tick()
+            }
+        }
+
+        impl ::bt_cpp_rust::nodes::DecoratorNodeBase for #ident {}
+
+        impl ::bt_cpp_rust::nodes::GetNodeType for #ident {
+            fn node_type(&self) -> ::bt_cpp_rust::basic_types::NodeType {
+                ::bt_cpp_rust::basic_types::NodeType::Decorator
             }
         }
     };
