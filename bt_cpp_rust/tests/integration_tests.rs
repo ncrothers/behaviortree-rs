@@ -32,16 +32,16 @@ impl DummyActionNode {
 }
 
 impl StatefulActionNode for DummyActionNode {
-    fn on_start(&mut self) -> NodeStatus {
+    fn on_start(&mut self) -> Result<NodeStatus, NodeError> {
         info!("Starting!");
 
-        NodeStatus::Running
+        Ok(NodeStatus::Running)
     }
 
-    fn on_running(&mut self) -> NodeStatus {
+    fn on_running(&mut self) -> Result<NodeStatus, NodeError> {
         info!("Running!");
 
-        NodeStatus::Success
+        Ok(NodeStatus::Success)
     }
 }
 
@@ -88,7 +88,7 @@ impl TreeNode for DummyActionNode {
 #[test]
 fn tree_test() {
     pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Info)
         .init();
 
     let text = std::fs::read_to_string("./test.xml").unwrap();
@@ -98,18 +98,11 @@ fn tree_test() {
     register_node!(factory, "CustomNode", DummyActionNode);
     register_node!(factory, "InnerNode", DummyActionNode);
 
-    let blackboard = Rc::new(RefCell::new(Blackboard::new()));
+    let blackboard = Blackboard::new_ptr();
 
     factory.register_bt_from_text(text).unwrap();
 
-    let mut tree = match factory.instantiate_tree(&blackboard, "main") {
-        Ok(tree) => tree,
-        Err(e) => {
-            error!("Error: {e}");
-            panic!("");
-        }
-    };
-    info!("{tree:?}");
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("{status:?}"),

@@ -10,10 +10,10 @@ use thiserror::Error;
 
 use crate::{
     basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping},
-    blackboard::Blackboard,
+    blackboard::{Blackboard, BlackboardPtr},
     macros::build_node_ptr,
     nodes::{
-        ActionNodeBase, ControlNodeBase, ParallelNode, SequenceNode, TreeNodeBase, TreeNodePtr, NodeError, ReactiveSequenceNode,
+        ActionNodeBase, ControlNodeBase, ParallelNode, SequenceNode, TreeNodeBase, TreeNodePtr, NodeError, ReactiveSequenceNode, self,
     },
 };
 
@@ -69,7 +69,13 @@ impl Tree {
 
         // Check pre conditions goes here
 
-        new_status = self.root.borrow_mut().execute_tick()?;
+        loop {
+            new_status = self.root.borrow_mut().execute_tick()?;
+
+            if new_status != NodeStatus::Running {
+                break;
+            }
+        }
 
         // Check post conditions here
 
@@ -79,7 +85,7 @@ impl Tree {
 
 pub struct Factory {
     node_map: HashMap<String, NodePtrType>,
-    blackboard: Rc<RefCell<Blackboard>>,
+    blackboard: BlackboardPtr,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
 }
 
@@ -94,11 +100,11 @@ impl Factory {
         }
     }
 
-    pub fn set_blackboard(&mut self, blackboard: Rc<RefCell<Blackboard>>) {
+    pub fn set_blackboard(&mut self, blackboard: BlackboardPtr) {
         self.blackboard = blackboard;
     }
 
-    pub fn blackboard(&self) -> Rc<RefCell<Blackboard>> {
+    pub fn blackboard(&self) -> BlackboardPtr {
         Rc::clone(&self.blackboard)
     }
 
@@ -118,7 +124,7 @@ impl Factory {
         tree_id: &String,
         tree_name: &String,
         path_prefix: &String,
-        blackboard: &Rc<RefCell<Blackboard>>,
+        blackboard: &BlackboardPtr,
     ) -> Result<TreeNodePtr, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
@@ -135,7 +141,7 @@ impl Factory {
 
     pub fn instantiate_tree(
         &self,
-        blackboard: &Rc<RefCell<Blackboard>>,
+        blackboard: &BlackboardPtr,
         main_tree_id: &str,
     ) -> Result<Tree, ParseError> {
         let main_tree_id = String::from(main_tree_id);
@@ -415,15 +421,27 @@ impl Default for Factory {
     }
 }
 
-fn builtin_nodes(blackboard: Rc<RefCell<Blackboard>>) -> HashMap<String, NodePtrType> {
+fn builtin_nodes(blackboard: BlackboardPtr) -> HashMap<String, NodePtrType> {
     let mut node_map = HashMap::new();
 
-    let node = build_node_ptr!(blackboard, "Sequence", SequenceNode);
+    let node = build_node_ptr!(blackboard, "Sequence", nodes::SequenceNode);
     node_map.insert(String::from("Sequence"), node);
-    let node = build_node_ptr!(blackboard, "ReactiveSequence", ReactiveSequenceNode);
+    let node = build_node_ptr!(blackboard, "ReactiveSequence", nodes::ReactiveSequenceNode);
     node_map.insert(String::from("ReactiveSequence"), node);
-    let node = build_node_ptr!(blackboard, "Parallel", ParallelNode);
+    let node = build_node_ptr!(blackboard, "SequenceStar", nodes::SequenceWithMemoryNode);
+    node_map.insert(String::from("SequenceStar"), node);
+    let node = build_node_ptr!(blackboard, "Parallel", nodes::ParallelNode);
     node_map.insert(String::from("Parallel"), node);
+    let node = build_node_ptr!(blackboard, "ParallelAll", nodes::ParallelAllNode);
+    node_map.insert(String::from("ParallelAll"), node);
+    let node = build_node_ptr!(blackboard, "Fallback", nodes::FallbackNode);
+    node_map.insert(String::from("Fallback"), node);
+    let node = build_node_ptr!(blackboard, "ReactiveFallback", nodes::ReactiveFallbackNode);
+    node_map.insert(String::from("ReactiveFallback"), node);
+    let node = build_node_ptr!(blackboard, "IfThenElse", nodes::IfThenElseNode);
+    node_map.insert(String::from("IfThenElse"), node);
+    let node = build_node_ptr!(blackboard, "WhileDoElse", nodes::WhileDoElseNode);
+    node_map.insert(String::from("WhileDoElse"), node);
 
     node_map
 }

@@ -67,7 +67,7 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
 
             fn execute_action_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
                 match self.tick()? {
-                    ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
+                    ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
                     status => Ok(status)
                 }
             }
@@ -167,9 +167,9 @@ pub fn derive_sync_action_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::NodeTick for #ident {
-            fn execute_tick(&mut self) -> Result<NodeStatus, NodeError> {
-                match self.execute_action_tick()? {
-                    ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
+            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                match <Self as ::bt_cpp_rust::nodes::ActionNode>::execute_action_tick(self)? {
+                    ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
                     status => Ok(status)
                 }
             }
@@ -189,18 +189,18 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::NodeTick for #ident where #ident: ::bt_cpp_rust::nodes::StatefulActionNode {
             fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
-                let prev_status = self.status();
+                let prev_status = <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self);
 
                 let new_status = match prev_status {
                     ::bt_cpp_rust::basic_types::NodeStatus::Idle => {
-                        let new_status = self.on_start();
+                        let new_status = self.on_start()?;
                         if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
                             return Err(NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
                         }
                         new_status
                     }
                     ::bt_cpp_rust::basic_types::NodeStatus::Running => {
-                        let new_status = self.on_running();
+                        let new_status = self.on_running()?;
                         if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
                             return Err(NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
                         }
@@ -209,7 +209,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
                     prev_status => prev_status
                 };
 
-                self.set_status(new_status.clone());
+                <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::set_status(self, new_status.clone());
 
                 Ok(new_status)
             }
@@ -219,7 +219,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
             fn halt(&mut self) {
                 *self.halt_requested.borrow_mut() = true;
 
-                if matches!(self.status(), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
+                if matches!(<Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
                     self.on_halted();
                 }
             }

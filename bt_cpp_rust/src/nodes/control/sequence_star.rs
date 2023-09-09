@@ -4,9 +4,8 @@ use crate::{
     basic_types::NodeStatus,
     nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
-
-/// The SequenceNode is used to tick children in an ordered sequence.
-/// If any child returns RUNNING, previous children will NOT be ticked again.
+/// The SequenceStarNode is used to tick children in an ordered sequence.
+/// If any child returns RUNNING, previous children are not ticked again.
 /// 
 /// - If all the children return SUCCESS, this node returns SUCCESS.
 /// 
@@ -14,8 +13,9 @@ use crate::{
 ///   Loop is NOT restarted, the same running child will be ticked again.
 /// 
 /// - If a child returns FAILURE, stop the loop and return FAILURE.
+///   Loop is NOT restarted, the same running child will be ticked again.
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-pub struct SequenceNode {
+pub struct SequenceWithMemoryNode {
     config: NodeConfig,
     children: Vec<TreeNodePtr>,
     status: NodeStatus,
@@ -23,8 +23,8 @@ pub struct SequenceNode {
     all_skipped: bool,
 }
 
-impl SequenceNode {
-    pub fn new(config: NodeConfig) -> SequenceNode {
+impl SequenceWithMemoryNode {
+    pub fn new(config: NodeConfig) -> SequenceWithMemoryNode {
         Self {
             config,
             children: Vec::new(),
@@ -35,7 +35,7 @@ impl SequenceNode {
     }
 }
 
-impl TreeNode for SequenceNode {
+impl TreeNode for SequenceWithMemoryNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         if self.status == NodeStatus::Idle {
             self.all_skipped = true;
@@ -52,29 +52,35 @@ impl TreeNode for SequenceNode {
             self.all_skipped &= child_status == NodeStatus::Skipped;
 
             match &child_status {
+                NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Failure => {
-                    self.reset_children();
-                    self.child_idx = 0;
+                    // Do NOT reset child_idx on failure
+                    // Halt children at and after this index
+                    self.halt_children(self.child_idx)?;
+
                     return Ok(NodeStatus::Failure);
                 }
                 NodeStatus::Success | NodeStatus::Skipped => {
                     self.child_idx += 1;
                 }
-                NodeStatus::Idle => return Err(NodeError::StatusError("ParallelAllNode".to_string(), "Idle".to_string())),
-                _ => {}
+                NodeStatus::Idle => return Err(NodeError::StatusError("SequenceStarNode".to_string(), "Idle".to_string()))
             };
         }
 
+        // All children returned Success
         if self.child_idx == self.children.len() {
             self.reset_children();
             self.child_idx = 0;
         }
 
-        Ok(NodeStatus::Success)
+        match self.all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Failure),
+        }
     }
 }
 
-impl NodeHalt for SequenceNode {
+impl NodeHalt for SequenceWithMemoryNode {
     fn halt(&mut self) {
         self.child_idx = 0;
         self.reset_children()

@@ -215,11 +215,11 @@ where
 
     fn string_into(&self) -> Result<NodeStatus, Self::Err> {
         match self.as_ref() {
-            "IDLE" => Ok(NodeStatus::Idle),
-            "RUNNING" => Ok(NodeStatus::Idle),
-            "SUCCESS" => Ok(NodeStatus::Idle),
-            "FAILURE" => Ok(NodeStatus::Idle),
-            "SKIPPED" => Ok(NodeStatus::Idle),
+            "IDLE" | "Idle" => Ok(NodeStatus::Idle),
+            "RUNNING" | "Running" => Ok(NodeStatus::Running),
+            "SUCCESS" | "Success" => Ok(NodeStatus::Success),
+            "FAILURE" | "Failure" => Ok(NodeStatus::Failure),
+            "SKIPPED" | "Skipped" => Ok(NodeStatus::Skipped),
             _ => Err(ParseNodeStatusError::NoMatch),
         }
     }

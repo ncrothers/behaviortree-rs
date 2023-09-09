@@ -7,7 +7,7 @@ use crate::{
         self, get_remapped_key, BTToString, NodeStatus, PortDirection, PortValue, PortsList,
         PortsRemapping, StringInto, TreeNodeManifest,
     },
-    blackboard::{Blackboard, BlackboardString},
+    blackboard::{Blackboard, BlackboardString, BlackboardPtr},
     tree::ParseError,
 };
 
@@ -97,7 +97,7 @@ pub trait GetNodeType {
 
 #[derive(Debug, Error)]
 pub enum NodeError {
-    #[error("Node [{0}] returned invalid status [NodeStatus::{1}] when it is not allowed")]
+    #[error("Child node of [{0}] returned invalid status [NodeStatus::{1}] when it is not allowed")]
     StatusError(String, String),
     #[error("Out of bounds index")]
     IndexError,
@@ -109,6 +109,8 @@ pub enum NodeError {
     BlackboardError(String),
     #[error("{0}")]
     UserError(#[from] anyhow::Error),
+    #[error("{0}")]
+    NodeStructureError(String),
 }
 
 /// TODO: Not currently used
@@ -138,7 +140,7 @@ pub enum PostCond {
 /// Contains all common configuration that all types of nodes use.
 #[derive(Clone, Debug)]
 pub struct NodeConfig {
-    pub blackboard: Rc<RefCell<Blackboard>>,
+    pub blackboard: BlackboardPtr,
     pub input_ports: PortsRemapping,
     pub output_ports: PortsRemapping,
     pub manifest: Option<Rc<TreeNodeManifest>>,
@@ -152,7 +154,7 @@ pub struct NodeConfig {
 }
 
 impl NodeConfig {
-    pub fn new(blackboard: Rc<RefCell<Blackboard>>) -> NodeConfig {
+    pub fn new(blackboard: BlackboardPtr) -> NodeConfig {
         Self {
             blackboard,
             input_ports: HashMap::new(),
@@ -166,7 +168,7 @@ impl NodeConfig {
     }
 
     /// Returns a reference to the blackboard.
-    pub fn blackboard(&self) -> &Rc<RefCell<Blackboard>> {
+    pub fn blackboard(&self) -> &BlackboardPtr {
         &self.blackboard
     }
 

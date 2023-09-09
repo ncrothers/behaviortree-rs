@@ -5,6 +5,17 @@ use crate::{
     nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
+/// The ReactiveSequence is similar to a ParallelNode.
+/// All the children are ticked from first to last:
+/// 
+/// - If a child returns RUNNING, halt the remaining siblings in the sequence and return RUNNING.
+/// - If a child returns SUCCESS, tick the next sibling.
+/// - If a child returns FAILURE, stop and return FAILURE.
+/// 
+/// If all the children return SUCCESS, this node returns SUCCESS.
+/// 
+/// IMPORTANT: to work properly, this node should not have more than a single
+///            asynchronous child.
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
 pub struct ReactiveSequenceNode {
     config: NodeConfig,
@@ -39,14 +50,12 @@ impl TreeNode for ReactiveSequenceNode {
                 NodeStatus::Running => {
                     for i in 0..counter {
                         self.halt_child(i)?;
-                        // if let Err(e) = self.halt_child(i as usize) {
-                        //     error!("Unexpected error in ReactiveSequenceNode.tick(): {e:?}");
-                        // }
                     }
                     if self.running_child == -1 {
                         self.running_child = counter as i32;
                     } else if self.running_child != counter as i32 {
                         // Multiple children running at the same time
+                        return Err(NodeError::NodeStructureError("[ReactiveSequence]: Only a single child can return Running.".to_string()))
                     }
                     return Ok(NodeStatus::Running);
                 }

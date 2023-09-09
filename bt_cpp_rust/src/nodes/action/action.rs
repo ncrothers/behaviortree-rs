@@ -17,7 +17,7 @@ impl Clone for Box<dyn ActionNodeBase> {
 pub trait SyncActionNode {}
 
 pub trait StatefulActionNode {
-    fn on_start(&mut self) -> NodeStatus;
-    fn on_running(&mut self) -> NodeStatus;
+    fn on_start(&mut self) -> Result<NodeStatus, NodeError>;
+    fn on_running(&mut self) -> Result<NodeStatus, NodeError>;
     fn on_halted(&mut self) {}
 }

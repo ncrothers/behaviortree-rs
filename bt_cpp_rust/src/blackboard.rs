@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, cell::RefCell};
 
 use crate::basic_types::{BTToString, StringInto};
 
@@ -71,11 +71,17 @@ pub struct Blackboard {
     map: HashMap<String, Box<dyn Any>>,
 }
 
+pub type BlackboardPtr = std::rc::Rc<std::cell::RefCell<Blackboard>>;
+
 impl Blackboard {
     pub fn new() -> Blackboard {
         Self {
             map: HashMap::new(),
         }
+    }
+
+    pub fn new_ptr() -> BlackboardPtr {
+        std::rc::Rc::new(std::cell::RefCell::new(Self::new()))
     }
 
     /// When reading from the Blackboard, a String will attempt to be coerced to

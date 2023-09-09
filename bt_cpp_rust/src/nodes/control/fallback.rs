@@ -53,7 +53,7 @@ impl TreeNode for FallbackNode {
 
             match &child_status {
                 NodeStatus::Running => {
-                    return Ok(child_status);
+                    return Ok(NodeStatus::Running);
                 }
                 NodeStatus::Failure => {
                     self.child_idx += 1;
@@ -61,7 +61,7 @@ impl TreeNode for FallbackNode {
                 NodeStatus::Success => {
                     self.reset_children();
                     self.child_idx = 0;
-                    return Ok(child_status);
+                    return Ok(NodeStatus::Success);
                 }
                 NodeStatus::Skipped => {
                     self.child_idx += 1;
@@ -77,12 +77,16 @@ impl TreeNode for FallbackNode {
             self.child_idx = 0;
         }
 
-        Ok(NodeStatus::Success)
+        match self.all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Failure),
+        }
     }
 }
 
 impl NodeHalt for FallbackNode {
     fn halt(&mut self) {
-        self.reset_children()
+        self.child_idx = 0;
+        self.reset_children();
     }
 }

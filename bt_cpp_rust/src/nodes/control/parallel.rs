@@ -7,7 +7,23 @@ use crate::{
     macros::{define_ports, input_port},
     nodes::{ControlNode, NodeConfig, TreeNode, TreeNodeDefaults, TreeNodePtr, NodeError, NodeHalt},
 };
-
+/// The ParallelNode execute all its children
+/// __concurrently__, but not in separate threads!
+/// 
+/// Even if this may look similar to ReactiveSequence,
+/// this Control Node is the __only__ one that can have
+/// multiple children RUNNING at the same time.
+/// 
+/// The Node is completed either when the THRESHOLD_SUCCESS
+/// or THRESHOLD_FAILURE number is reached (both configured using ports).
+/// 
+/// If any of the thresholds is reached, and other children are still running,
+/// they will be halted.
+/// 
+/// Note that threshold indexes work as in Python:
+/// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
+/// 
+/// Therefore -1 is equivalent to the number of children.
 #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
 pub struct ParallelNode {
     config: NodeConfig,
@@ -64,12 +80,12 @@ impl TreeNode for ParallelNode {
 
         let children_count = self.children.len();
 
-        if (children_count as i32) < self.success_threshold {
-            // err
+        if children_count < self.success_threshold() {
+            return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never succeed.".to_string()));
         }
 
-        if (children_count as i32) < self.failure_threshold {
-            // err
+        if children_count < self.failure_threshold() {
+            return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never fail.".to_string()));
         }
 
         let mut skipped_count = 0;
