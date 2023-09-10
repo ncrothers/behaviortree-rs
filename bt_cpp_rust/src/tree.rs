@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, io::Cursor, rc::Rc, string::FromUtf8Error};
 
-use log::debug;
+use log::{debug, info};
 use quick_xml::{
     events::{attributes::Attributes, Event},
     name::QName,
@@ -44,6 +44,8 @@ pub enum ParseError {
     UnknownTree(String),
     #[error("Node type [] didn't had invalid presence/absence of children.")]
     NodeTypeMismatch(String),
+    #[error("No main tree was provided, either in the XML or as a function parameter.")]
+    NoMainTree,
 }
 
 #[derive(Debug)]
@@ -103,6 +105,7 @@ pub struct Factory {
     node_map: HashMap<String, NodePtrType>,
     blackboard: BlackboardPtr,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
+    main_tree_id: Option<String>,
 }
 
 impl Factory {
@@ -113,6 +116,7 @@ impl Factory {
             node_map: builtin_nodes(Rc::clone(&blackboard)),
             blackboard,
             tree_roots: HashMap::new(),
+            main_tree_id: None,
         }
     }
 
@@ -152,6 +156,23 @@ impl Factory {
         match self.build_child(&mut reader)? {
             Some(child) => Ok(child),
             None => Err(ParseError::NodeTypeMismatch("SubTree".to_string())),
+        }
+    }
+
+    pub fn create_tree_from_text(&mut self, text: String, blackboard: BlackboardPtr) -> Result<Tree, ParseError> {
+        self.register_bt_from_text(text)?;
+
+        if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
+            Err(ParseError::NoMainTree)
+        }
+        else if self.tree_roots.len() == 1 {
+            // Unwrap is safe because we check that tree_roots.len() == 1
+            let main_tree_id = self.tree_roots.iter().next().unwrap().0;
+    
+            self.instantiate_tree(&blackboard, main_tree_id)
+        }
+        else {
+            self.instantiate_tree(&blackboard, self.main_tree_id.as_ref().unwrap())
         }
     }
 
@@ -374,8 +395,15 @@ impl Factory {
         match reader.read_event_into(&mut buf)? {
             Event::Start(e) => {
                 let name = String::from_utf8(e.name().0.into())?;
+                let attributes = e.attributes().to_map()?;
+
                 if name.as_str() != "root" {
                     return Err(ParseError::ExpectedRoot(name));
+                }
+                
+                if let Some(tree_id) = attributes.get("main_tree_to_execute") {
+                    info!("Found main tree ID: {tree_id}");
+                    self.main_tree_id = Some(tree_id.clone());
                 }
             }
             _ => return Err(ParseError::MissingRoot),

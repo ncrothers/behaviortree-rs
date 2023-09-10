@@ -147,9 +147,9 @@ pub(crate) use __build_node_ptr as build_node_ptr;
 macro_rules! __register_node {
     ($f:ident, $n:expr, $t:ty) => {
         {
-            use bt_cpp_rust::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
-            use bt_cpp_rust::basic_types::{NodeType, TreeNodeManifest};
-            use bt_cpp_rust::tree::NodePtrType;
+            use $crate::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
+            use $crate::basic_types::{NodeType, TreeNodeManifest};
+            use $crate::tree::NodePtrType;
 
             let blackboard = $f.blackboard();
             let node_config = NodeConfig::new(blackboard);
@@ -160,7 +160,7 @@ macro_rules! __register_node {
                 ports: node.provided_ports(),
                 description: String::new(),
             };
-            node.config().set_manifest(Rc::new(manifest));
+            node.config().set_manifest(::std::rc::Rc::new(manifest));
             match node.node_type() {
                 NodeType::Action => {
                     $f.register_node($n, NodePtrType::Action(Box::new(node)));
