@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::DeriveInput;
+use syn::{DeriveInput, Item, token::Struct, parse::Parser};
 
 #[macro_use]
 extern crate quote;
@@ -7,6 +7,31 @@ extern crate quote;
 extern crate syn;
 
 extern crate proc_macro;
+
+#[proc_macro_attribute]
+pub fn bt_node(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut input = parse_macro_input!(item as Item);
+
+    match &mut input {
+        Item::Struct(ref mut x) => {
+            match &mut x.fields {
+                syn::Fields::Named(fields) => {
+                    fields.named.push(
+                        syn::Field::parse_named.parse2(quote! { pub config: ::bt_cpp_rust::nodes::NodeConfig }).unwrap()
+                    );
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    };
+
+    let output = quote! {
+        #input
+    };
+
+    TokenStream::from(output)
+}
 
 #[proc_macro_derive(TreeNodeDefaults)]
 /// Test docstring
