@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
-use syn::{DeriveInput, Item, token::Struct, parse::Parser, Attribute, ItemStruct};
+use proc_macro2::Ident;
+use syn::{DeriveInput, Item, token::{Struct, Comma}, parse::Parser, Attribute, ItemStruct, punctuated::Punctuated, AttrStyle};
 
 #[macro_use]
 extern crate quote;
@@ -8,22 +9,145 @@ extern crate syn;
 
 extern crate proc_macro;
 
-fn create_bt_node(args: TokenStream, input: TokenStream, mut item: ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
+trait ToMap<T, K, V> {
+    fn to_map(&self) -> syn::Result<std::collections::HashMap<K, V>>;
+}
+
+impl ToMap<Punctuated<syn::Meta, Comma>, syn::Ident, Option<proc_macro2::TokenStream>> for Punctuated<syn::Meta, Comma> {
+    /// Convert a list of attribute arguments to a HashMap
+    fn to_map(&self) -> syn::Result<std::collections::HashMap<syn::Ident, Option<proc_macro2::TokenStream>>> {
+        self.iter()
+            .map(|m| {
+                match m {
+                    syn::Meta::NameValue(arg) => {
+                        // Convert Expr to one of the valid types:
+                        // Ident (variable name etc)
+                        // ExprCall (function call etc)
+                        // Lit (literal, for integer types etc)
+                        if let syn::Expr::Lit(lit) = &arg.value {
+                            if let syn::Lit::Str(arg_str) = &lit.lit {
+                                let value = if let Ok(call) = arg_str.parse::<syn::ExprCall>() {
+                                    quote! { #call }
+                                }
+                                else if let Ok(ident) = arg_str.parse::<syn::Ident>() {
+                                    quote! { #ident }
+                                }
+                                else if let Ok(lit) = arg_str.parse::<syn::Lit>() {
+                                    quote! { #lit }
+                                }
+                                else {
+                                    return Err(syn::Error::new_spanned(&arg.value, "argument value should be a:  variable, literal, function call"))
+                                };
+
+                                Ok((arg.path.get_ident().unwrap().clone(), Some(value)))
+                            }
+                            else {
+                                Err(syn::Error::new_spanned(&arg.value, "argument value should be a string literal"))
+                            }
+                        }
+                        else {
+                            Err(syn::Error::new_spanned(&arg.value, "argument value should be a string literal"))
+                        }
+                    }
+                    syn::Meta::Path(arg) => {
+                        Ok((arg.get_ident().unwrap().clone(), None))
+                    }
+                    _ => Err(syn::Error::new_spanned(m, "argument type should be Path or NameValue: `#[bt(default)]`, or `#[bt(default = \"String::new()\")]`"))
+                }
+            })
+            .collect()
+    }
+}
+
+trait ConcatTokenStream {
+    fn concat(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+}
+
+impl ConcatTokenStream for proc_macro2::TokenStream {
+    fn concat(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        if self.is_empty() {
+            quote! {
+                #value
+            }
+        }
+        else {
+            quote! {
+                #self,
+                #value
+            }
+        }
+    }
+}
+
+fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
     let args_parsed = syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated
         .parse(args)?;
 
+    let mut derives = vec![quote! { Clone, ::std::fmt::Debug, ::bt_cpp_rust::derive::TreeNodeDefaults }];
 
     for arg in args_parsed.iter() {
-        // match arg.is_ident("SyncActionNode") {
-        //     true => compile_error!("I am a SyncActionNode!"),
-        //     false => {}
-        // }
-
+        // Require parameter to be ident, no prefix path
         arg.require_ident()?;
+        
+        let ident = arg.get_ident().unwrap().to_string();
+
+        // Match all possible node types
+        match ident.as_str() {
+            "SyncActionNode" => derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode }),
+            "StatefulActionNode" => derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::StatefulActionNode }),
+            "ControlNode" => derives.push(quote! { ::bt_cpp_rust::derive::ControlNode }),
+            "DecoratorNode" => derives.push(quote! { ::bt_cpp_rust::derive::DecoratorNode }),
+            _ => return Err(syn::Error::new_spanned(arg, "unsupported node type"))
+        }
     }
+
+    let mut default_fields = proc_macro2::TokenStream::new();
+    let mut manual_fields = proc_macro2::TokenStream::new();
+    let mut manual_fields_with_types = proc_macro2::TokenStream::new();
 
     match &mut item.fields {
         syn::Fields::Named(fields) => {
+            for f in fields.named.iter_mut() {
+                let name = f.ident.as_ref().unwrap();
+                let ty = &f.ty;
+
+                let mut used_default = false;
+                for a in f.attrs.iter() {
+                    if a.path().is_ident("bt") {
+
+                        let args: Punctuated<syn::Meta, Comma> = a.parse_args_with(Punctuated::parse_terminated)?;
+                        let args_map = args.to_map()?;
+
+                        // If the default argument was included
+                        if let Some(value) = args_map.get(&syn::parse_str("default")?) {
+                            used_default = true;
+                            // Use the provided default, if provided by user
+                            let default_value = if let Some(default_value) = value {
+                                quote!{ #default_value }
+                            }
+                            // Otherwise, use Default
+                            else {
+                                quote! { #ty::default() }
+                            };
+
+                            default_fields = default_fields.concat(quote! { #name: #default_value });
+                        }
+                    }
+                }
+
+                // Mark field as manually specified if 
+                if !used_default {
+                    manual_fields = manual_fields.concat(quote! { #name });
+                    manual_fields_with_types = manual_fields_with_types.concat(quote! { #name: #ty });
+                }
+    
+                // Remove the bt attribute, keep all others
+                f.attrs = f.attrs.clone().into_iter().filter(|a| !a.path().is_ident("bt")).collect();
+            }
+
+            // user_fields = fields.named.clone();
+            // user_field_names = user_fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+
             fields.named.push(
                 syn::Field::parse_named.parse2(quote! { pub config: ::bt_cpp_rust::nodes::NodeConfig }).unwrap()
             );
@@ -34,71 +158,80 @@ fn create_bt_node(args: TokenStream, input: TokenStream, mut item: ItemStruct) -
         _ => return Err(syn::Error::new_spanned(item, "expected a struct with named fields"))
     };
 
-    let ident = item.ident.clone();
+    let mut user_attrs = Vec::new();
+
+    for attr in item.attrs.iter() {
+        if attr.path().is_ident("derive") {
+            derives.push(attr.parse_args()?);
+        }
+        else if let AttrStyle::Outer = attr.style {
+            user_attrs.push(attr);
+        }
+    }
+
+    let user_attrs = user_attrs.into_iter().fold(proc_macro2::TokenStream::new(), |acc, a| {
+        // Only want to transfer outer attributes
+        if let AttrStyle::Outer = a.style {
+            if acc.is_empty() {
+                quote! {
+                    #a
+                }
+            }
+            else {
+                quote! {
+                    #acc
+                    #a
+                }
+            }
+        }
+        else {
+            acc
+        }
+    });
+
+    // Convert Vec of derive Paths into one TokenStream
+    let derives = derives.into_iter().fold(proc_macro2::TokenStream::new(), |acc, d| {
+        if acc.is_empty() {
+            quote! {
+                #d
+            }
+        }
+        else {
+            quote! {
+                #acc, #d
+            }
+        }
+    });
+
+    let ident = &item.ident;
+    let vis = &item.vis;
+    let struct_fields = &item.fields;
 
     let output = quote! {
-        #[derive(::bt_cpp_rust::derive::TreeNodeDefaults, ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode, ::std::fmt::Debug, Clone)]
-        #item
-        // pub struct #ident {
-        //     pub config: ::bt_cpp_rust::nodes::NodeConfig,
-        //     pub status: ::bt_cpp_rust::basic_types::NodeStatus,
-        // }
+        #user_attrs
+        #[derive(#derives)]
+        #vis struct #ident #struct_fields
 
-        // impl #ident {
-        //     pub fn new() -> #ident {
-        //         Self {
-
-        //         }
-        //     }
-        // }
-
-        // impl ::bt_cpp_rust::nodes::TreeNodeDefaults for #ident {
-        //     fn status(&self) -> ::bt_cpp_rust::basic_types::NodeStatus {
-        //         self.status.clone()
-        //     }
-
-        //     fn reset_status(&mut self) {
-        //         self.status = ::bt_cpp_rust::basic_types::NodeStatus::Idle
-        //     }
-
-        //     fn set_status(&mut self, status: ::bt_cpp_rust::basic_types::NodeStatus) {
-        //         self.status = status;
-        //     }
-
-        //     fn config(&mut self) -> &mut ::bt_cpp_rust::nodes::NodeConfig {
-        //         &mut self.config
-        //     }
-
-        //     fn into_boxed(self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
-        //         Box::new(self)
-        //     }
-
-        //     fn to_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
-        //         std::rc::Rc::new(std::cell::RefCell::new(self.clone()))
-        //     }
-
-        //     fn clone_node_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
-        //         Box::new(self.clone())
-        //     }
-        // }
-
-        // impl ::bt_cpp_rust::nodes::TreeNodeBase for #ident {}
+        impl #ident {
+            fn new(config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #ident {
+                Self {
+                    config,
+                    status: ::bt_cpp_rust::basic_types::NodeStatus::Idle,
+                    #default_fields,
+                    #manual_fields
+                }
+            }
+        }
     };
-
 
     Ok(output)
 }
 
 #[proc_macro_attribute]
 pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input_cloned = input.clone();
-    let mut item = parse_macro_input!(input_cloned as ItemStruct);
+    let item = parse_macro_input!(input as ItemStruct);
 
-
-
-    // parse_args
-
-    create_bt_node(args, input, item).unwrap_or_else(syn::Error::into_compile_error).into()
+    create_bt_node(args, item).unwrap_or_else(syn::Error::into_compile_error).into()
 }
 
 #[proc_macro_derive(TreeNodeDefaults)]
