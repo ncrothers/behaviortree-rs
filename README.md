@@ -107,7 +107,9 @@ struct DummyActionNode {
 
 ### Implement traits
 
-At the minimum, you also need to implement the `TreeNode` trait. The only required method to implement is `tick()`. If you are using ports with your node, you also need to implement `provided_ports()`. An example of both functions is shown below:
+At the minimum, you also need to implement the `TreeNode` and `NodeHalt` traits. The only required method to implement is `tick()`. If you are using ports with your node, you also need to implement `provided_ports()`. You can choose to implement `halt()` if you need to do any cleanup when the node is stopped externally.
+
+Example:
 
 ```rust
 impl TreeNode for DummyActionNode {
@@ -126,6 +128,15 @@ impl TreeNode for DummyActionNode {
             // With default value 
             input_port!("bar", 16)
         )
+    }
+}
+
+impl NodeHalt for DummyActionNode {
+    // Only need to add this if you want to clean up.
+    // Otherwise just: `impl NodeHalt for DummyActionNode {}` will suffice.
+    fn halt(&mut self) {
+        // Cleanup code here
+        // ...
     }
 }
 ```
