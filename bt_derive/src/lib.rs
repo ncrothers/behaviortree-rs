@@ -164,6 +164,9 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
             // user_field_names = user_fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
 
             fields.named.push(
+                syn::Field::parse_named.parse2(quote! { pub name: String }).unwrap()
+            );
+            fields.named.push(
                 syn::Field::parse_named.parse2(quote! { pub config: ::bt_cpp_rust::nodes::NodeConfig }).unwrap()
             );
             fields.named.push(
@@ -230,8 +233,9 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
         #vis struct #ident #struct_fields
 
         impl #ident {
-            pub fn new(config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #ident {
+            pub fn new(name: impl AsRef<str>, config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #ident {
                 Self {
+                    name: name.as_ref().to_string(),
                     config,
                     status: ::bt_cpp_rust::basic_types::NodeStatus::Idle,
                     #extra_fields

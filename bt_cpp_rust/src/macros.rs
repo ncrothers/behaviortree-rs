@@ -170,7 +170,28 @@ macro_rules! __register_node {
         }
     };
     ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
-        <$t>::new($n, $($x),*)
+        {
+            use $crate::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
+            use $crate::basic_types::{NodeType, TreeNodeManifest};
+            use $crate::tree::NodePtrType;
+
+            let blackboard = $f.blackboard();
+            let node_config = NodeConfig::new(blackboard);
+            let mut node = <$t>::new($n, node_config, $($x),*);
+            let manifest = TreeNodeManifest {
+                node_type: node.node_type(),
+                registration_id: $n.to_string(),
+                ports: node.provided_ports(),
+                description: String::new(),
+            };
+            node.config().set_manifest(::std::rc::Rc::new(manifest));
+            match node.node_type() {
+                NodeType::Action => {
+                    $f.register_node($n, NodePtrType::Action(Box::new(node)));
+                }
+                _ => panic!("Currently unsupported NodeType")
+            };
+        }
     };
 }
 #[doc(inline)]
