@@ -122,6 +122,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
     match &mut item.fields {
         syn::Fields::Named(fields) => {
             for f in fields.named.iter_mut() {
+                // let vis = &f.vis;
                 let name = f.ident.as_ref().unwrap();
                 let ty = &f.ty;
 
@@ -229,7 +230,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
         #vis struct #ident #struct_fields
 
         impl #ident {
-            fn new(config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #ident {
+            pub fn new(config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #ident {
                 Self {
                     config,
                     status: ::bt_cpp_rust::basic_types::NodeStatus::Idle,
