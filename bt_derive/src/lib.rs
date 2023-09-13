@@ -37,19 +37,20 @@ fn create_bt_node(args: TokenStream, input: TokenStream, mut item: ItemStruct) -
     let ident = item.ident.clone();
 
     let output = quote! {
-        // #[derive(::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode, ::std::fmt::Debug, Clone)]
-        pub struct #ident {
-            // pub config: ::bt_cpp_rust::nodes::NodeConfig,
-            // pub status: ::bt_cpp_rust::basic_types::NodeStatus,
-        }
+        #[derive(::bt_cpp_rust::derive::TreeNodeDefaults, ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode, ::std::fmt::Debug, Clone)]
+        #item
+        // pub struct #ident {
+        //     pub config: ::bt_cpp_rust::nodes::NodeConfig,
+        //     pub status: ::bt_cpp_rust::basic_types::NodeStatus,
+        // }
 
-        impl #ident {
-            pub fn new() -> #ident {
-                Self {
+        // impl #ident {
+        //     pub fn new() -> #ident {
+        //         Self {
 
-                }
-            }
-        }
+        //         }
+        //     }
+        // }
 
         // impl ::bt_cpp_rust::nodes::TreeNodeDefaults for #ident {
         //     fn status(&self) -> ::bt_cpp_rust::basic_types::NodeStatus {
