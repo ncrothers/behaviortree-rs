@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::{DeriveInput, Item, token::Struct, parse::Parser};
+use syn::{DeriveInput, Item, token::Struct, parse::Parser, Attribute, ItemStruct};
 
 #[macro_use]
 extern crate quote;
@@ -8,29 +8,96 @@ extern crate syn;
 
 extern crate proc_macro;
 
-#[proc_macro_attribute]
-pub fn bt_node(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut input = parse_macro_input!(item as Item);
+fn create_bt_node(args: TokenStream, input: TokenStream, mut item: ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
+    let args_parsed = syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated
+        .parse(args)?;
 
-    match &mut input {
-        Item::Struct(ref mut x) => {
-            match &mut x.fields {
-                syn::Fields::Named(fields) => {
-                    fields.named.push(
-                        syn::Field::parse_named.parse2(quote! { pub config: ::bt_cpp_rust::nodes::NodeConfig }).unwrap()
-                    );
-                }
-                _ => {}
-            }
+
+    for arg in args_parsed.iter() {
+        // match arg.is_ident("SyncActionNode") {
+        //     true => compile_error!("I am a SyncActionNode!"),
+        //     false => {}
+        // }
+
+        arg.require_ident()?;
+    }
+
+    match &mut item.fields {
+        syn::Fields::Named(fields) => {
+            fields.named.push(
+                syn::Field::parse_named.parse2(quote! { pub config: ::bt_cpp_rust::nodes::NodeConfig }).unwrap()
+            );
+            fields.named.push(
+                syn::Field::parse_named.parse2(quote! { pub status: ::bt_cpp_rust::basic_types::NodeStatus }).unwrap()
+            );
         }
-        _ => {}
+        _ => return Err(syn::Error::new_spanned(item, "expected a struct with named fields"))
     };
+
+    let ident = item.ident.clone();
 
     let output = quote! {
-        #input
+        // #[derive(::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode, ::std::fmt::Debug, Clone)]
+        pub struct #ident {
+            // pub config: ::bt_cpp_rust::nodes::NodeConfig,
+            // pub status: ::bt_cpp_rust::basic_types::NodeStatus,
+        }
+
+        impl #ident {
+            pub fn new() -> #ident {
+                Self {
+
+                }
+            }
+        }
+
+        // impl ::bt_cpp_rust::nodes::TreeNodeDefaults for #ident {
+        //     fn status(&self) -> ::bt_cpp_rust::basic_types::NodeStatus {
+        //         self.status.clone()
+        //     }
+
+        //     fn reset_status(&mut self) {
+        //         self.status = ::bt_cpp_rust::basic_types::NodeStatus::Idle
+        //     }
+
+        //     fn set_status(&mut self, status: ::bt_cpp_rust::basic_types::NodeStatus) {
+        //         self.status = status;
+        //     }
+
+        //     fn config(&mut self) -> &mut ::bt_cpp_rust::nodes::NodeConfig {
+        //         &mut self.config
+        //     }
+
+        //     fn into_boxed(self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
+        //         Box::new(self)
+        //     }
+
+        //     fn to_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
+        //         std::rc::Rc::new(std::cell::RefCell::new(self.clone()))
+        //     }
+
+        //     fn clone_node_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
+        //         Box::new(self.clone())
+        //     }
+        // }
+
+        // impl ::bt_cpp_rust::nodes::TreeNodeBase for #ident {}
     };
 
-    TokenStream::from(output)
+
+    Ok(output)
+}
+
+#[proc_macro_attribute]
+pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
+    let input_cloned = input.clone();
+    let mut item = parse_macro_input!(input_cloned as ItemStruct);
+
+
+
+    // parse_args
+
+    create_bt_node(args, input, item).unwrap_or_else(syn::Error::into_compile_error).into()
 }
 
 #[proc_macro_derive(TreeNodeDefaults)]
