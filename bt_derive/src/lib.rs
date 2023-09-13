@@ -66,11 +66,25 @@ trait ConcatTokenStream {
 impl ConcatTokenStream for proc_macro2::TokenStream {
     fn concat(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         if self.is_empty() {
+            if value.is_empty() {
+                // Both are empty
+                proc_macro2::TokenStream::new()
+            }
+            else {
+                // self empty, value not empty
+                quote! {
+                    #value
+                }
+            }
+        } 
+        else if value.is_empty() {
+            // self not empty, value empty
             quote! {
-                #value
+                #self
             }
         }
         else {
+            // Both have value
             quote! {
                 #self,
                 #value
@@ -207,6 +221,8 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
     let vis = &item.vis;
     let struct_fields = &item.fields;
 
+    let extra_fields = proc_macro2::TokenStream::new().concat(default_fields).concat(manual_fields);
+
     let output = quote! {
         #user_attrs
         #[derive(#derives)]
@@ -217,8 +233,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                 Self {
                     config,
                     status: ::bt_cpp_rust::basic_types::NodeStatus::Idle,
-                    #default_fields,
-                    #manual_fields
+                    #extra_fields
                 }
             }
         }
