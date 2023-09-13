@@ -1,27 +1,13 @@
-use bt_derive::{DecoratorNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
 };
 
 /// The InverterNode returns Failure on Success, and Success on Failure
-#[derive(TreeNodeDefaults, DecoratorNode, Debug, Clone)]
-pub struct InverterNode {
-    config: NodeConfig,
-    child: Option<TreeNodePtr>,
-    status: NodeStatus,
-}
-
-impl InverterNode {
-    pub fn new(config: NodeConfig) -> InverterNode {
-        Self {
-            config,
-            child: None,
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(DecoratorNode)]
+pub struct InverterNode {}
 
 impl TreeNode for InverterNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {

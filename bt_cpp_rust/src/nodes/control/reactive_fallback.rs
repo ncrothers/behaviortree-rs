@@ -1,8 +1,8 @@
-use bt_derive::{ControlNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
 /// The ReactiveFallback is similar to a ParallelNode.
@@ -16,22 +16,8 @@ use crate::{
 /// 
 /// IMPORTANT: to work properly, this node should not have more than
 ///            a single asynchronous child.
-#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-pub struct ReactiveFallbackNode {
-    config: NodeConfig,
-    children: Vec<TreeNodePtr>,
-    status: NodeStatus,
-}
-
-impl ReactiveFallbackNode {
-    pub fn new(config: NodeConfig) -> ReactiveFallbackNode {
-        Self {
-            config,
-            children: Vec::new(),
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(ControlNode)]
+pub struct ReactiveFallbackNode {}
 
 impl TreeNode for ReactiveFallbackNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {

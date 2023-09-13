@@ -1,8 +1,8 @@
-use bt_derive::{ControlNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
 /// WhileDoElse must have exactly 2 or 3 children.
@@ -16,22 +16,8 @@ use crate::{
 /// 
 /// If the 2nd or 3d child is RUNNING and the statement changes,
 /// the RUNNING child will be stopped before starting the sibling.
-#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-pub struct WhileDoElseNode {
-    config: NodeConfig,
-    children: Vec<TreeNodePtr>,
-    status: NodeStatus,
-}
-
-impl WhileDoElseNode {
-    pub fn new(config: NodeConfig) -> WhileDoElseNode {
-        Self {
-            config,
-            children: Vec::new(),
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(ControlNode)]
+pub struct WhileDoElseNode {}
 
 impl TreeNode for WhileDoElseNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {

@@ -1,8 +1,8 @@
-use bt_derive::{ControlNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
 /// The SequenceNode is used to tick children in an ordered sequence.
@@ -14,25 +14,12 @@ use crate::{
 ///   Loop is NOT restarted, the same running child will be ticked again.
 /// 
 /// - If a child returns FAILURE, stop the loop and return FAILURE.
-#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
+#[bt_node(ControlNode)]
 pub struct SequenceNode {
-    config: NodeConfig,
-    children: Vec<TreeNodePtr>,
-    status: NodeStatus,
+    #[bt(default = "0")]
     child_idx: usize,
+    #[bt(default = "false")]
     all_skipped: bool,
-}
-
-impl SequenceNode {
-    pub fn new(config: NodeConfig) -> SequenceNode {
-        Self {
-            config,
-            children: Vec::new(),
-            status: NodeStatus::Idle,
-            child_idx: 0,
-            all_skipped: false,
-        }
-    }
 }
 
 impl TreeNode for SequenceNode {

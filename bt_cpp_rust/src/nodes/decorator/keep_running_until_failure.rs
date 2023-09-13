@@ -1,27 +1,13 @@
-use bt_derive::{DecoratorNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
 };
 
 /// The KeepRunningUntilFailureNode returns always Failure or Running
-#[derive(TreeNodeDefaults, DecoratorNode, Debug, Clone)]
-pub struct KeepRunningUntilFailureNode {
-    config: NodeConfig,
-    child: Option<TreeNodePtr>,
-    status: NodeStatus,
-}
-
-impl KeepRunningUntilFailureNode {
-    pub fn new(config: NodeConfig) -> KeepRunningUntilFailureNode {
-        Self {
-            config,
-            child: None,
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(DecoratorNode)]
+pub struct KeepRunningUntilFailureNode {}
 
 impl TreeNode for KeepRunningUntilFailureNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {

@@ -1,27 +1,13 @@
-use bt_derive::{DecoratorNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
 };
 
 /// The ForceFailureNode returns always Failure or Running
-#[derive(TreeNodeDefaults, DecoratorNode, Debug, Clone)]
-pub struct ForceFailureNode {
-    config: NodeConfig,
-    child: Option<TreeNodePtr>,
-    status: NodeStatus,
-}
-
-impl ForceFailureNode {
-    pub fn new(config: NodeConfig) -> ForceFailureNode {
-        Self {
-            config,
-            child: None,
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(DecoratorNode)]
+pub struct ForceFailureNode {}
 
 impl TreeNode for ForceFailureNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {

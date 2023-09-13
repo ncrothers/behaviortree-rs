@@ -1,8 +1,8 @@
-use bt_derive::{DecoratorNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
     macros::{define_ports, input_port}
 };
 
@@ -15,25 +15,12 @@ use crate::{
 /// 
 /// - if TRUE (default), the node will be skipped in the future.
 /// - if FALSE, return synchronously the same status returned by the child, forever.
-#[derive(TreeNodeDefaults, DecoratorNode, Debug, Clone)]
+#[bt_node(DecoratorNode)]
 pub struct RunOnceNode {
-    config: NodeConfig,
-    child: Option<TreeNodePtr>,
-    status: NodeStatus,
+    #[bt(default = "false")]
     already_ticked: bool,
+    #[bt(default = "NodeStatus::Idle")]
     returned_status: NodeStatus,
-}
-
-impl RunOnceNode {
-    pub fn new(config: NodeConfig) -> RunOnceNode {
-        Self {
-            config,
-            child: None,
-            status: NodeStatus::Idle,
-            already_ticked: false,
-            returned_status: NodeStatus::Idle,
-        }
-    }
 }
 
 impl TreeNode for RunOnceNode {

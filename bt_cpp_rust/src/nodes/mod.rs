@@ -11,6 +11,15 @@ use crate::{
     tree::ParseError,
 };
 
+pub mod control;
+pub use control::{ControlNode, ControlNodeBase, ControlNodePtr};
+
+pub mod decorator;
+pub use decorator::{DecoratorNode, DecoratorNodeBase, DecoratorNodePtr};
+
+pub mod action;
+pub use action::*;
+
 // =============================
 // Trait Definitions
 // =============================
@@ -82,9 +91,6 @@ pub trait NodeTick {
 
 /// TODO
 pub trait ConditionNode {}
-
-/// TODO
-pub trait DecoratorNode {}
 
 /// Automatically implemented for all node types.
 pub trait GetNodeType {

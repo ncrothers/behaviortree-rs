@@ -1,8 +1,8 @@
-use bt_derive::{ControlNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
 /// The FallbackNode is used to try different strategies,
@@ -14,25 +14,13 @@ use crate::{
 /// - If a child returns RUNNING, this node returns RUNNING.
 ///
 /// - If a child returns SUCCESS, stop the loop and return SUCCESS.
-#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
+// #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
+#[bt_node(ControlNode)]
 pub struct FallbackNode {
-    config: NodeConfig,
-    children: Vec<TreeNodePtr>,
-    status: NodeStatus,
+    #[bt(default = "0")]
     child_idx: usize,
+    #[bt(default = "true")]
     all_skipped: bool,
-}
-
-impl FallbackNode {
-    pub fn new(config: NodeConfig) -> FallbackNode {
-        Self {
-            config,
-            children: Vec::new(),
-            status: NodeStatus::Idle,
-            child_idx: 0,
-            all_skipped: true,
-        }
-    }
 }
 
 impl TreeNode for FallbackNode {

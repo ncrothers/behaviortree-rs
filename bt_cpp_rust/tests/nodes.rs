@@ -1,26 +1,12 @@
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
 
-use bt_cpp_rust::{nodes::{NodeConfig, NodeError, TreeNode, NodeHalt, StatefulActionNode}, basic_types::{NodeStatus, PortsList, BTToString}, macros::{define_ports, input_port, register_node}, tree::Factory, blackboard::Blackboard};
-use bt_derive::{SyncActionNode, ActionNode, TreeNodeDefaults, StatefulActionNode};
-use log::{info, error};
+use bt_cpp_rust::{nodes::{NodeError, TreeNode, NodeHalt, StatefulActionNode}, basic_types::{NodeStatus, PortsList, BTToString}, macros::{define_ports, input_port}};
+use bt_derive::bt_node;
+use log::info;
 
 
-#[derive(Debug, Clone, TreeNodeDefaults, ActionNode, SyncActionNode)]
-pub struct StatusNode {
-    name: String,
-    config: NodeConfig,
-    status: NodeStatus,
-}
-
-impl StatusNode {
-    pub fn new(name: &str, config: NodeConfig) -> StatusNode {
-        Self {
-            name: name.to_string(),
-            config,
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(SyncActionNode)]
+pub struct StatusNode {}
 
 impl TreeNode for StatusNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
@@ -38,23 +24,10 @@ impl TreeNode for StatusNode {
 
 impl NodeHalt for StatusNode {}
 
-#[derive(Debug, Clone, TreeNodeDefaults, ActionNode, SyncActionNode)]
+#[bt_node(SyncActionNode)]
 pub struct SuccessThenFailure {
-    name: String,
-    config: NodeConfig,
-    status: NodeStatus,
+    #[bt(default)]
     iter: usize,
-}
-
-impl SuccessThenFailure {
-    pub fn new(name: &str, config: NodeConfig) -> SuccessThenFailure {
-        Self {
-            name: name.to_string(),
-            config,
-            status: NodeStatus::Idle,
-            iter: 0,
-        }
-    }
 }
 
 impl TreeNode for SuccessThenFailure {
@@ -79,22 +52,8 @@ impl TreeNode for SuccessThenFailure {
 
 impl NodeHalt for SuccessThenFailure {}
 
-#[derive(Debug, Clone, TreeNodeDefaults, ActionNode, SyncActionNode)]
-pub struct EchoNode {
-    name: String,
-    config: NodeConfig,
-    status: NodeStatus,
-}
-
-impl EchoNode {
-    pub fn new(name: &str, config: NodeConfig) -> EchoNode {
-        Self {
-            name: name.to_string(),
-            config,
-            status: NodeStatus::Idle,
-        }
-    }
-}
+#[bt_node(SyncActionNode)]
+pub struct EchoNode {}
 
 impl TreeNode for EchoNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
@@ -112,25 +71,12 @@ impl TreeNode for EchoNode {
 
 impl NodeHalt for EchoNode {}
 
-#[derive(Debug, Clone, TreeNodeDefaults, ActionNode, StatefulActionNode)]
+#[bt_node(StatefulActionNode)]
 pub struct RunForNode {
-    name: String,
-    config: NodeConfig,
-    status: NodeStatus,
+    #[bt(default)]
     counter: usize,
+    #[bt(default = "RefCell::new(false)")]
     halt_requested: RefCell<bool>,
-}
-
-impl RunForNode {
-    pub fn new(name: &str, config: NodeConfig) -> RunForNode {
-        Self {
-            name: name.to_string(),
-            config,
-            status: NodeStatus::Idle,
-            counter: 0,
-            halt_requested: RefCell::new(false),
-        }
-    }
 }
 
 impl TreeNode for RunForNode {

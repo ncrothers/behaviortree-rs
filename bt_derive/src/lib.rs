@@ -1,6 +1,5 @@
 use proc_macro::TokenStream;
-use proc_macro2::Ident;
-use syn::{DeriveInput, Item, token::{Struct, Comma}, parse::Parser, Attribute, ItemStruct, punctuated::Punctuated, AttrStyle};
+use syn::{DeriveInput, token::Comma, parse::Parser, ItemStruct, punctuated::Punctuated, AttrStyle};
 
 #[macro_use]
 extern crate quote;
@@ -35,8 +34,11 @@ impl ToMap<Punctuated<syn::Meta, Comma>, syn::Ident, Option<proc_macro2::TokenSt
                                 else if let Ok(lit) = arg_str.parse::<syn::Lit>() {
                                     quote! { #lit }
                                 }
+                                else if let Ok(path) = arg_str.parse::<syn::Path>() {
+                                    quote! { #path }
+                                }
                                 else {
-                                    return Err(syn::Error::new_spanned(&arg.value, "argument value should be a:  variable, literal, function call"))
+                                    return Err(syn::Error::new_spanned(&arg.value, "argument value should be a:  variable, literal, path, function call"))
                                 };
 
                                 Ok((arg.path.get_ident().unwrap().clone(), Some(value)))
@@ -97,23 +99,18 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
     let args_parsed = syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated
         .parse(args)?;
 
+    if args_parsed.empty_or_trailing() {
+        return Err(syn::Error::new_spanned(args_parsed, "you must specify one argument for the node type"));
+    }
+
     let mut derives = vec![quote! { Clone, ::std::fmt::Debug, ::bt_cpp_rust::derive::TreeNodeDefaults }];
 
-    for arg in args_parsed.iter() {
-        // Require parameter to be ident, no prefix path
-        arg.require_ident()?;
-        
-        let ident = arg.get_ident().unwrap().to_string();
+    let arg = args_parsed.iter().next().unwrap();
 
-        // Match all possible node types
-        match ident.as_str() {
-            "SyncActionNode" => derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode }),
-            "StatefulActionNode" => derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::StatefulActionNode }),
-            "ControlNode" => derives.push(quote! { ::bt_cpp_rust::derive::ControlNode }),
-            "DecoratorNode" => derives.push(quote! { ::bt_cpp_rust::derive::DecoratorNode }),
-            _ => return Err(syn::Error::new_spanned(arg, "unsupported node type"))
-        }
-    }
+    // Require parameter to be ident, no prefix path
+    arg.require_ident()?;
+    
+    let ident = arg.get_ident().unwrap().to_string();
 
     let mut default_fields = proc_macro2::TokenStream::new();
     let mut manual_fields = proc_macro2::TokenStream::new();
@@ -122,10 +119,9 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
     match &mut item.fields {
         syn::Fields::Named(fields) => {
             for f in fields.named.iter_mut() {
-                // let vis = &f.vis;
                 let name = f.ident.as_ref().unwrap();
                 let ty = &f.ty;
-
+                
                 let mut used_default = false;
                 for a in f.attrs.iter() {
                     if a.path().is_ident("bt") {
@@ -142,7 +138,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                             }
                             // Otherwise, use Default
                             else {
-                                quote! { #ty::default() }
+                                quote! { <#ty>::default() }
                             };
 
                             default_fields = default_fields.concat(quote! { #name: #default_value });
@@ -160,9 +156,6 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                 f.attrs = f.attrs.clone().into_iter().filter(|a| !a.path().is_ident("bt")).collect();
             }
 
-            // user_fields = fields.named.clone();
-            // user_field_names = user_fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
-
             fields.named.push(
                 syn::Field::parse_named.parse2(quote! { pub name: String }).unwrap()
             );
@@ -172,6 +165,37 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
             fields.named.push(
                 syn::Field::parse_named.parse2(quote! { pub status: ::bt_cpp_rust::basic_types::NodeStatus }).unwrap()
             );
+
+            // Match all possible node types
+            match ident.as_str() {
+                "SyncActionNode" => {
+                    // Add proper derive macros
+                    derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode });
+                }
+                "StatefulActionNode" => {
+                    // Add proper derive macros
+                    derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::StatefulActionNode });
+                }
+                "ControlNode" => {
+                    // Add ControlNode-specific fields
+                    fields.named.push(
+                        syn::Field::parse_named.parse2(quote! { pub children: Vec<::bt_cpp_rust::nodes::TreeNodePtr> }).unwrap()
+                    );
+                    default_fields = default_fields.concat(quote! { children: Vec::new() });
+                    // Add proper derive macros
+                    derives.push(quote! { ::bt_cpp_rust::derive::ControlNode });
+                }
+                "DecoratorNode" => {
+                    // Add DecoratorNode-specific fields
+                    fields.named.push(
+                        syn::Field::parse_named.parse2(quote! { pub child: Option<::bt_cpp_rust::nodes::TreeNodePtr> }).unwrap()
+                    );
+                    default_fields = default_fields.concat(quote! { child: None });
+                    // Add proper derive macros
+                    derives.push(quote! { ::bt_cpp_rust::derive::DecoratorNode });
+                }
+                _ => return Err(syn::Error::new_spanned(arg, "unsupported node type"))
+            }
         }
         _ => return Err(syn::Error::new_spanned(item, "expected a struct with named fields"))
     };

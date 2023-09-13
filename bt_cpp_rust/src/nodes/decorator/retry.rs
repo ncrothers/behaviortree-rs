@@ -1,8 +1,8 @@
-use bt_derive::{DecoratorNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
     macros::{define_ports, input_port}
 };
 
@@ -21,27 +21,14 @@ use crate::{
 ///     <OpenDoor/>
 /// </RetryUntilSuccessful>
 /// ```
-#[derive(TreeNodeDefaults, DecoratorNode, Debug, Clone)]
+#[bt_node(DecoratorNode)]
 pub struct RetryNode {
-    config: NodeConfig,
-    child: Option<TreeNodePtr>,
-    status: NodeStatus,
+    #[bt(default = "-1")]
     max_attempts: i32,
+    #[bt(default = "0")]
     try_count: usize,
+    #[bt(default = "true")]
     all_skipped: bool,
-}
-
-impl RetryNode {
-    pub fn new(config: NodeConfig) -> RetryNode {
-        Self {
-            config,
-            child: None,
-            status: NodeStatus::Idle,
-            max_attempts: -1,
-            try_count: 0,
-            all_skipped: true,
-        }
-    }
 }
 
 impl TreeNode for RetryNode {

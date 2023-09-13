@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 
-use bt_derive::{ControlNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodeDefaults, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, TreeNode, TreeNodeDefaults, TreeNodePtr, NodeError, NodeHalt},
 };
+
 /// The ParallelNode execute all its children
 /// __concurrently__, but not in separate threads!
 /// 
@@ -24,32 +25,21 @@ use crate::{
 /// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
 /// 
 /// Therefore -1 is equivalent to the number of children.
-#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
+#[bt_node(ControlNode)]
 pub struct ParallelNode {
-    config: NodeConfig,
-    children: Vec<TreeNodePtr>,
-    status: NodeStatus,
+    #[bt(default = "-1")]
     success_threshold: i32,
+    #[bt(default = "-1")]
     failure_threshold: i32,
+    #[bt(default)]
     completed_list: HashSet<usize>,
+    #[bt(default = "0")]
     success_count: usize,
+    #[bt(default = "0")]
     failure_count: usize,
 }
 
 impl ParallelNode {
-    pub fn new(config: NodeConfig) -> ParallelNode {
-        Self {
-            config,
-            children: Vec::new(),
-            status: NodeStatus::Idle,
-            success_threshold: -1,
-            failure_threshold: -1,
-            completed_list: HashSet::new(),
-            success_count: 0,
-            failure_count: 0,
-        }
-    }
-
     fn success_threshold(&self) -> usize {
         if self.success_threshold < 0 {
             ((self.children.len() as i32) + self.success_threshold + 1).max(0) as usize

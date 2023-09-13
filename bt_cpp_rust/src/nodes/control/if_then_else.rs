@@ -1,9 +1,9 @@
-use bt_derive::{ControlNode, TreeNodeDefaults};
+use bt_derive::bt_node;
 use log::warn;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeConfig, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
 };
 
 /// IfThenElseNode must have exactly 2 or 3 children. This node is NOT reactive.
@@ -18,23 +18,10 @@ use crate::{
 /// statement returns FAILURE.
 /// 
 /// This is equivalent to add AlwaysFailure as 3rd child.
-#[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
+#[bt_node(ControlNode)]
 pub struct IfThenElseNode {
-    config: NodeConfig,
-    children: Vec<TreeNodePtr>,
-    status: NodeStatus,
+    #[bt(default = "0")]
     child_idx: usize,
-}
-
-impl IfThenElseNode {
-    pub fn new(config: NodeConfig) -> IfThenElseNode {
-        Self {
-            config,
-            children: Vec::new(),
-            status: NodeStatus::Idle,
-            child_idx: 0,
-        }
-    }
 }
 
 impl TreeNode for IfThenElseNode {
