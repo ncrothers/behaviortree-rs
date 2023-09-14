@@ -2,5 +2,4 @@
 members = [
     "bt_cpp_rust",
     "bt_derive",
-    "rust_test",
 ]
