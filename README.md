@@ -30,7 +30,7 @@ struct DummyActionNode {
 }
 
 impl DummyActionNode {
-    pub fn new(name: impl AsRef<str>, config: NodeConfig, status: NodeStatus) -> DummyActionNode {
+    pub fn new(name: impl AsRef<str>, config: NodeConfig) -> DummyActionNode {
         Self {
             name: name.as_ref().to_string(),
             config,
@@ -65,7 +65,7 @@ struct DummyActionNode {
 }
 
 impl DummyActionNode {
-    pub fn new(name: impl AsRef<str>, config: NodeConfig, status: NodeStatus, foo: String, bar: u32) -> DummyActionNode {
+    pub fn new(name: impl AsRef<str>, config: NodeConfig, foo: String, bar: u32) -> DummyActionNode {
         Self {
             name: name.as_ref().to_string(),
             config,
