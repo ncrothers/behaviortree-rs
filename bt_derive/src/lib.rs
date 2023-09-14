@@ -271,6 +271,107 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
     Ok(output)
 }
 
+/// Macro used to automatically generate the default boilerplate needed for all `TreeNode`s.
+/// 
+/// # Basic Usage
+/// 
+/// To use the macro, you need to add `#[bt_node(...)]` above your struct. As an argument
+/// to the attribute, specify the NodeType that you would like to implement.
+/// 
+/// Supported options:
+/// - `SyncActionNode`
+/// - `StatefulActionNode`
+/// - `ControlNode`
+/// - `DecoratorNode`
+/// 
+/// ===
+/// 
+/// ```rust
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{TreeNode, NodeError, NodeHalt}};
+/// 
+/// // Here we are specifying a `SyncActionNode` as the node type.
+/// #[bt_node(SyncActionNode)]
+/// struct MyActionNode {} // No additional fields
+/// 
+/// // Now I need to `impl TreeNode`
+/// impl TreeNode for MyActionNode {
+///     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
+///         // Do something here
+///         // ...
+/// 
+///         Ok(NodeStatus::Success)
+///     }
+/// }
+/// 
+/// // Also need to `impl NodeHalt`
+/// // However, we'll just use the default implementation
+/// impl NodeHalt for MyActionNode {}
+/// ```
+/// 
+/// ===
+/// 
+/// The above code will add fields to `MyActionNode` and create a `new()` associated method:
+/// 
+/// ```ignore
+/// impl DummyActionNode {
+///     pub fn new(name: impl AsRef<str>, config: NodeConfig) -> DummyActionNode {
+///         Self {
+///             name: name.as_ref().to_string(),
+///             config,
+///             status: NodeStatus::Idle
+///         }
+///     }
+/// }
+/// ```
+/// 
+/// # Adding Fields
+/// 
+/// When you add your own fields into the struct, be default they will be added
+/// to the `new()` definition as arguments. To specify default values, use
+/// the `#[bt(default)]` attribute above the fields.
+/// 
+/// `#[bt(default)]` will use the type's implementation of the `Default` trait. If
+/// the trait isn't implemented on the type, or if you want to manually specify
+/// a value, use `#[bt(default = "...")]`, where `...` is the value.
+/// 
+/// Valid argument types within the `"..."` are:
+/// 
+/// ```ignore
+/// // Function calls
+/// #[bt(default = "String::from(10)")]
+/// 
+/// // Variables
+/// #[bt(default = "foo")]
+/// 
+/// // Paths (like enums)
+/// #[bt(default = "NodeStatus::Idle")]
+/// 
+/// // Literals
+/// #[bt(default = "10")]
+/// ```
+/// 
+/// ## Example
+/// 
+/// ```rust
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{TreeNode, NodeError, NodeHalt}};
+/// 
+/// #[bt_node(SyncActionNode)]
+/// struct MyActionNode {
+///     #[bt(default = "NodeStatus::Success")]
+///     foo: NodeStatus,
+///     #[bt(default)] // defaults to empty String
+///     bar: String
+/// }
+/// 
+/// // Now I need to `impl TreeNode`
+/// impl TreeNode for MyActionNode {
+///     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
+///         Ok(NodeStatus::Success)
+///     }
+/// }
+/// 
+/// impl NodeHalt for MyActionNode {}
+/// ```
 #[proc_macro_attribute]
 pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as ItemStruct);
