@@ -9,10 +9,7 @@ use crate::nodes::SuccessThenFailure;
 
 #[test]
 fn force_failure() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -46,10 +43,7 @@ fn force_failure() {
 
 #[test]
 fn force_success() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -83,10 +77,7 @@ fn force_success() {
 
 #[test]
 fn inverter() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -120,10 +111,7 @@ fn inverter() {
 
 #[test]
 fn keep_running_until_failure() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -159,10 +147,7 @@ fn keep_running_until_failure() {
 
 #[test]
 fn repeat() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -198,10 +183,7 @@ fn repeat() {
 
 #[test]
 fn retry() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -239,10 +221,7 @@ fn retry() {
 
 #[test]
 fn run_once() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>

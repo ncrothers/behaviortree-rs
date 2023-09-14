@@ -7,10 +7,7 @@ use nodes::{EchoNode, RunForNode, StatusNode};
 
 #[test]
 fn fallback() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -44,16 +41,15 @@ fn fallback() {
 
 #[test]
 fn if_then_else() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
             <BehaviorTree ID="main">
                 <IfThenElse>
                     <StatusNode status="Failure" />
+                    <EchoNode msg="Success branch" />
+                    <EchoNode msg="Failure branch" />
                 </IfThenElse>
             </BehaviorTree>
         </root>
@@ -78,10 +74,7 @@ fn if_then_else() {
 
 #[test]
 fn parallel_all() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -115,10 +108,7 @@ fn parallel_all() {
 
 #[test]
 fn parallel() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -154,10 +144,7 @@ fn parallel() {
 
 #[test]
 fn reactive_fallback() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -190,10 +177,7 @@ fn reactive_fallback() {
 
 #[test]
 fn reactive_sequence() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -228,10 +212,7 @@ fn reactive_sequence() {
 
 #[test]
 fn sequence_star() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -266,10 +247,7 @@ fn sequence_star() {
 
 #[test]
 fn sequence_vanilla() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>
@@ -304,10 +282,7 @@ fn sequence_vanilla() {
 
 #[test]
 fn while_do_else() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root>

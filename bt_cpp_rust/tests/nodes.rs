@@ -4,6 +4,12 @@ use bt_cpp_rust::{nodes::{NodeError, TreeNode, NodeHalt, StatefulActionNode}, ba
 use bt_derive::bt_node;
 use log::info;
 
+pub fn test_setup() {
+    let _ = pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Info)
+        .is_test(true)
+        .try_init();
+}
 
 #[bt_node(SyncActionNode)]
 pub struct StatusNode {}

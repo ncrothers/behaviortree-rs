@@ -9,8 +9,8 @@ use quick_xml::{
 use thiserror::Error;
 
 use crate::{
-    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping},
-    blackboard::{Blackboard, BlackboardPtr},
+    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, StringInto, ParseBoolError, PortChecks},
+    blackboard::{Blackboard, BlackboardPtr, BlackboardString},
     macros::build_node_ptr,
     nodes::{
         ActionNodeBase, ControlNodeBase, TreeNodeBase, TreeNodePtr, NodeError, self, DecoratorNodeBase,
@@ -46,6 +46,8 @@ pub enum ParseError {
     NodeTypeMismatch(String),
     #[error("No main tree was provided, either in the XML or as a function parameter.")]
     NoMainTree,
+    #[error("{0}")]
+    StringIntoError(#[from] ParseBoolError),
 }
 
 #[derive(Debug)]
@@ -106,17 +108,20 @@ pub struct Factory {
     blackboard: BlackboardPtr,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
     main_tree_id: Option<String>,
+    // TODO: temporary solution, potentially replace later
+    tree_uid: RefCell<u32>,
 }
 
 impl Factory {
     pub fn new() -> Factory {
-        let blackboard = Rc::new(RefCell::new(Blackboard::new()));
+        let blackboard = Blackboard::new_ptr();
 
         Self {
             node_map: builtin_nodes(Rc::clone(&blackboard)),
             blackboard,
             tree_roots: HashMap::new(),
             main_tree_id: None,
+            tree_uid: RefCell::new(0),
         }
     }
 
@@ -139,12 +144,19 @@ impl Factory {
         }
     }
 
+    fn get_uid(&self) -> u32 {
+        let uid = self.tree_uid.borrow().clone();
+        *self.tree_uid.borrow_mut() += 1;
+
+        uid
+    }
+
     fn recursively_build_subtree(
         &self,
         tree_id: &String,
         tree_name: &String,
         path_prefix: &String,
-        blackboard: &BlackboardPtr,
+        blackboard: BlackboardPtr,
     ) -> Result<TreeNodePtr, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
@@ -153,13 +165,13 @@ impl Factory {
             }
         };
 
-        match self.build_child(&mut reader)? {
+        match self.build_child(&mut reader, &blackboard, tree_name, path_prefix)? {
             Some(child) => Ok(child),
             None => Err(ParseError::NodeTypeMismatch("SubTree".to_string())),
         }
     }
 
-    pub fn create_tree_from_text(&mut self, text: String, blackboard: BlackboardPtr) -> Result<Tree, ParseError> {
+    pub fn create_tree_from_text(&mut self, text: String, blackboard: &BlackboardPtr) -> Result<Tree, ParseError> {
         self.register_bt_from_text(text)?;
 
         if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
@@ -169,10 +181,10 @@ impl Factory {
             // Unwrap is safe because we check that tree_roots.len() == 1
             let main_tree_id = self.tree_roots.iter().next().unwrap().0;
     
-            self.instantiate_tree(&blackboard, main_tree_id)
+            self.instantiate_tree(blackboard, main_tree_id)
         }
         else {
-            self.instantiate_tree(&blackboard, self.main_tree_id.as_ref().unwrap())
+            self.instantiate_tree(blackboard, self.main_tree_id.as_ref().unwrap())
         }
     }
 
@@ -181,6 +193,9 @@ impl Factory {
         blackboard: &BlackboardPtr,
         main_tree_id: &str,
     ) -> Result<Tree, ParseError> {
+        // Clone ptr to Blackboard
+        let blackboard = Rc::clone(blackboard);
+
         let main_tree_id = String::from(main_tree_id);
 
         let root_node = self.recursively_build_subtree(
@@ -197,15 +212,20 @@ impl Factory {
         &self,
         node_name: &String,
         attributes: Attributes,
+        path_prefix: &String,
     ) -> Result<TreeNodePtr, ParseError> {
         // Get clone of node from node_map based on tag name
         let node_ref = self.get_node(node_name)?;
 
-        let node = match node_ref {
+        let mut node = match node_ref {
             NodePtrType::Action(node) => node.clone(),
             // TODO: expand more
             x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
         };
+
+        let new_prefix = path_prefix.to_owned() + node_name;
+                        
+        node.config().path = new_prefix;
 
         // Get list of defined ports from node
 
@@ -219,10 +239,13 @@ impl Factory {
     fn build_children(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
+        blackboard: &BlackboardPtr,
+        tree_name: &String,
+        path_prefix: &String,
     ) -> Result<Vec<TreeNodePtr>, ParseError> {
         let mut nodes = Vec::new();
 
-        while let Some(node) = self.build_child(reader)? {
+        while let Some(node) = self.build_child(reader, blackboard, tree_name, path_prefix)? {
             nodes.push(node);
         }
 
@@ -285,6 +308,9 @@ impl Factory {
     fn build_child(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
+        blackboard: &BlackboardPtr,
+        tree_name: &String,
+        path_prefix: &String,
     ) -> Result<Option<TreeNodePtr>, ParseError> {
         let mut buf = Vec::new();
 
@@ -306,8 +332,11 @@ impl Factory {
                 let node = match node_ref {
                     NodePtrType::Control(node) => {
                         let mut node = node.clone();
+                        let new_prefix = path_prefix.to_owned() + &node_name;
+                        
+                        node.config().path = new_prefix;
 
-                        let children = self.build_children(reader)?;
+                        let children = self.build_children(reader, blackboard, tree_name, &(node.config().path.to_owned() + "/"))?;
 
                         for child in children {
                             node.add_child(child);
@@ -321,8 +350,11 @@ impl Factory {
                     }
                     NodePtrType::Decorator(node) => {
                         let mut node = node.clone();
+                        let new_prefix = path_prefix.to_owned() + &node_name;
+                        
+                        node.config().path = new_prefix;
 
-                        let child = match self.build_child(reader)? {
+                        let child = match self.build_child(reader, blackboard, tree_name, &(node.config().path.to_owned() + "/"))? {
                             Some(node) => node,
                             None => {
                                 return Err(ParseError::NodeTypeMismatch("Decorator".to_string()));
@@ -352,17 +384,56 @@ impl Factory {
                 let node = match node_name.as_str() {
                     "SubTree" => {
                         let attributes = attributes.to_map()?;
-                        match attributes.get("ID") {
-                            Some(id) => self.recursively_build_subtree(
-                                id,
-                                &String::new(),
-                                &String::new(),
-                                &self.blackboard,
-                            )?,
-                            None => return Err(ParseError::MissingAttribute("ID".to_string())),
+                        let child_blackboard = Blackboard::with_parent(blackboard);
+
+                        // Process attributes (Ports, special fields, etc)
+                        for (attr, value) in attributes.iter() {
+                            // Set autoremapping to true or false
+                            if attr == "_autoremap" {
+                                child_blackboard.borrow_mut().enable_auto_remapping(value.string_into()?);
+                                continue;
+                            }
+                            else if !attr.is_allowed_port_name() {
+                                continue;
+                            }
+
+                            if let Some(port_name) = value.strip_bb_pointer() {
+                                // Add remapping if `value` is a Blackboard pointer
+                                child_blackboard.borrow_mut().add_subtree_remapping(attr.clone(), port_name);
+                            }
+                            else {
+                                // Set string value into Blackboard
+                                child_blackboard.borrow_mut().set(attr, value.clone());
+                            }
                         }
+
+                        let id = match attributes.get("ID") {
+                            Some(id) => id,
+                            None => return Err(ParseError::MissingAttribute("ID".to_string())),
+                        };
+
+                        let mut subtree_name = tree_name.clone();
+                        if !subtree_name.is_empty() {
+                            subtree_name += "/";
+                        }
+
+                        if let Some(name_attr) = attributes.get("name") {
+                            subtree_name += name_attr;
+                        }
+                        else {
+                            subtree_name += &format!("{id}::{}", self.get_uid());
+                        }
+
+                        let new_prefix = format!("{subtree_name}/");
+
+                        self.recursively_build_subtree(
+                            id,
+                            &subtree_name,
+                            &new_prefix,
+                            child_blackboard,
+                        )?
                     }
-                    _ => self.build_leaf_node(&node_name, attributes)?,
+                    _ => self.build_leaf_node(&node_name, attributes, path_prefix)?,
                 };
 
                 Some(node)

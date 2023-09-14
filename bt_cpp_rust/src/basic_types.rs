@@ -198,7 +198,7 @@ where
 {
     type Err = ParseBoolError;
 
-    fn string_into(&self) -> Result<bool, Self::Err> {
+    fn string_into(&self) -> Result<bool, ParseBoolError> {
         match self.as_ref() {
             "1" | "true" | "TRUE" => Ok(true),
             "0" | "false" | "FALSE" => Ok(false),
@@ -325,6 +325,30 @@ impl TreeNodeManifest {
 // ===========================
 // Ports
 // ===========================
+
+pub trait PortChecks {
+    fn is_allowed_port_name(&self) -> bool;
+}
+
+impl<T: AsRef<str>> PortChecks for T {
+    fn is_allowed_port_name(&self) -> bool {
+        let name = self.as_ref();
+
+        if name.is_empty() {
+            false
+        }
+        else if name == "_autoremap" {
+            true
+        }
+        else if !name.chars().next().unwrap().is_ascii_alphabetic() {
+            false
+        }
+        else {
+            // If the name isn't name or ID, it's valid
+            !(name == "name" || name == "ID")
+        }
+    }
+}
 
 pub type PortsRemapping = HashMap<String, String>;
 

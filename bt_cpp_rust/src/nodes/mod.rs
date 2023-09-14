@@ -247,7 +247,7 @@ impl NodeConfig {
                     }
                 } else {
                     match get_remapped_key(port, val) {
-                        Some(key) => match self.blackboard.borrow().read::<T>(&key) {
+                        Some(key) => match self.blackboard.borrow_mut().get::<T>(&key) {
                             Some(val) => Ok(val),
                             None => Err(NodeError::BlackboardError(key)),
                         },
@@ -291,7 +291,7 @@ impl NodeConfig {
                     }
                 };
 
-                self.blackboard.borrow_mut().write(blackboard_key, value);
+                self.blackboard.borrow_mut().set(blackboard_key, value);
 
                 Ok(())
             }

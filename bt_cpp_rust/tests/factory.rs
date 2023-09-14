@@ -6,10 +6,7 @@ mod nodes;
 
 #[test]
 fn main_tree_attr() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     // Check case where there is more than one tree, and the ID is specified (Ok)
     let xml = r#"
@@ -28,7 +25,7 @@ fn main_tree_attr() {
     register_node!(factory, "StatusNode", StatusNode);
     let blackboard = Blackboard::new_ptr();
 
-    let tree = factory.create_tree_from_text(xml, blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 
@@ -49,7 +46,7 @@ fn main_tree_attr() {
     register_node!(factory, "StatusNode", StatusNode);
     let blackboard = Blackboard::new_ptr();
 
-    let tree = factory.create_tree_from_text(xml, blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 
@@ -66,17 +63,14 @@ fn main_tree_attr() {
     register_node!(factory, "StatusNode", StatusNode);
     let blackboard = Blackboard::new_ptr();
 
-    let tree = factory.create_tree_from_text(xml, blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 }
 
 #[test]
 fn subtrees() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root main_tree_to_execute="main">
@@ -99,7 +93,7 @@ fn subtrees() {
     register_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::new_ptr();
-    let tree = factory.create_tree_from_text(xml, blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();
@@ -114,10 +108,7 @@ fn subtrees() {
 
 #[test]
 fn node_not_registered() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root main_tree_to_execute="main">
@@ -132,7 +123,7 @@ fn node_not_registered() {
     // Don't register StatusNode
 
     let blackboard = Blackboard::new_ptr();
-    let tree = factory.create_tree_from_text(xml, blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 }
