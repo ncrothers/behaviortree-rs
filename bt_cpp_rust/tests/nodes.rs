@@ -81,8 +81,6 @@ impl NodeHalt for EchoNode {}
 pub struct RunForNode {
     #[bt(default)]
     counter: usize,
-    #[bt(default = "RefCell::new(false)")]
-    halt_requested: RefCell<bool>,
 }
 
 impl TreeNode for RunForNode {

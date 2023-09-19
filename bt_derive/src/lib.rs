@@ -173,6 +173,11 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                     derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode });
                 }
                 "StatefulActionNode" => {
+                    // Add StatefulActionNode-specific fields
+                    fields.named.push(
+                        syn::Field::parse_named.parse2(quote! { pub halt_requested: ::std::cell::RefCell<bool> }).unwrap()
+                    );
+                    default_fields = default_fields.concat(quote! { halt_requested: ::std::cell::RefCell::new(false) });
                     // Add proper derive macros
                     derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::StatefulActionNode });
                 }
