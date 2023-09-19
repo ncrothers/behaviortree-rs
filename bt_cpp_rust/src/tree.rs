@@ -145,7 +145,7 @@ impl Factory {
     }
 
     fn get_uid(&self) -> u32 {
-        let uid = self.tree_uid.borrow().clone();
+        let uid = *self.tree_uid.borrow();
         *self.tree_uid.borrow_mut() += 1;
 
         uid
@@ -491,24 +491,32 @@ impl Factory {
                     let name = String::from_utf8(e.name().0.into())?;
                     let attributes = e.attributes().to_map()?;
 
-                    // Add error for missing BT
-                    if name.as_str() != "BehaviorTree" {
-                        return Err(ParseError::ExpectedRoot(name));
-                    }
-
-                    // Save position of Reader for each BT
-                    if let Some(id) = attributes.get("ID") {
-                        self.tree_roots.insert(id.clone(), reader.clone());
-                    } else {
-                        return Err(ParseError::MissingAttribute("Found BehaviorTree definition without ID. Cannot continue parsing.".to_string()));
-                    }
-
+                    // Strange method of cloning QName such that the internal buffer is also cloned
+                    // Otherwise, borrow checker errors with &mut buf still being borrowed
                     let end = e.to_end();
-                    let name = end.name();
-                    let name = name.as_ref().to_vec().clone();
-                    let name = QName(name.as_slice());
+                    let end_name = end.name().as_ref().to_vec().clone();
+                    let end_name = QName(end_name.as_slice());
 
-                    reader.read_to_end_into(name, &mut buf)?;
+                    // TODO: Maybe do something with TreeNodesModel?
+                    // For now, just ignore it
+                    if name.as_str() == "TreeNodesModel" {
+                        reader.read_to_end_into(end_name, &mut buf)?;
+                    }
+                    else {
+                        // Add error for missing BT
+                        if name.as_str() != "BehaviorTree" {
+                            return Err(ParseError::ExpectedRoot(name));
+                        }
+    
+                        // Save position of Reader for each BT
+                        if let Some(id) = attributes.get("ID") {
+                            self.tree_roots.insert(id.clone(), reader.clone());
+                        } else {
+                            return Err(ParseError::MissingAttribute("Found BehaviorTree definition without ID. Cannot continue parsing.".to_string()));
+                        }
+    
+                        reader.read_to_end_into(end_name, &mut buf)?;
+                    }
                 }
                 Event::End(e) => {
                     let name = String::from_utf8(e.name().0.into())?;

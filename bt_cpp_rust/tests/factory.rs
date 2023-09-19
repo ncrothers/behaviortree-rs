@@ -127,3 +127,33 @@ fn node_not_registered() {
 
     assert!(tree.is_err());
 }
+
+#[test]
+fn ignore_treenodesmodel() {
+    nodes::test_setup();
+
+    let xml = r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="main">
+                <StatusNode status="Failure" />
+            </BehaviorTree>
+
+            <TreeNodesModel>
+                <Action></Action>
+            </TreeNodesModel>
+        </root>
+    "#.to_string();
+
+    let mut factory = Factory::new();
+
+    register_node!(factory, "StatusNode", StatusNode);
+
+    let blackboard = Blackboard::new_ptr();
+    let tree = factory.create_tree_from_text(xml, &blackboard);
+
+    if tree.is_err() {
+        log::error!("{}", tree.as_ref().err().unwrap());
+    }
+
+    assert!(tree.is_ok());
+}
