@@ -240,9 +240,198 @@ impl Blackboard {
             entry.borrow_mut().value = Box::new(value);
         }
         else {
-            let entry = Entry { value: Box::new(value) };
-    
-            self.storage.insert(key, Rc::new(RefCell::new(entry)));
+            
+            let entry = self.create_entry(&key);
+
+            // Set value of new entry
+            entry.borrow_mut().value = Box::new(value);
         }
+    }
+
+    fn create_entry(&mut self, key: &impl AsRef<str>) -> EntryPtr {
+        let entry;
+        
+        // If the entry already exists
+        if let Some(existing_entry) = self.storage.get(key.as_ref()) {
+            return Rc::clone(existing_entry);
+        }
+        // Use explicit remapping rule
+        else if self.internal_to_external.contains_key(key.as_ref()) && self.parent_bb.is_some() {
+            // Safe to unwrap because .contains_key() is true
+            let remapped_key = self.internal_to_external.get(key.as_ref()).unwrap();
+
+            entry = self.parent_bb.as_ref().unwrap().borrow_mut().create_entry(remapped_key);
+        }
+        // Use autoremapping
+        else if self.auto_remapping && self.parent_bb.is_some() {
+            entry = self.parent_bb.as_ref().unwrap().borrow_mut().create_entry(key);
+        }
+        // No remapping or no parent blackboard
+        else {
+            // Create an entry with an empty placeholder value
+            entry = Rc::new(RefCell::new(Entry { value: Box::new(()) }));
+        }
+
+        self.storage.insert(key.as_ref().to_string(), Rc::clone(&entry));
+        entry
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TODO: add other tests
+
+    #[test]
+    fn create_entry() {
+        // With no remapping
+
+        let root_bb = Blackboard::new_ptr();
+        let left_bb = Blackboard::with_parent(&root_bb);
+        let right_bb = Blackboard::with_parent(&root_bb);
+
+        left_bb.borrow_mut().set("foo", 123u32);
+
+        assert!(left_bb.borrow_mut().get::<u32>("foo").is_some());
+        // These two should be none because remapping is not enabled
+        assert!(right_bb.borrow_mut().get::<u32>("foo").is_none());
+        assert!(root_bb.borrow_mut().get::<u32>("foo").is_none());
+
+        // With autoremapping
+
+        let root_bb = Blackboard::new_ptr();
+        let left_bb = Blackboard::with_parent(&root_bb);
+        let right_bb = Blackboard::with_parent(&root_bb);
+
+        root_bb.borrow_mut().enable_auto_remapping(true);
+        left_bb.borrow_mut().enable_auto_remapping(true);
+        right_bb.borrow_mut().enable_auto_remapping(true);
+        
+        left_bb.borrow_mut().set("foo", 123u32);
+
+        assert_eq!(left_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(right_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(root_bb.borrow_mut().get::<u32>("foo"), Some(123));
+
+        // With custom remapping
+        let root_bb = Blackboard::new_ptr();
+        let left_bb = Blackboard::with_parent(&root_bb);
+        let right_bb = Blackboard::with_parent(&root_bb);
+
+        right_bb.borrow_mut().add_subtree_remapping(String::from("foo"), String::from("bar"));
+        left_bb.borrow_mut().add_subtree_remapping(String::from("foo"), String::from("bar"));
+        
+        left_bb.borrow_mut().set("foo", 123u32);
+
+        assert_eq!(left_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(right_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(root_bb.borrow_mut().get::<u32>("bar"), Some(123));
+    }
+
+    #[test]
+    fn remapping() {
+        // No remapping
+        
+        let root_bb = Blackboard::new_ptr();
+        let child_bb = Blackboard::with_parent(&root_bb);
+
+        root_bb.borrow_mut().set("foo", 123u32);
+
+        assert!(child_bb.borrow_mut().get::<u32>("foo").is_none());
+        
+        // Auto remapping
+        
+        let root_bb = Blackboard::new_ptr();
+        let child1_bb = Blackboard::with_parent(&root_bb);
+        let child2_bb = Blackboard::with_parent(&child1_bb);
+        let child3_bb = Blackboard::with_parent(&child2_bb);
+
+        child1_bb.borrow_mut().enable_auto_remapping(true);
+        child2_bb.borrow_mut().enable_auto_remapping(true);
+        child3_bb.borrow_mut().enable_auto_remapping(true);
+
+        root_bb.borrow_mut().set("foo", 123u32);
+
+        assert_eq!(child1_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(child2_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(child3_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        
+        // Custom remapping
+        
+        let root_bb = Blackboard::new_ptr();
+        let child1_bb = Blackboard::with_parent(&root_bb);
+        let child2_bb = Blackboard::with_parent(&child1_bb);
+        let child3_bb = Blackboard::with_parent(&child2_bb);
+
+        child1_bb.borrow_mut().add_subtree_remapping(String::from("child1"), String::from("root"));
+        child2_bb.borrow_mut().add_subtree_remapping(String::from("child2"), String::from("child1"));
+        child3_bb.borrow_mut().add_subtree_remapping(String::from("child3"), String::from("child2"));
+
+        root_bb.borrow_mut().set("root", 123u32);
+
+        assert_eq!(child1_bb.borrow_mut().get::<u32>("child1"), Some(123));
+        assert_eq!(child2_bb.borrow_mut().get::<u32>("child2"), Some(123));
+        assert_eq!(child3_bb.borrow_mut().get::<u32>("child3"), Some(123));
+        assert_eq!(child3_bb.borrow_mut().get::<u32>("foo"), None);
+    }
+
+    #[test]
+    fn type_matching() {
+        let bb = Blackboard::new_ptr();
+
+        bb.borrow_mut().set("foo", 123u32);
+
+        assert!(bb.borrow_mut().get::<u32>("foo").is_some());
+        assert!(bb.borrow_mut().get::<String>("foo").is_none());
+        assert!(bb.borrow_mut().get::<f32>("foo").is_none());
+    }
+
+    #[test]
+    fn custom_type() {
+        #[derive(Clone, Debug, PartialEq)]
+        struct CustomEntry {
+            pub foo: u32,
+            pub bar: String,
+        }
+
+        impl StringInto<CustomEntry> for String {
+            type Err = anyhow::Error;
+
+            fn string_into(&self) -> Result<CustomEntry, Self::Err> {
+                let splits: Vec<&str> = self.split(',').collect();
+
+                if splits.len() != 2 {
+                    Err(anyhow::anyhow!("Error!"))
+                }
+                else {
+                    let foo = splits[0].parse()?;
+                    Ok(CustomEntry { foo, bar: splits[1].to_string() })
+                }
+            }
+        }
+
+        impl BTToString for CustomEntry {
+            fn bt_to_string(&self) -> String {
+                format!("{},{}", self.foo, &self.bar)
+            }
+        }
+
+        let bb = Blackboard::new_ptr();
+
+        let custom_value = CustomEntry {
+            foo: 123,
+            bar: String::from("bar")
+        };
+
+        bb.borrow_mut().set("custom", custom_value.clone());
+        bb.borrow_mut().set("custom_str", String::from("123,bar"));
+        bb.borrow_mut().set("custom_str_malformed", String::from("not an int,bar"));
+
+        assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom").as_ref(), Some(&custom_value));
+        // Check parse from String
+        assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom_str").as_ref(), Some(&custom_value));
+        // Check it returns None if it cannot be parsed
+        assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom_str_malformed").as_ref(), None);
     }
 }
