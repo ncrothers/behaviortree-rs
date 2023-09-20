@@ -54,9 +54,23 @@ where
 /// Struct that stores arbitrary data in a `HashMap<String, Box<dyn Any>>`.
 /// Data types must be compatible with `BTToString` and `StringInto<T>`.
 /// 
+/// # Usage
+/// 
+/// Create a root-level `Blackboard` using `Blackboard::new_ptr()`, which returns
+/// a `BlackboardPtr`.
+/// 
+/// ```
+/// use bt_cpp_rust::Blackboard;
+/// 
+/// // Create a root-level Blackboard
+/// let bb = Blackboard::new_ptr();
+/// // Create a child Blackboard
+/// let child = Blackboard::with_parent(&bb);
+/// ```
+/// 
 /// Provides methods `get<T>()` and `set<T>()`.
 /// 
-/// # get
+/// ## get
 /// 
 /// When reading from the Blackboard, a String will attempt to be coerced to
 /// `T` by calling `string_into()`. `get<T>()` will return `None` if:
@@ -64,7 +78,7 @@ where
 /// - The value type doesn't match the stored type (`.downcast<T>()`)
 /// - Value is a string but `to_string()` returns `Err`
 /// 
-/// # set
+/// ## set
 /// 
 /// `set()` returns an `Option<T>` which contains the previous value.
 /// If there was no previous value, it returns `None`.
