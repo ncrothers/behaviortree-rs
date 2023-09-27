@@ -1,8 +1,6 @@
 use std::{any::Any, collections::HashMap, rc::Rc, cell::RefCell};
 
-use log::warn;
-
-use crate::basic_types::{BTToString, StringInto, PortInfo};
+use crate::basic_types::{FromString, ParseStr};
 
 /// Trait that provides `strip_bb_pointer()` for all `AsRef<str>`,
 /// which includes `String` and `&str`. 
@@ -52,7 +50,6 @@ where
 }
 
 /// Struct that stores arbitrary data in a `HashMap<String, Box<dyn Any>>`.
-/// Data types must be compatible with `BTToString` and `StringInto<T>`.
 /// 
 /// # Usage
 /// 
@@ -68,20 +65,20 @@ where
 /// let child = Blackboard::with_parent(&bb);
 /// ```
 /// 
-/// Provides methods `get<T>()` and `set<T>()`.
+/// Provides methods `get<T>()`, `get_exact<T>()`, and `set<T>()`.
 /// 
 /// ## get
 /// 
 /// When reading from the Blackboard, a String will attempt to be coerced to
-/// `T` by calling `string_into()`. `get<T>()` will return `None` if:
+/// `T` by calling `parse_str()`. `get<T>()` will return `None` if:
 /// - No key matches the provided key
 /// - The value type doesn't match the stored type (`.downcast<T>()`)
 /// - Value is a string but `to_string()` returns `Err`
 /// 
-/// ## set
+/// ## get_exact
 /// 
-/// `set()` returns an `Option<T>` which contains the previous value.
-/// If there was no previous value, it returns `None`.
+/// If the value type at the key doesn't match `T`, it will _not_ try to
+/// parse a string value. It will just return `None`.
 #[derive(Debug)]
 pub struct Blackboard {
     storage: HashMap<String, EntryPtr>,
@@ -132,21 +129,19 @@ impl Blackboard {
     }
 
     /// Get an Rc to the Entry
-    fn get_entry(&mut self, key: impl AsRef<str>) -> Option<EntryPtr> {
-        let key = key.as_ref().to_string();
-
+    fn get_entry(&mut self, key: &str) -> Option<EntryPtr> {
         // Try to get the key
-        if let Some(entry) = self.storage.get(&key) {
+        if let Some(entry) = self.storage.get(key) {
             return Some(Rc::clone(entry));
         }
         // Couldn't find key. Try remapping if we have a parent
         else if let Some(parent_bb) = self.parent_bb.as_ref() {
-            if let Some(new_key) = self.internal_to_external.get(&key) {
+            if let Some(new_key) = self.internal_to_external.get(key) {
                 // Return the value of the parent's `get()`
                 let parent_entry = parent_bb.borrow_mut().get_entry(new_key);
 
                 if let Some(value) = &parent_entry {
-                    self.storage.insert(key, Rc::clone(value));
+                    self.storage.insert(key.to_string(), Rc::clone(value));
                 }
 
                 return parent_entry;
@@ -162,6 +157,65 @@ impl Blackboard {
         None
     }
 
+    /// Internal method that just tries to get value at key. If the stored
+    /// type is not T, return None
+    fn __get_no_string<T>(&mut self, key: &str) -> Option<T>
+    where T: Any + Clone,
+    {
+        // Try to get the key
+        if let Some(entry) = self.get_entry(key) {
+            // Try to downcast directly to T
+            if let Some(value) = entry.borrow().value.downcast_ref::<T>() {
+                return Some(value.clone());
+            }
+        }
+
+        None
+    }
+
+    /// Internal method that tries to get the value at key, but only works
+    /// if it's a String/&str, then tries FromString to convert it to T
+    fn __get_allow_string<T>(&mut self, key: &str) -> Option<T>
+    where T: Any + Clone + FromString,
+    {
+        // Try to get the key
+        if let Some(entry) = self.get_entry(key) {
+            let value = {
+                // If value is a String or &str, try to call `FromString` to convert to T
+                if let Some(value) = entry.borrow().value.downcast_ref::<String>() {
+                    value.to_string()
+                } else if let Some(value) = entry.borrow().value.downcast_ref::<&str>() {
+                    value.to_string()
+                }
+                // Didn't match either String or &str, so return from __get_allow_string
+                else {
+                    return None;
+                }
+            };
+
+            // Try to parse String into T
+            if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
+                // Update value with the value type instead of just a string
+                let mut t = entry.borrow_mut();
+                t.value = Box::new(value.clone());
+                return Some(value);
+            }
+        }
+
+        // No matches
+        None
+    }
+
+    /// Tries to return the value at `key`. The type `T` must implement
+    /// `FromString` when calling this method; it will try to convert
+    /// from `String`/`&str` if there's an entry at `key` but it is not
+    /// of type `T`. If it does convert it successfully, it will replace
+    /// the existing value with `T` so converting from the string type
+    /// won't be needed next time.
+    /// 
+    /// If you want to get an entry that has a type that doesn't implement
+    /// `FromString`, use `get_exact<T>` instead.
+    /// 
     /// The `Blackboard` tries a few things when reading a `key`:
     /// - First it checks if it can find `key`:
     ///     - Check itself for `key`
@@ -171,7 +225,7 @@ impl Blackboard {
     ///     - Return `None` if none of the above work
     /// - If a value is matched, attempt to coerce the value to `T`. If it couldn't 
     /// be coerced to `T`:
-    ///     - If it's a `String` or `&str`, try calling `string_into()`
+    ///     - If it's a `String` or `&str`, try calling `parse_str()`
     /// - If none of those work, return `None`
     /// 
     /// __NOTE__: This method borrows `self` mutably because if it finds a remapped
@@ -195,34 +249,39 @@ impl Blackboard {
     /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
     /// ```
     pub fn get<T>(&mut self, key: impl AsRef<str>) -> Option<T>
-    where
-        T: Any + Clone,
-        String: StringInto<T>,
+    where T: Any + Clone + FromString,
     {
-        let key = key.as_ref().to_string();
+        // Try without parsing string first, then try with parsing string
+        self.__get_no_string(key.as_ref()).or(self.__get_allow_string(key.as_ref()))
+    }
 
-        // Try to get the key
-        if let Some(entry) = self.get_entry(&key) {
-            // Try to downcast directly to T
-            if let Some(value) = entry.borrow().value.downcast_ref::<T>() {
-                return Some(value.clone());
-            } else {
-                // If value is a String or &str, try to call `StringInto` to convert to T
-                if let Some(value) = entry.borrow().value.downcast_ref::<String>() {
-                    if let Ok(value) = value.string_into() {
-                        return Some(value);
-                    }
-                } else if let Some(value) = entry.borrow().value.downcast_ref::<&str>() {
-                    let value = value.to_string();
-                    if let Ok(value) = value.string_into() {
-                        return Some(value);
-                    }
-                }
-            }
-        }
-
-        // No matches
-        None
+    /// Version of `get<T>` that does _not_ try to convert from string if the type
+    /// doesn't match. This method has the benefit of not requiring the trait
+    /// `FromString`, which allows you to avoid implementing the trait for
+    /// types that don't need it or it's impossible to represent the data
+    /// type as a string.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// 
+    /// let mut blackboard = Blackboard::new_ptr();
+    /// let mut blackboard_borrowed = blackboard.borrow_mut();
+    /// 
+    /// blackboard_borrowed.set("foo", 132u32);
+    /// assert_eq!(blackboard_borrowed.get_exact::<u32>("foo"), Some(132u32));
+    /// 
+    /// blackboard_borrowed.set("bar", "100");
+    /// 
+    /// assert_eq!(blackboard_borrowed.get_exact::<&str>("bar"), Some("100"));
+    /// assert_eq!(blackboard_borrowed.get_exact::<String>("bar"), None);
+    /// assert_eq!(blackboard_borrowed.get_exact::<u32>("bar"), None);
+    /// ```
+    pub fn get_exact<T>(&mut self, key: impl AsRef<str>) -> Option<T>
+    where T: Any + Clone,
+    {
+        self.__get_no_string(key.as_ref())
     }
 
     /// Sets the `value` in the Blackboard at `key`.
@@ -243,7 +302,7 @@ impl Blackboard {
     /// assert_eq!(blackboard_borrowed.get::<String>("bar"), Some(String::from("100")));
     /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
     /// ```
-    pub fn set<T: Any + BTToString + 'static>(
+    pub fn set<T: Any + 'static>(
         &mut self,
         key: impl AsRef<str>,
         value: T,
@@ -254,7 +313,6 @@ impl Blackboard {
             entry.borrow_mut().value = Box::new(value);
         }
         else {
-            
             let entry = self.create_entry(&key);
 
             // Set value of new entry
@@ -409,11 +467,11 @@ mod tests {
             pub bar: String,
         }
 
-        impl StringInto<CustomEntry> for String {
+        impl FromString for CustomEntry {
             type Err = anyhow::Error;
 
-            fn string_into(&self) -> Result<CustomEntry, Self::Err> {
-                let splits: Vec<&str> = self.split(',').collect();
+            fn from_string(value: impl AsRef<str>) -> Result<Self, Self::Err> {
+                let splits: Vec<&str> = value.as_ref().split(',').collect();
 
                 if splits.len() != 2 {
                     Err(anyhow::anyhow!("Error!"))
@@ -422,12 +480,6 @@ mod tests {
                     let foo = splits[0].parse()?;
                     Ok(CustomEntry { foo, bar: splits[1].to_string() })
                 }
-            }
-        }
-
-        impl BTToString for CustomEntry {
-            fn bt_to_string(&self) -> String {
-                format!("{},{}", self.foo, &self.bar)
             }
         }
 
@@ -442,7 +494,7 @@ mod tests {
         bb.borrow_mut().set("custom_str", String::from("123,bar"));
         bb.borrow_mut().set("custom_str_malformed", String::from("not an int,bar"));
 
-        assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom").as_ref(), Some(&custom_value));
+        assert_eq!(bb.borrow_mut().get_exact::<CustomEntry>("custom").as_ref(), Some(&custom_value));
         // Check parse from String
         assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom_str").as_ref(), Some(&custom_value));
         // Check it returns None if it cannot be parsed

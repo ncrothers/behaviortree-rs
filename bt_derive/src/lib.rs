@@ -668,3 +668,22 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+#[proc_macro_derive(FromString)]
+pub fn derive_from_string(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let ident = input.ident;
+
+    let expanded = quote! {
+        impl ::bt_cpp_rust::basic_types::FromString for #ident {
+            type Err = <#ident as ::core::str::FromStr>::Err;
+
+            fn from_string(value: impl AsRef<str>) -> Result<#ident, Self::Err> {
+                value.as_ref().parse()
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}

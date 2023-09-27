@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::{
     blackboard::BlackboardString,
-    macros::{impl_into_string, impl_string_into},
+    macros::{impl_into_string, impl_from_string},
     tree::ParseError,
 };
 
@@ -133,56 +133,83 @@ impl std::fmt::Display for PortDirection {
 // ===========================
 
 ///
-/// Trait for custom conversion into String
+/// Trait for custom conversion from String
 ///
-/// Out of the box, `StringInto<T>` is implemented on all numeric types, `bool`,
+/// Out of the box, `ParseStr<T>` is implemented on all numeric types, `bool`,
 /// `NodeStatus`, `NodeType`, and `PortDirection`, and `Vec`s holding those types.
 ///
-/// To implement `StringInto<T>` on your own type, it is recommended to implement `FromStr` on your type,
-/// then call the `impl_string_into!` macro and pass your custom type in. Here's an example:
+/// To implement `ParseStr<T>` on your own type, you can derive
+/// the `bt_cpp_rust` trait: `FromString` on it. To derive this
+/// trait you will need to implement the Rust built-in trait `FromStr`.
+/// You can also just implement `FromString` yourself, but it's recommended
+/// to implement `FromStr` that also provides the `::parse()` function.
 ///
-/// ```ignore
+/// # Example
+/// 
+/// ```
+/// use bt_cpp_rust::derive::FromString;
+/// 
+/// #[derive(FromString)]
 /// struct MyType {
 ///     foo: String
 /// }
 ///
 /// impl std::str::FromStr for MyType {
-///     type Err = ParseError;
+///     // Replace with your error
+///     type Err = core::convert::Infallible;
 ///
 ///     fn from_str(s: &str) -> Result<Self, Self::Err> {
 ///         todo!()
 ///     }
 /// }
 ///
-/// impl_string_into!(MyType);
 /// ```
-pub trait StringInto<T> {
+pub trait ParseStr<T> {
     type Err;
 
-    fn string_into(&self) -> Result<T, Self::Err>;
+    fn parse_str(&self) -> Result<T, Self::Err>;
 }
 
-impl_string_into!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
+// Implements ParseStr<T> for all T that implements FromString
+impl<T, U> ParseStr<T> for U
+where 
+    T: FromString,
+    U: AsRef<str>
+{
+    type Err = <T as FromString>::Err;
 
-impl StringInto<String> for String {
-    type Err = Infallible;
-
-    fn string_into(&self) -> Result<String, Self::Err> {
-        Ok(self.clone())
+    fn parse_str(&self) -> Result<T, Self::Err> {
+        <T as FromString>::from_string(self)
     }
 }
 
-impl<T> StringInto<Vec<String>> for T
-where
-    T: AsRef<str>,
+pub trait FromString where Self: Sized {
+    type Err;
+
+    fn from_string(value: impl AsRef<str>) -> Result<Self, Self::Err>;
+}
+
+impl<T> FromString for Vec<T>
+where T: FromString
 {
+    type Err = <T as FromString>::Err;
+
+    fn from_string(value: impl AsRef<str>) -> Result<Vec<T>, Self::Err> {
+        value
+            .as_ref()
+            .split(';')
+            .map(|x| T::from_string(x))
+            .collect()
+    }
+}
+
+impl_from_string!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
+
+impl FromString for String {
     type Err = Infallible;
 
-    fn string_into(&self) -> Result<Vec<String>, Self::Err> {
-        self.as_ref()
-            .split(';')
-            .map(|x| Ok(x.to_string()))
-            .collect()
+    fn from_string(value: impl AsRef<str>) -> Result<String, Self::Err> {
+        Ok(value.as_ref().to_string())
     }
 }
 
@@ -192,14 +219,11 @@ pub enum ParseBoolError {
     ParseError,
 }
 
-impl<T> StringInto<bool> for T
-where
-    T: AsRef<str>,
-{
+impl FromString for bool {
     type Err = ParseBoolError;
 
-    fn string_into(&self) -> Result<bool, ParseBoolError> {
-        match self.as_ref() {
+    fn from_string(value: impl AsRef<str>) -> Result<bool, ParseBoolError> {
+        match value.as_ref() {
             "1" | "true" | "TRUE" => Ok(true),
             "0" | "false" | "FALSE" => Ok(false),
             _ => Err(ParseBoolError::ParseError),
@@ -207,14 +231,12 @@ where
     }
 }
 
-impl<T> StringInto<NodeStatus> for T
-where
-    T: AsRef<str>,
+impl FromString for NodeStatus
 {
     type Err = ParseNodeStatusError;
 
-    fn string_into(&self) -> Result<NodeStatus, Self::Err> {
-        match self.as_ref() {
+    fn from_string(value: impl AsRef<str>) -> Result<NodeStatus, Self::Err> {
+        match value.as_ref() {
             "IDLE" | "Idle" => Ok(NodeStatus::Idle),
             "RUNNING" | "Running" => Ok(NodeStatus::Running),
             "SUCCESS" | "Success" => Ok(NodeStatus::Success),
@@ -225,14 +247,12 @@ where
     }
 }
 
-impl<T> StringInto<NodeType> for T
-where
-    T: AsRef<str>,
+impl FromString for NodeType
 {
     type Err = ParseNodeTypeError;
 
-    fn string_into(&self) -> Result<NodeType, Self::Err> {
-        match self.as_ref() {
+    fn from_string(value: impl AsRef<str>) -> Result<NodeType, Self::Err> {
+        match value.as_ref() {
             "Undefined" => Ok(NodeType::Undefined),
             "Action" => Ok(NodeType::Action),
             "Condition" => Ok(NodeType::Condition),
@@ -244,14 +264,12 @@ where
     }
 }
 
-impl<T> StringInto<PortDirection> for T
-where
-    T: AsRef<str>,
+impl FromString for PortDirection
 {
     type Err = ParsePortDirectionError;
 
-    fn string_into(&self) -> Result<PortDirection, Self::Err> {
-        match self.as_ref() {
+    fn from_string(value: impl AsRef<str>) -> Result<PortDirection, Self::Err> {
+        match value.as_ref() {
             "Input" | "INPUT" => Ok(PortDirection::Input),
             "Output" | "OUTPUT" => Ok(PortDirection::Output),
             "InOut" | "INOUT" => Ok(PortDirection::InOut),
@@ -373,7 +391,7 @@ impl<T> PortValue for T where T: Any + PortClone + Debug + BTToString {}
 pub struct PortInfo {
     r#type: PortDirection,
     description: String,
-    default_value: Option<Box<dyn PortValue>>,
+    default_value: Option<String>,
 }
 
 impl PortInfo {
@@ -385,7 +403,7 @@ impl PortInfo {
         }
     }
 
-    pub fn default_value(&self) -> Option<&Box<dyn PortValue>> {
+    pub fn default_value(&self) -> Option<&String> {
         match &self.default_value {
             Some(v) => Some(v),
             None => None,
@@ -396,9 +414,9 @@ impl PortInfo {
         self.default_value.as_ref().map(|v| v.bt_to_string())
     }
 
-    pub fn set_default(&mut self, default: impl PortValue) {
+    pub fn set_default(&mut self, default: impl BTToString) {
         // let test = <Box<dyn Any>>::downcast::<u32>(self.default_value().unwrap().bt_to_string()).unwrap();
-        self.default_value = Some(Box::new(default))
+        self.default_value = Some(default.bt_to_string())
     }
 
     pub fn set_description(&mut self, description: String) {
@@ -420,7 +438,7 @@ impl Port {
         Port(name.to_string(), port_info)
     }
 
-    pub fn default(mut self, default: impl PortValue) -> Port {
+    pub fn default(mut self, default: impl BTToString) -> Port {
         self.1.set_default(default);
         self
     }

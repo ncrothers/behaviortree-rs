@@ -1,41 +1,24 @@
-/// Macro for simplifying implementation of `StringInto<T>` for any type that implements `FromStr`.
-///
-/// Also implements the trait for `Vec<T>`, with a delimiter of `;`.
+/// Macro for simplifying implementation of `FromString` for any type that implements `FromStr`.
 ///
 /// The macro-based implementation works for any type that implements `FromStr`;
 /// it calls `parse()` under the hood.
 #[doc(hidden)]
-macro_rules! __impl_string_into {
+macro_rules! __impl_from_string {
     ( $($t:ty),* ) => {
         $(
-            impl<T> $crate::basic_types::StringInto<$t> for T
-            where T: AsRef<str>
+            impl $crate::basic_types::FromString for $t
             {
                 type Err = <$t as FromStr>::Err;
 
-                fn string_into(&self) -> Result<$t, Self::Err> {
-                    self.as_ref().parse()
-                }
-            }
-
-            impl<T> $crate::basic_types::StringInto<Vec<$t>> for T
-            where T: AsRef<str>
-            {
-                type Err = <$t as FromStr>::Err;
-
-                fn string_into(&self) -> Result<Vec<$t>, Self::Err> {
-                    self
-                        .as_ref()
-                        .split(";")
-                        .map(|x| x.parse())
-                        .collect()
+                fn from_string(value: impl AsRef<str>) -> Result<Self, Self::Err> {
+                    value.as_ref().parse()
                 }
             }
         ) *
     };
 }
 #[doc(inline)]
-pub(crate) use __impl_string_into as impl_string_into;
+pub(crate) use __impl_from_string as impl_from_string;
 
 /// Macro for simplifying implementation of `IntoString` for any type implementing `Display`.
 ///

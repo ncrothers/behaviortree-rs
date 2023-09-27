@@ -9,7 +9,7 @@ use quick_xml::{
 use thiserror::Error;
 
 use crate::{
-    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, StringInto, ParseBoolError, PortChecks},
+    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, ParseBoolError, PortChecks, FromString},
     blackboard::{Blackboard, BlackboardPtr, BlackboardString},
     macros::build_node_ptr,
     nodes::{
@@ -47,7 +47,7 @@ pub enum ParseError {
     #[error("No main tree was provided, either in the XML or as a function parameter.")]
     NoMainTree,
     #[error("{0}")]
-    StringIntoError(#[from] ParseBoolError),
+    ParseStringError(#[from] ParseBoolError),
 }
 
 #[derive(Debug)]
@@ -100,6 +100,10 @@ impl Tree {
 
     pub fn tick_while_running(&mut self) -> Result<NodeStatus, NodeError> {
         self.tick_root(TickOption::WhileRunning)
+    }
+
+    pub fn root_blackboard(&self) -> BlackboardPtr {
+        Rc::clone(&self.root.borrow_mut().config().blackboard)
     }
 }
 
@@ -184,6 +188,8 @@ impl Factory {
             self.instantiate_tree(blackboard, main_tree_id)
         }
         else {
+            // Unwrap is safe here because there are more than 1 root and 
+            // self.main_tree_id is Some
             self.instantiate_tree(blackboard, self.main_tree_id.as_ref().unwrap())
         }
     }
@@ -390,7 +396,7 @@ impl Factory {
                         for (attr, value) in attributes.iter() {
                             // Set autoremapping to true or false
                             if attr == "_autoremap" {
-                                child_blackboard.borrow_mut().enable_auto_remapping(value.string_into()?);
+                                child_blackboard.borrow_mut().enable_auto_remapping(<bool as FromString>::from_string(value)?);
                                 continue;
                             }
                             else if !attr.is_allowed_port_name() {

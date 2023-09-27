@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::{
     basic_types::{
         self, get_remapped_key, BTToString, NodeStatus, PortDirection, PortValue, PortsList,
-        PortsRemapping, StringInto, TreeNodeManifest,
+        PortsRemapping, FromString, TreeNodeManifest, ParseStr,
     },
     blackboard::{BlackboardString, BlackboardPtr},
     tree::ParseError,
@@ -222,11 +222,9 @@ impl NodeConfig {
     /// - If a default value is needed (value is empty), couldn't parse default value
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
-    /// - If port value is a string, couldn't convert it to `T` using `string_into()`.
+    /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub fn get_input<T>(&self, port: &str) -> Result<T, NodeError>
-    where
-        T: BTToString + Clone + 'static,
-        String: StringInto<T>,
+    where T: BTToString + FromString + Clone + 'static,
     {
         match self.input_ports.get(port) {
             Some(val) => {
@@ -236,7 +234,7 @@ impl NodeConfig {
                         Ok(manifest) => {
                             let port_info = manifest.ports.get(port).unwrap();
                             match port_info.default_value() {
-                                Some(default) => match default.bt_to_string().string_into() {
+                                Some(default) => match default.parse_str() {
                                     Ok(value) => Ok(value),
                                     Err(_) => Err(NodeError::PortError(String::from(port))),
                                 },
@@ -247,12 +245,13 @@ impl NodeConfig {
                     }
                 } else {
                     match get_remapped_key(port, val) {
+                        // Value is a Blackboard pointer
                         Some(key) => match self.blackboard.borrow_mut().get::<T>(&key) {
                             Some(val) => Ok(val),
                             None => Err(NodeError::BlackboardError(key)),
                         },
-                        // Just a normal string
-                        None => match val.string_into() {
+                        // Value is just a normal string
+                        None => match <T as FromString>::from_string(val) {
                             Ok(val) => Ok(val),
                             Err(_) => Err(NodeError::PortValueParseError(
                                 String::from(port),
