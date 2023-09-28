@@ -1,3 +1,5 @@
+use std::f32::consts::E;
+
 use proc_macro::TokenStream;
 use syn::{DeriveInput, token::Comma, parse::Parser, ItemStruct, punctuated::Punctuated, AttrStyle};
 
@@ -100,17 +102,33 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
         .parse(args)?;
 
     if args_parsed.empty_or_trailing() {
-        return Err(syn::Error::new_spanned(args_parsed, "you must specify one argument for the node type"));
+        return Err(syn::Error::new_spanned(args_parsed, "you must specify at least one argument: node type"));
     }
+
+    let mut args_parsed_iter = args_parsed.iter();
 
     let mut derives = vec![quote! { Clone, ::std::fmt::Debug, ::bt_cpp_rust::derive::TreeNodeDefaults }];
 
-    let arg = args_parsed.iter().next().unwrap();
+    let arg = args_parsed_iter.next().unwrap();
 
     // Require parameter to be ident, no prefix path
     arg.require_ident()?;
     
     let ident = arg.get_ident().unwrap().to_string();
+
+    let (runtime_str, runtime_ident): (String, proc_macro2::TokenStream) = if let Some(runtime) = args_parsed_iter.next() {
+        runtime.require_ident()?;
+
+        let ident = arg.get_ident().unwrap().to_string();
+
+        (ident.clone(), match ident.as_str() {
+            x @ ("Async" | "Sync") => x.parse()?,
+            _ => { return Err(syn::Error::new_spanned(runtime, "unsupported runtime: must be either Async or Sync")) }
+        })
+    }
+    else {
+        (String::from("Async"), "Async".parse()?)
+    };
 
     let mut default_fields = proc_macro2::TokenStream::new();
     let mut manual_fields = proc_macro2::TokenStream::new();
@@ -250,9 +268,45 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
         }
     });
 
+    let mut extra_impls = proc_macro2::TokenStream::new();
+
     let ident = &item.ident;
     let vis = &item.vis;
     let struct_fields = &item.fields;
+
+    match runtime_str.as_str() {
+        "Async" => {
+            extra_impls = quote! {
+                impl ::bt_cpp_rust::nodes::SyncTick for #ident {
+                    fn tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                        Err(::bt_cpp_rust::nodes::NodeError::UnreachableTick)
+                    }
+                }
+
+                impl ::bt_cpp_rust::nodes::SyncNodeHalt for #ident {}
+            };
+        }
+        "Sync" => {
+            extra_impls = quote! {
+                impl ::bt_cpp_rust::nodes::AsyncTick for #ident {
+                    fn tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                        ::std::boxed::Box::pin(async move {
+                            ::tokio::task::spawn_blocking(|| <#ident as ::bt_cpp_rust::nodes::SyncTick>::tick(self)).await
+                        })
+                    }
+                }
+                
+                impl ::bt_cpp_rust::nodes::AsyncNodeHalt for #ident {
+                    fn halt(&mut self) -> ::futures::future::BoxFuture<()> {
+                        ::std::boxed::Box::pin(async move {
+                            ::tokio::task::spawn_blocking(|| <#ident as ::bt_cpp_rust::nodes::SyncNodeHalt>::halt(self)).await
+                        })
+                    }
+                }
+            }
+        },
+        _ => unreachable!(),
+    }
 
     let extra_fields = proc_macro2::TokenStream::new().concat(default_fields).concat(manual_fields);
 
@@ -271,6 +325,8 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                 }
             }
         }
+
+        #extra_impls
     };
 
     Ok(output)
@@ -477,38 +533,41 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 &self.children
             }
 
-            fn halt_control(&mut self) {
-                self.reset_children();
-            }
-
-            fn halt_child(&self, index: usize) -> Result<(), ::bt_cpp_rust::nodes::NodeError> {
-                match self.children.get(index) {
-                    Some(child) => {
-                        if child.borrow().status() == NodeStatus::Running {
-                            child.borrow_mut().halt();
+            fn halt_child(&self, index: usize) -> ::futures::future::BoxFuture<Result<(), ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    match self.children.get(index) {
+                        Some(child) => {
+                            if child.borrow().status() == NodeStatus::Running {
+                                child.borrow_mut().halt().await;
+                            }
+                            Ok(child.borrow_mut().reset_status())
                         }
-                        Ok(child.borrow_mut().reset_status())
+                        None => Err(::bt_cpp_rust::nodes::NodeError::IndexError),
                     }
-                    None => Err(::bt_cpp_rust::nodes::NodeError::IndexError),
-                }
+                })
             }
 
-            fn halt_children(&self, start: usize) -> Result<(), ::bt_cpp_rust::nodes::NodeError> {
-                if start >= self.children.len() {
-                    return Err(::bt_cpp_rust::nodes::NodeError::IndexError);
-                }
-
-                let end = self.children.len();
-
-                for i in start..end {
-                    self.halt_child(i)?;
-                }
-
-                Ok(())
+            fn halt_children(&self, start: usize) -> ::futures::future::BoxFuture<Result<(), ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    
+                    if start >= self.children.len() {
+                        return Err(::bt_cpp_rust::nodes::NodeError::IndexError);
+                    }
+    
+                    let end = self.children.len();
+    
+                    for i in start..end {
+                        self.halt_child(i).await?;
+                    }
+    
+                    Ok(())
+                })
             }
 
-            fn reset_children(&self) {
-                self.halt_children(0).unwrap();
+            fn reset_children(&self) -> ::futures::future::BoxFuture<()> {
+                ::std::boxed::Box::pin(async move {
+                    self.halt_children(0).unwrap();
+                })
             }
 
             fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ControlNodeBase> {
@@ -516,9 +575,11 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl ::bt_cpp_rust::nodes::NodeTick for #ident {
-            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
-                self.tick()
+        impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
+            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    self.tick().await
+                })
             }
         }
 
@@ -576,13 +637,15 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl ::bt_cpp_rust::nodes::NodeTick for #ident {
-            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
-                if self.child.is_none() {
-                    return Err(::bt_cpp_rust::nodes::NodeError::ChildMissing);
-                }
-                
-                self.tick()
+        impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
+            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    if self.child.is_none() {
+                        return Err(::bt_cpp_rust::nodes::NodeError::ChildMissing);
+                    }
+                    
+                    self.tick().await
+                })
             }
         }
 
@@ -606,8 +669,8 @@ pub fn derive_sync_action_node(input: TokenStream) -> TokenStream {
     let ident = input.ident;
 
     let expanded = quote! {
-        impl ::bt_cpp_rust::nodes::NodeTick for #ident {
-            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+        impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
+            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
                 match <Self as ::bt_cpp_rust::nodes::ActionNode>::execute_action_tick(self)? {
                     ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
                     status => Ok(status)
@@ -627,8 +690,8 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
     let ident = input.ident;
 
     let expanded = quote! {
-        impl ::bt_cpp_rust::nodes::NodeTick for #ident where #ident: ::bt_cpp_rust::nodes::StatefulActionNode {
-            fn execute_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+        impl ::bt_cpp_rust::nodes::ExecuteTick for #ident where #ident: ::bt_cpp_rust::nodes::StatefulActionNode {
+            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
                 let prev_status = <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self);
 
                 let new_status = match prev_status {

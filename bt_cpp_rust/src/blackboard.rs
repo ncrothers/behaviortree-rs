@@ -1,4 +1,7 @@
-use std::{any::Any, collections::HashMap, rc::Rc, cell::RefCell};
+use std::{any::Any, collections::HashMap, rc::Rc, cell::RefCell, sync::Arc};
+
+use futures::future::BoxFuture;
+use tokio::sync::{RwLock, Mutex};
 
 use crate::basic_types::{FromString, ParseStr};
 
@@ -89,11 +92,12 @@ pub struct Blackboard {
 
 #[derive(Debug)]
 pub struct Entry {
-    pub value: Box<dyn Any>,
+    pub value: Box<dyn Any + Send>,
 }
 
-pub type BlackboardPtr = Rc<RefCell<Blackboard>>;
-pub type EntryPtr = Rc<RefCell<Entry>>;
+pub type BlackboardPtr = Arc<RwLock<Blackboard>>;
+
+pub type EntryPtr = Arc<Mutex<Entry>>;
 
 impl Blackboard {
     fn new(parent_bb: Option<BlackboardPtr>) -> Blackboard {
@@ -107,12 +111,12 @@ impl Blackboard {
 
     /// Creates a Blackboard with `parent_bb` as the parent. Returned as a new `BlackboardPtr`.
     pub fn with_parent(parent_bb: &BlackboardPtr) -> BlackboardPtr {
-        Rc::new(RefCell::new(Self::new(Some(Rc::clone(parent_bb)))))
+        Arc::new(RwLock::new(Self::new(Some(Arc::clone(parent_bb)))))
     }
 
     /// Creates a Blackboard with no parent and returns it as a `BlackboardPtr`.
     pub fn new_ptr() -> BlackboardPtr {
-        std::rc::Rc::new(std::cell::RefCell::new(Self::new(None)))
+        Arc::new(RwLock::new(Self::new(None)))
     }
 
     /// Enables the Blackboard to use autoremapping when getting values from 
@@ -129,43 +133,45 @@ impl Blackboard {
     }
 
     /// Get an Rc to the Entry
-    fn get_entry(&mut self, key: &str) -> Option<EntryPtr> {
-        // Try to get the key
-        if let Some(entry) = self.storage.get(key) {
-            return Some(Rc::clone(entry));
-        }
-        // Couldn't find key. Try remapping if we have a parent
-        else if let Some(parent_bb) = self.parent_bb.as_ref() {
-            if let Some(new_key) = self.internal_to_external.get(key) {
-                // Return the value of the parent's `get()`
-                let parent_entry = parent_bb.borrow_mut().get_entry(new_key);
-
-                if let Some(value) = &parent_entry {
-                    self.storage.insert(key.to_string(), Rc::clone(value));
+    fn get_entry(&mut self, key: &str) -> BoxFuture<Option<EntryPtr>> {
+        Box::pin(async move {
+            // Try to get the key
+            if let Some(entry) = self.storage.get(key) {
+                return Some(Arc::clone(entry));
+            }
+            // Couldn't find key. Try remapping if we have a parent
+            else if let Some(parent_bb) = self.parent_bb.as_ref() {
+                if let Some(new_key) = self.internal_to_external.get(key) {
+                    // Return the value of the parent's `get()`
+                    let parent_entry = parent_bb.write().await.get_entry(new_key).await;
+    
+                    if let Some(value) = &parent_entry {
+                        self.storage.insert(key.to_string(), Arc::clone(value));
+                    }
+    
+                    return parent_entry;
                 }
-
-                return parent_entry;
+                // Use auto remapping
+                else if self.auto_remapping {
+                    // Return the value of the parent's `get()`
+                    return parent_bb.write().await.get_entry(key).await;
+                }
             }
-            // Use auto remapping
-            else if self.auto_remapping {
-                // Return the value of the parent's `get()`
-                return parent_bb.borrow_mut().get_entry(key);
-            }
-        }
-
-        // No matches
-        None
+    
+            // No matches
+            None
+        })
     }
 
     /// Internal method that just tries to get value at key. If the stored
     /// type is not T, return None
-    fn __get_no_string<T>(&mut self, key: &str) -> Option<T>
+    async fn __get_no_string<T>(&mut self, key: &str) -> Option<T>
     where T: Any + Clone,
     {
         // Try to get the key
-        if let Some(entry) = self.get_entry(key) {
+        if let Some(entry) = self.get_entry(key).await {
             // Try to downcast directly to T
-            if let Some(value) = entry.borrow().value.downcast_ref::<T>() {
+            if let Some(value) = entry.lock().await.value.downcast_ref::<T>() {
                 return Some(value.clone());
             }
         }
@@ -175,16 +181,16 @@ impl Blackboard {
 
     /// Internal method that tries to get the value at key, but only works
     /// if it's a String/&str, then tries FromString to convert it to T
-    fn __get_allow_string<T>(&mut self, key: &str) -> Option<T>
-    where T: Any + Clone + FromString,
+    async fn __get_allow_string<T>(&mut self, key: &str) -> Option<T>
+    where T: Any + Clone + FromString + Send,
     {
         // Try to get the key
-        if let Some(entry) = self.get_entry(key) {
+        if let Some(entry) = self.get_entry(key).await {
             let value = {
                 // If value is a String or &str, try to call `FromString` to convert to T
-                if let Some(value) = entry.borrow().value.downcast_ref::<String>() {
+                if let Some(value) = entry.lock().await.value.downcast_ref::<String>() {
                     value.to_string()
-                } else if let Some(value) = entry.borrow().value.downcast_ref::<&str>() {
+                } else if let Some(value) = entry.lock().await.value.downcast_ref::<&str>() {
                     value.to_string()
                 }
                 // Didn't match either String or &str, so return from __get_allow_string
@@ -196,7 +202,7 @@ impl Blackboard {
             // Try to parse String into T
             if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
                 // Update value with the value type instead of just a string
-                let mut t = entry.borrow_mut();
+                let mut t = entry.lock().await;
                 t.value = Box::new(value.clone());
                 return Some(value);
             }
@@ -248,11 +254,11 @@ impl Blackboard {
     /// assert_eq!(blackboard_borrowed.get::<String>("bar"), Some(String::from("100")));
     /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
     /// ```
-    pub fn get<T>(&mut self, key: impl AsRef<str>) -> Option<T>
-    where T: Any + Clone + FromString,
+    pub async fn get<T>(&mut self, key: impl AsRef<str>) -> Option<T>
+    where T: Any + Clone + FromString + Send,
     {
         // Try without parsing string first, then try with parsing string
-        self.__get_no_string(key.as_ref()).or(self.__get_allow_string(key.as_ref()))
+        self.__get_no_string(key.as_ref()).await.or(self.__get_allow_string(key.as_ref()).await)
     }
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
@@ -278,10 +284,10 @@ impl Blackboard {
     /// assert_eq!(blackboard_borrowed.get_exact::<String>("bar"), None);
     /// assert_eq!(blackboard_borrowed.get_exact::<u32>("bar"), None);
     /// ```
-    pub fn get_exact<T>(&mut self, key: impl AsRef<str>) -> Option<T>
+    pub async fn get_exact<T>(&mut self, key: impl AsRef<str>) -> Option<T>
     where T: Any + Clone,
     {
-        self.__get_no_string(key.as_ref())
+        self.__get_no_string(key.as_ref()).await
     }
 
     /// Sets the `value` in the Blackboard at `key`.
@@ -302,7 +308,7 @@ impl Blackboard {
     /// assert_eq!(blackboard_borrowed.get::<String>("bar"), Some(String::from("100")));
     /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
     /// ```
-    pub fn set<T: Any + 'static>(
+    pub async fn set<T: Any + Send + 'static>(
         &mut self,
         key: impl AsRef<str>,
         value: T,
@@ -310,13 +316,13 @@ impl Blackboard {
         let key = key.as_ref().to_string();
 
         if let Some(entry) = self.storage.get_mut(&key) {
-            entry.borrow_mut().value = Box::new(value);
+            entry.lock().await.value = Box::new(value);
         }
         else {
             let entry = self.create_entry(&key);
 
             // Set value of new entry
-            entry.borrow_mut().value = Box::new(value);
+            entry.lock().await.value = Box::new(value);
         }
     }
 
@@ -332,11 +338,11 @@ impl Blackboard {
             // Safe to unwrap because .contains_key() is true
             let remapped_key = self.internal_to_external.get(key.as_ref()).unwrap();
 
-            entry = self.parent_bb.as_ref().unwrap().borrow_mut().create_entry(remapped_key);
+            entry = self.parent_bb.as_ref().unwrap().write().await.create_entry(remapped_key);
         }
         // Use autoremapping
         else if self.auto_remapping && self.parent_bb.is_some() {
-            entry = self.parent_bb.as_ref().unwrap().borrow_mut().create_entry(key);
+            entry = self.parent_bb.as_ref().unwrap().write().await.create_entry(key);
         }
         // No remapping or no parent blackboard
         else {

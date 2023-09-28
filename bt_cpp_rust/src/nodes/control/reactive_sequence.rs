@@ -1,8 +1,9 @@
 use bt_derive::bt_node;
+use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, NodePorts, TreeNodePtr, NodeError, SyncNodeHalt, AsyncTick, AsyncNodeHalt},
 };
 
 /// The ReactiveSequence is similar to a ParallelNode.
@@ -22,57 +23,63 @@ pub struct ReactiveSequenceNode {
     running_child: i32,
 }
 
-impl TreeNode for ReactiveSequenceNode {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-        let mut all_skipped = true;
-
-        self.status = NodeStatus::Running;
-
-        for (counter, child) in self.children.iter().enumerate() {
-            let child_status = child.borrow_mut().execute_tick()?;
-
-            all_skipped &= child_status == NodeStatus::Skipped;
-
-            match child_status {
-                NodeStatus::Running => {
-                    for i in 0..counter {
-                        self.halt_child(i)?;
+impl AsyncTick for ReactiveSequenceNode {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+        Box::pin(async move {
+            let mut all_skipped = true;
+        
+            self.status = NodeStatus::Running;
+        
+            for (counter, child) in self.children.iter().enumerate() {
+                let child_status = child.borrow_mut().execute_tick().await?;
+        
+                all_skipped &= child_status == NodeStatus::Skipped;
+        
+                match child_status {
+                    NodeStatus::Running => {
+                        for i in 0..counter {
+                            self.halt_child(i)?;
+                        }
+                        if self.running_child == -1 {
+                            self.running_child = counter as i32;
+                        } else if self.running_child != counter as i32 {
+                            // Multiple children running at the same time
+                            return Err(NodeError::NodeStructureError("[ReactiveSequence]: Only a single child can return Running.".to_string()))
+                        }
+                        return Ok(NodeStatus::Running);
                     }
-                    if self.running_child == -1 {
-                        self.running_child = counter as i32;
-                    } else if self.running_child != counter as i32 {
-                        // Multiple children running at the same time
-                        return Err(NodeError::NodeStructureError("[ReactiveSequence]: Only a single child can return Running.".to_string()))
+                    NodeStatus::Failure => {
+                        self.reset_children();
+                        return Ok(NodeStatus::Failure);
                     }
-                    return Ok(NodeStatus::Running);
-                }
-                NodeStatus::Failure => {
-                    self.reset_children();
-                    return Ok(NodeStatus::Failure);
-                }
-                // Do nothing on Success
-                NodeStatus::Success => {}
-                NodeStatus::Skipped => {
-                    // Halt current child
-                    child.borrow_mut().halt();
-                }
-                NodeStatus::Idle => {
-                    return Err(NodeError::StatusError(child.borrow_mut().config().path.clone(), "Idle".to_string()));
+                    // Do nothing on Success
+                    NodeStatus::Success => {}
+                    NodeStatus::Skipped => {
+                        // Halt current child
+                        child.borrow_mut().halt();
+                    }
+                    NodeStatus::Idle => {
+                        return Err(NodeError::StatusError(child.borrow_mut().config().path.clone(), "Idle".to_string()));
+                    }
                 }
             }
-        }
-
-        self.reset_children();
-
-        match all_skipped {
-            true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Success),
-        }
+        
+            self.reset_children();
+        
+            match all_skipped {
+                true => Ok(NodeStatus::Skipped),
+                false => Ok(NodeStatus::Success),
+            }
+        })
     }
 }
 
-impl NodeHalt for ReactiveSequenceNode {
-    fn halt(&mut self) {
-        self.reset_children()
+impl NodePorts for ReactiveSequenceNode {}
+
+impl AsyncNodeHalt for ReactiveSequenceNode {
+    fn halt(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {
+            self.reset_children().await;
+        })
     }
 }

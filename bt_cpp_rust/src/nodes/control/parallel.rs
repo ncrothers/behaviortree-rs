@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
 use bt_derive::bt_node;
+use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{ControlNode, TreeNode, TreeNodeDefaults, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, NodePorts, TreeNodeDefaults, TreeNodePtr, NodeError, SyncNodeHalt, AsyncTick, AsyncNodeHalt},
 };
 
 /// The ParallelNode execute all its children
@@ -63,71 +64,75 @@ impl ParallelNode {
     }
 }
 
-impl TreeNode for ParallelNode {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-        self.success_threshold = self.config().get_input("success_count").unwrap();
-        self.failure_threshold = self.config().get_input("failure_count").unwrap();
-
-        let children_count = self.children.len();
-
-        if children_count < self.success_threshold() {
-            return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never succeed.".to_string()));
-        }
-
-        if children_count < self.failure_threshold() {
-            return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never fail.".to_string()));
-        }
-
-        let mut skipped_count = 0;
-
-        for i in 0..children_count {
-            if !self.completed_list.contains(&i) {
-                let mut child = self.children[i].borrow_mut();
-                match child.execute_tick()? {
-                    NodeStatus::Skipped => skipped_count += 1,
-                    NodeStatus::Success => {
-                        self.completed_list.insert(i);
-                        self.success_count += 1;
+impl AsyncTick for ParallelNode {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+        Box::pin(async move {
+            self.success_threshold = self.config().get_input("success_count").unwrap();
+            self.failure_threshold = self.config().get_input("failure_count").unwrap();
+    
+            let children_count = self.children.len();
+    
+            if children_count < self.success_threshold() {
+                return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never succeed.".to_string()));
+            }
+    
+            if children_count < self.failure_threshold() {
+                return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never fail.".to_string()));
+            }
+    
+            let mut skipped_count = 0;
+    
+            for i in 0..children_count {
+                if !self.completed_list.contains(&i) {
+                    let mut child = self.children[i].borrow_mut();
+                    match child.execute_tick().await? {
+                        NodeStatus::Skipped => skipped_count += 1,
+                        NodeStatus::Success => {
+                            self.completed_list.insert(i);
+                            self.success_count += 1;
+                        }
+                        NodeStatus::Failure => {
+                            self.completed_list.insert(i);
+                            self.failure_count += 1;
+                        }
+                        NodeStatus::Running => {}
+                        // Throw error, should never happen
+                        NodeStatus::Idle => {}
                     }
-                    NodeStatus::Failure => {
-                        self.completed_list.insert(i);
-                        self.failure_count += 1;
-                    }
-                    NodeStatus::Running => {}
-                    // Throw error, should never happen
-                    NodeStatus::Idle => {}
+                }
+    
+                let required_success_count = self.success_threshold();
+    
+                // Check if success condition has been met
+                if self.success_count >= required_success_count
+                    || (self.success_threshold < 0
+                        && (self.success_count + skipped_count) >= required_success_count)
+                {
+                    self.clear();
+                    self.reset_children();
+                    return Ok(NodeStatus::Success);
+                }
+    
+                if (children_count - self.failure_count) < required_success_count
+                    || self.failure_count == self.failure_threshold()
+                {
+                    self.clear();
+                    self.reset_children();
+                    return Ok(NodeStatus::Failure);
                 }
             }
-
-            let required_success_count = self.success_threshold();
-
-            // Check if success condition has been met
-            if self.success_count >= required_success_count
-                || (self.success_threshold < 0
-                    && (self.success_count + skipped_count) >= required_success_count)
-            {
-                self.clear();
-                self.reset_children();
-                return Ok(NodeStatus::Success);
+    
+            // If all children were skipped, return Skipped
+            // Otherwise return Running
+            match skipped_count == children_count {
+                true => Ok(NodeStatus::Skipped),
+                false => Ok(NodeStatus::Running),
             }
-
-            if (children_count - self.failure_count) < required_success_count
-                || self.failure_count == self.failure_threshold()
-            {
-                self.clear();
-                self.reset_children();
-                return Ok(NodeStatus::Failure);
-            }
-        }
-
-        // If all children were skipped, return Skipped
-        // Otherwise return Running
-        match skipped_count == children_count {
-            true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Running),
-        }
+        })
     }
+}
 
+impl NodePorts for ParallelNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(
             input_port!("success_count", -1),
@@ -136,8 +141,10 @@ impl TreeNode for ParallelNode {
     }
 }
 
-impl NodeHalt for ParallelNode {
-    fn halt(&mut self) {
-        self.halt_control()
+impl AsyncNodeHalt for ParallelNode {
+    fn halt(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {
+            self.reset_children();
+        })
     }
 }

@@ -1,6 +1,8 @@
-use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc, sync::{PoisonError, LockResult, RwLock, TryLockError, Arc}};
 
+use futures::future::BoxFuture;
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 use crate::{
     basic_types::{
@@ -26,29 +28,55 @@ pub use action::*;
 
 /// Supertrait that requires all of the base functions that need to 
 /// be implemented for every tree node.
-pub trait TreeNodeBase: TreeNode + TreeNodeDefaults + GetNodeType + NodeTick + NodeHalt {}
+pub trait TreeNodeBase: std::fmt::Debug + NodePorts + TreeNodeDefaults + GetNodeType + ExecuteTick + SyncNodeHalt + AsyncNodeHalt + SyncTick + AsyncTick {}
 
 /// Pointer to the most general trait, which encapsulates all 
 /// node types that implement `TreeNodeBase` (all nodes need 
 /// to for it to compile)
-pub type TreeNodePtr = Rc<RefCell<dyn TreeNodeBase>>;
+pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase>>;
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
 /// the `tick()` is defined as well as the ports, with 
 /// `provided_ports()`.
-pub trait TreeNode: std::fmt::Debug {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError>;
+pub trait NodePorts {
     fn provided_ports(&self) -> PortsList {
         HashMap::new()
     }
 }
 
+/// The only trait from `TreeNodeBase` that _needs_ to be
+/// implemented manually, without a derive macro. This is where
+/// the `tick()` is defined as well as the ports, with 
+/// `provided_ports()`.
+pub trait SyncTick {
+    fn tick(&mut self) -> Result<NodeStatus, NodeError>;
+}
+
+/// The only trait from `TreeNodeBase` that _needs_ to be
+/// implemented manually, without a derive macro. This is where
+/// the `tick()` is defined as well as the ports, with 
+/// `provided_ports()`.
+pub trait AsyncTick {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
+}
+
 /// Trait that defines the `halt()` function, which gets called 
 /// when a node is stopped. This function typically contains any 
 /// cleanup code for the node.
-pub trait NodeHalt {
+pub trait SyncNodeHalt {
     fn halt(&mut self) {}
+}
+
+/// Trait that defines the `halt()` function, which gets called 
+/// when a node is stopped. This function typically contains any 
+/// cleanup code for the node.
+pub trait AsyncNodeHalt {
+    fn halt(&mut self) -> BoxFuture<()> { Box::pin(async move {}) }
+}
+
+pub trait RuntimeType {
+    fn get_runtime(&self) -> NodeRuntime;
 }
 
 /// Trait that should only be implemented with a derive macro.
@@ -85,8 +113,8 @@ pub trait TreeNodeDefaults {
 
 /// Automatically implemented for all node types. The implementation
 /// differs based on the `NodeType`.
-pub trait NodeTick {
-    fn execute_tick(&mut self) -> Result<NodeStatus, NodeError>;
+pub trait ExecuteTick {
+    fn execute_tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
 }
 
 /// TODO
@@ -119,6 +147,10 @@ pub enum NodeError {
     NodeStructureError(String),
     #[error("Decorator node does not have a child.")]
     ChildMissing,
+    #[error("Blackboard lock was poisoned.")]
+    LockPoisoned,
+    #[error("A tick method was called that should have been unreachable. Please report this.")]
+    UnreachableTick,
 }
 
 /// TODO: Not currently used
@@ -139,6 +171,13 @@ pub enum PostCond {
     OnSuccess,
     Always,
     Count,
+}
+
+#[derive(Clone, Debug)]
+pub enum NodeRuntime {
+    Async,
+    Sync,
+    All
 }
 
 // =========================================

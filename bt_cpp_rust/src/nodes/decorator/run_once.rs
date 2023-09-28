@@ -1,8 +1,9 @@
 use bt_derive::bt_node;
+use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, NodePorts, NodeError, SyncNodeHalt, AsyncNodeHalt, AsyncTick},
     macros::{define_ports, input_port}
 };
 
@@ -23,27 +24,31 @@ pub struct RunOnceNode {
     returned_status: NodeStatus,
 }
 
-impl TreeNode for RunOnceNode {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-        let skip = self.config.get_input("then_skip")?;
-
-        if self.already_ticked {
-            return if skip { Ok(NodeStatus::Skipped) } else { Ok(self.returned_status.clone()) };
-        }
-
-        self.set_status(NodeStatus::Running);
-
-        let status = self.child.as_ref().unwrap().borrow_mut().execute_tick()?;
-
-        if status.is_completed() {
-            self.already_ticked = true;
-            self.returned_status = status.clone();
-            self.reset_child();
-        }
-
-        Ok(status)
+impl AsyncTick for RunOnceNode {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+        Box::pin(async move {
+            let skip = self.config.get_input("then_skip")?;
+        
+            if self.already_ticked {
+                return if skip { Ok(NodeStatus::Skipped) } else { Ok(self.returned_status.clone()) };
+            }
+        
+            self.set_status(NodeStatus::Running);
+        
+            let status = self.child.as_ref().unwrap().borrow_mut().execute_tick().await?;
+        
+            if status.is_completed() {
+                self.already_ticked = true;
+                self.returned_status = status.clone();
+                self.reset_child();
+            }
+        
+            Ok(status)
+        })
     }
+}
 
+impl NodePorts for RunOnceNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(
             input_port!("then_skip", true)
@@ -51,8 +56,10 @@ impl TreeNode for RunOnceNode {
     }
 }
 
-impl NodeHalt for RunOnceNode {
-    fn halt(&mut self) {
-        self.reset_child();
+impl AsyncNodeHalt for RunOnceNode {
+    fn halt(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {
+            self.reset_child();
+        })
     }
 }

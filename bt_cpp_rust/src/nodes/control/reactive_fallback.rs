@@ -1,8 +1,9 @@
 use bt_derive::bt_node;
+use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, TreeNode, TreeNodePtr, NodeError, NodeHalt},
+    nodes::{ControlNode, NodePorts, TreeNodePtr, NodeError, SyncNodeHalt, AsyncTick, AsyncNodeHalt},
 };
 
 /// The ReactiveFallback is similar to a ParallelNode.
@@ -19,51 +20,57 @@ use crate::{
 #[bt_node(ControlNode)]
 pub struct ReactiveFallbackNode {}
 
-impl TreeNode for ReactiveFallbackNode {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-        let mut all_skipped = true;
-        self.status = NodeStatus::Running;
-
-        for index in 0..self.children.len() {
-            let cur_child = &mut self.children[index];
-
-            let child_status = cur_child.borrow_mut().execute_tick()?;
-
-            all_skipped &= child_status == NodeStatus::Skipped;
-
-            match &child_status {
-                NodeStatus::Running => {
-                    for i in 0..index {
-                        self.halt_child(i)?;
+impl AsyncTick for ReactiveFallbackNode {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+        Box::pin(async move {
+            let mut all_skipped = true;
+            self.status = NodeStatus::Running;
+    
+            for index in 0..self.children.len() {
+                let cur_child = &mut self.children[index];
+    
+                let child_status = cur_child.borrow_mut().execute_tick().await?;
+    
+                all_skipped &= child_status == NodeStatus::Skipped;
+    
+                match &child_status {
+                    NodeStatus::Running => {
+                        for i in 0..index {
+                            self.halt_child(i)?;
+                        }
+    
+                        return Ok(NodeStatus::Running);
                     }
-
-                    return Ok(NodeStatus::Running);
-                }
-                NodeStatus::Failure => {}
-                NodeStatus::Success => {
-                    self.reset_children();
-                    return Ok(NodeStatus::Success);
-                }
-                NodeStatus::Skipped => {
-                    self.halt_child(index)?;
-                }
-                NodeStatus::Idle => {
-                    return Err(NodeError::StatusError("Name here".to_string(), "Idle".to_string()));
-                }
-            };
-        }
-
-        self.reset_children();
-
-        match all_skipped {
-            true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Failure),
-        }
+                    NodeStatus::Failure => {}
+                    NodeStatus::Success => {
+                        self.reset_children();
+                        return Ok(NodeStatus::Success);
+                    }
+                    NodeStatus::Skipped => {
+                        self.halt_child(index)?;
+                    }
+                    NodeStatus::Idle => {
+                        return Err(NodeError::StatusError("Name here".to_string(), "Idle".to_string()));
+                    }
+                };
+            }
+    
+            self.reset_children();
+    
+            match all_skipped {
+                true => Ok(NodeStatus::Skipped),
+                false => Ok(NodeStatus::Failure),
+            }
+        })
     }
 }
 
-impl NodeHalt for ReactiveFallbackNode {
-    fn halt(&mut self) {
-        self.reset_children();
+impl NodePorts for ReactiveFallbackNode {}
+
+impl AsyncNodeHalt for ReactiveFallbackNode {
+    fn halt(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {
+            self.reset_children().await;
+        })
     }
 }

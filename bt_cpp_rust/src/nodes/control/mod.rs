@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::nodes::{TreeNodeBase, TreeNodePtr, NodeError};
 
 mod if_then_else;
+use futures::future::BoxFuture;
 pub use if_then_else::*;
 mod fallback;
 pub use fallback::*;
@@ -30,14 +31,12 @@ pub trait ControlNode: TreeNodeBase {
     fn add_child(&mut self, child: TreeNodePtr);
     /// Return reference to `Vec` of children nodes
     fn children(&self) -> &Vec<Rc<RefCell<dyn TreeNodeBase>>>;
-    /// Control-specific implementation of `halt()`
-    fn halt_control(&mut self);
     /// Call `halt()` on child at index
-    fn halt_child(&self, index: usize) -> Result<(), NodeError>;
+    fn halt_child(&self, index: usize) -> BoxFuture<Result<(), NodeError>>;
     /// Halt all children at and after index
-    fn halt_children(&self, start: usize) -> Result<(), NodeError>;
+    fn halt_children(&self, start: usize) -> BoxFuture<Result<(), NodeError>>;
     /// Reset status of all child nodes
-    fn reset_children(&self);
+    fn reset_children(&self) -> BoxFuture<()>;
     /// Creates a cloned version of itself as a `ControlNode` trait object
     fn clone_boxed(&self) -> Box<dyn ControlNodeBase>;
 }

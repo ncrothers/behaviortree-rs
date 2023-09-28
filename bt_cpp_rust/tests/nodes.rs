@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use bt_cpp_rust::{nodes::{NodeError, TreeNode, NodeHalt, StatefulActionNode}, basic_types::{NodeStatus, PortsList, BTToString}, macros::{define_ports, input_port}};
+use bt_cpp_rust::{nodes::{NodeError, NodePorts, SyncNodeHalt, StatefulActionNode}, basic_types::{NodeStatus, PortsList, BTToString}, macros::{define_ports, input_port}};
 use bt_derive::bt_node;
 use log::info;
 
@@ -14,7 +14,7 @@ pub fn test_setup() {
 #[bt_node(SyncActionNode)]
 pub struct StatusNode {}
 
-impl TreeNode for StatusNode {
+impl NodePorts for StatusNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         let status: NodeStatus = self.config.get_input("status")?;
 
@@ -28,7 +28,7 @@ impl TreeNode for StatusNode {
     }
 }
 
-impl NodeHalt for StatusNode {}
+impl SyncNodeHalt for StatusNode {}
 
 #[bt_node(SyncActionNode)]
 pub struct SuccessThenFailure {
@@ -36,7 +36,7 @@ pub struct SuccessThenFailure {
     iter: usize,
 }
 
-impl TreeNode for SuccessThenFailure {
+impl NodePorts for SuccessThenFailure {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         let max_iters: usize = self.config.get_input("iters")?;
 
@@ -56,12 +56,12 @@ impl TreeNode for SuccessThenFailure {
     }
 }
 
-impl NodeHalt for SuccessThenFailure {}
+impl SyncNodeHalt for SuccessThenFailure {}
 
 #[bt_node(SyncActionNode)]
 pub struct EchoNode {}
 
-impl TreeNode for EchoNode {
+impl NodePorts for EchoNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         let msg: String = self.config.get_input("msg")?;
 
@@ -75,7 +75,7 @@ impl TreeNode for EchoNode {
     }
 }
 
-impl NodeHalt for EchoNode {}
+impl SyncNodeHalt for EchoNode {}
 
 #[bt_node(StatefulActionNode)]
 pub struct RunForNode {
@@ -83,7 +83,7 @@ pub struct RunForNode {
     counter: usize,
 }
 
-impl TreeNode for RunForNode {
+impl NodePorts for RunForNode {
     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
         Ok(NodeStatus::Idle)
     }

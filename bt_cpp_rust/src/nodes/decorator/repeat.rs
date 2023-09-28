@@ -1,8 +1,9 @@
 use bt_derive::bt_node;
+use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{TreeNodeDefaults, DecoratorNode, TreeNode, NodeError, NodeHalt},
+    nodes::{TreeNodeDefaults, DecoratorNode, NodePorts, NodeError, SyncNodeHalt, AsyncNodeHalt, AsyncTick},
     macros::{define_ports, input_port}
 };
 
@@ -31,55 +32,59 @@ pub struct RepeatNode {
     all_skipped: bool,
 }
 
-impl TreeNode for RepeatNode {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-        // Load num_cycles from the port value
-        self.num_cycles = self.config.get_input("num_cycles")?;
-
-        let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
+impl AsyncTick for RepeatNode {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+        Box::pin(async move {
+            // Load num_cycles from the port value
+            self.num_cycles = self.config.get_input("num_cycles")?;
         
-        if matches!(self.status, NodeStatus::Idle) {
-            self.all_skipped = true;
-        }
-
-        self.set_status(NodeStatus::Running);
-
-        while do_loop {
-            let child_status = self.child.as_ref().unwrap().borrow_mut().execute_tick()?;
-
-            self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
-
-            match child_status {
-                NodeStatus::Success => {
-                    self.repeat_count += 1;
-                    do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
-
-                    self.reset_child();
-                }
-                NodeStatus::Failure => {
-                    self.repeat_count = 0;
-                    self.reset_child();
-
-                    return Ok(NodeStatus::Failure);
-                }
-                NodeStatus::Running => return Ok(NodeStatus::Running),
-                NodeStatus::Skipped => {
-                    self.reset_child();
-
-                    return Ok(NodeStatus::Skipped);
-                }
-                NodeStatus::Idle => return Err(NodeError::StatusError("InverterNode".to_string(), "Idle".to_string())),
+            let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
+            
+            if matches!(self.status, NodeStatus::Idle) {
+                self.all_skipped = true;
             }
-        }
-
-        self.repeat_count = 0;
-
-        match self.all_skipped {
-            true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Success),
-        }
+        
+            self.set_status(NodeStatus::Running);
+        
+            while do_loop {
+                let child_status = self.child.as_ref().unwrap().borrow_mut().execute_tick().await?;
+        
+                self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
+        
+                match child_status {
+                    NodeStatus::Success => {
+                        self.repeat_count += 1;
+                        do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
+        
+                        self.reset_child();
+                    }
+                    NodeStatus::Failure => {
+                        self.repeat_count = 0;
+                        self.reset_child();
+        
+                        return Ok(NodeStatus::Failure);
+                    }
+                    NodeStatus::Running => return Ok(NodeStatus::Running),
+                    NodeStatus::Skipped => {
+                        self.reset_child();
+        
+                        return Ok(NodeStatus::Skipped);
+                    }
+                    NodeStatus::Idle => return Err(NodeError::StatusError("InverterNode".to_string(), "Idle".to_string())),
+                }
+            }
+        
+            self.repeat_count = 0;
+        
+            match self.all_skipped {
+                true => Ok(NodeStatus::Skipped),
+                false => Ok(NodeStatus::Success),
+            }
+        })
     }
+}
 
+impl NodePorts for RepeatNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(
             input_port!("num_cycles")
@@ -87,9 +92,11 @@ impl TreeNode for RepeatNode {
     }
 }
 
-impl NodeHalt for RepeatNode {
-    fn halt(&mut self) {
-        self.repeat_count = 0;
-        self.reset_child();
+impl AsyncNodeHalt for RepeatNode {
+    fn halt(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {
+            self.repeat_count = 0;
+            self.reset_child();
+        })
     }
 }
