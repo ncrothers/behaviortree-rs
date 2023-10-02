@@ -15,15 +15,15 @@ impl AsyncTick for InverterNode {
         Box::pin(async move {
             self.set_status(NodeStatus::Running);
         
-            let child_status = self.child.as_ref().unwrap().borrow_mut().execute_tick().await?;
+            let child_status = self.child.as_ref().unwrap().lock().await.execute_tick().await?;
         
             match child_status {
                 NodeStatus::Success => {
-                    self.reset_child();
+                    self.reset_child().await;
                     Ok(NodeStatus::Failure)
                 }
                 NodeStatus::Failure => {
-                    self.reset_child();
+                    self.reset_child().await;
                     Ok(NodeStatus::Success)
                 }
                 status @ (NodeStatus::Running | NodeStatus::Skipped) => Ok(status),
@@ -38,7 +38,7 @@ impl NodePorts for InverterNode {}
 impl AsyncNodeHalt for InverterNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
-            self.reset_child();
+            self.reset_child().await;
         })
     }
 }

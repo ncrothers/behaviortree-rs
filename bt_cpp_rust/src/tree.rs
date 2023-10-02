@@ -53,10 +53,10 @@ pub enum ParseError {
 
 #[derive(Debug)]
 pub enum NodePtrType {
-    General(Box<dyn TreeNodeBase>),
-    Control(Box<dyn ControlNodeBase>),
-    Decorator(Box<dyn DecoratorNodeBase>),
-    Action(Box<dyn ActionNodeBase>),
+    General(Box<dyn TreeNodeBase + Send + Sync>),
+    Control(Box<dyn ControlNodeBase + Send + Sync>),
+    Decorator(Box<dyn DecoratorNodeBase + Send + Sync>),
+    Action(Box<dyn ActionNodeBase + Send + Sync>),
 }
 
 enum TickOption {
@@ -141,7 +141,7 @@ pub struct Factory {
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
     main_tree_id: Option<String>,
     // TODO: temporary solution, potentially replace later
-    tree_uid: RefCell<u32>,
+    tree_uid: std::sync::Mutex<u32>,
 }
 
 impl Factory {
@@ -153,7 +153,7 @@ impl Factory {
             blackboard,
             tree_roots: HashMap::new(),
             main_tree_id: None,
-            tree_uid: RefCell::new(0),
+            tree_uid: std::sync::Mutex::new(0),
         }
     }
 
@@ -173,8 +173,8 @@ impl Factory {
     }
 
     fn get_uid(&self) -> u32 {
-        let uid = *self.tree_uid.borrow();
-        *self.tree_uid.borrow_mut() += 1;
+        let uid = *self.tree_uid.lock().unwrap();
+        *self.tree_uid.lock().unwrap() += 1;
 
         uid
     }
@@ -374,12 +374,12 @@ impl Factory {
         Ok(())
     }
 
-    fn build_child(
-        &self,
-        reader: &mut Reader<Cursor<Vec<u8>>>,
-        blackboard: &BlackboardPtr,
-        tree_name: &String,
-        path_prefix: &String,
+    fn build_child<'a>(
+        &'a self,
+        reader: &'a mut Reader<Cursor<Vec<u8>>>,
+        blackboard: &'a BlackboardPtr,
+        tree_name: &'a String,
+        path_prefix: &'a String,
     ) -> BoxFuture<Result<Option<TreeNodePtr>, ParseError>> {
         Box::pin(async move {
             let mut buf = Vec::new();

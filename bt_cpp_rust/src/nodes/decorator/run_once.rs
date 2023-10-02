@@ -27,7 +27,7 @@ pub struct RunOnceNode {
 impl AsyncTick for RunOnceNode {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
-            let skip = self.config.get_input("then_skip")?;
+            let skip = self.config.get_input("then_skip").await?;
         
             if self.already_ticked {
                 return if skip { Ok(NodeStatus::Skipped) } else { Ok(self.returned_status.clone()) };
@@ -35,12 +35,12 @@ impl AsyncTick for RunOnceNode {
         
             self.set_status(NodeStatus::Running);
         
-            let status = self.child.as_ref().unwrap().borrow_mut().execute_tick().await?;
+            let status = self.child.as_ref().unwrap().lock().await.execute_tick().await?;
         
             if status.is_completed() {
                 self.already_ticked = true;
                 self.returned_status = status.clone();
-                self.reset_child();
+                self.reset_child().await;
             }
         
             Ok(status)
@@ -59,7 +59,7 @@ impl NodePorts for RunOnceNode {
 impl AsyncNodeHalt for RunOnceNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
-            self.reset_child();
+            self.reset_child().await;
         })
     }
 }

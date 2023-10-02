@@ -36,7 +36,7 @@ impl AsyncTick for RepeatNode {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             // Load num_cycles from the port value
-            self.num_cycles = self.config.get_input("num_cycles")?;
+            self.num_cycles = self.config.get_input("num_cycles").await?;
         
             let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
             
@@ -47,7 +47,7 @@ impl AsyncTick for RepeatNode {
             self.set_status(NodeStatus::Running);
         
             while do_loop {
-                let child_status = self.child.as_ref().unwrap().borrow_mut().execute_tick().await?;
+                let child_status = self.child.as_ref().unwrap().lock().await.execute_tick().await?;
         
                 self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
         
@@ -56,17 +56,17 @@ impl AsyncTick for RepeatNode {
                         self.repeat_count += 1;
                         do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
         
-                        self.reset_child();
+                        self.reset_child().await;
                     }
                     NodeStatus::Failure => {
                         self.repeat_count = 0;
-                        self.reset_child();
+                        self.reset_child().await;
         
                         return Ok(NodeStatus::Failure);
                     }
                     NodeStatus::Running => return Ok(NodeStatus::Running),
                     NodeStatus::Skipped => {
-                        self.reset_child();
+                        self.reset_child().await;
         
                         return Ok(NodeStatus::Skipped);
                     }
@@ -96,7 +96,7 @@ impl AsyncNodeHalt for RepeatNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.repeat_count = 0;
-            self.reset_child();
+            self.reset_child().await;
         })
     }
 }

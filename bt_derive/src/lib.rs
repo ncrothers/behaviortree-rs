@@ -193,9 +193,9 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                 "StatefulActionNode" => {
                     // Add StatefulActionNode-specific fields
                     fields.named.push(
-                        syn::Field::parse_named.parse2(quote! { pub halt_requested: ::std::cell::RefCell<bool> }).unwrap()
+                        syn::Field::parse_named.parse2(quote! { pub halt_requested: bool }).unwrap()
                     );
-                    default_fields = default_fields.concat(quote! { halt_requested: ::std::cell::RefCell::new(false) });
+                    default_fields = default_fields.concat(quote! { halt_requested: false });
                     // Add proper derive macros
                     derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::StatefulActionNode });
                 }
@@ -470,10 +470,10 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
             }
 
             fn to_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
-                std::rc::Rc::new(std::cell::RefCell::new(self.clone()))
+                ::std::sync::Arc::new(::tokio::sync::Mutex::new(self.clone()))
             }
 
-            fn clone_node_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase> {
+            fn clone_node_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase + ::std::marker::Send + ::std::marker::Sync> {
                 Box::new(self.clone())
             }
         }
@@ -537,10 +537,10 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 ::std::boxed::Box::pin(async move {
                     match self.children.get(index) {
                         Some(child) => {
-                            if child.borrow().status() == NodeStatus::Running {
-                                child.borrow_mut().halt().await;
+                            if child.lock().await.status() == NodeStatus::Running {
+                                ::bt_cpp_rust::nodes::AsyncNodeHalt::halt(&mut (*child.lock().await)).await;
                             }
-                            Ok(child.borrow_mut().reset_status())
+                            Ok(child.lock().await.reset_status())
                         }
                         None => Err(::bt_cpp_rust::nodes::NodeError::IndexError),
                     }
@@ -566,7 +566,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
 
             fn reset_children(&self) -> ::futures::future::BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
-                    self.halt_children(0).unwrap();
+                    self.halt_children(0).await.unwrap();
                 })
             }
 
@@ -578,7 +578,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
             fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
-                    self.tick().await
+                    <Self as ::bt_cpp_rust::nodes::AsyncTick>::tick(self).await
                 })
             }
         }
@@ -614,22 +614,23 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
                 }
             }
 
-            fn halt_decorator(&mut self) {
-                self.reset_child();
+            fn halt_child(&self) -> BoxFuture<()> {
+                ::std::boxed::Box::pin(async move {
+                    self.reset_child().await;
+                })
             }
 
-            fn halt_child(&self) {
-                self.reset_child();
-            }
-
-            fn reset_child(&self) {
-                if let Some(child) = self.child.as_ref() {
-                    if matches!(child.borrow().status(), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
-                        child.borrow_mut().halt();
+            fn reset_child(&self) -> BoxFuture<()> {
+                ::std::boxed::Box::pin(async move {
+                    if let Some(child) = self.child.as_ref() {
+                        let child = child.lock().await;
+                        if matches!(child.status(), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
+                            ::bt_cpp_rust::nodes::AsyncNodeHalt::halt(&mut (*child)).await;
+                        }
+        
+                        child.reset_status();
                     }
-    
-                    child.borrow_mut().reset_status();
-                }
+                })
             }
 
             fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::DecoratorNodeBase> {

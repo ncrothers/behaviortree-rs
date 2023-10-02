@@ -67,8 +67,8 @@ impl ParallelNode {
 impl AsyncTick for ParallelNode {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
-            self.success_threshold = self.config().get_input("success_count").unwrap();
-            self.failure_threshold = self.config().get_input("failure_count").unwrap();
+            self.success_threshold = self.config().get_input("success_count").await.unwrap();
+            self.failure_threshold = self.config().get_input("failure_count").await.unwrap();
     
             let children_count = self.children.len();
     
@@ -84,7 +84,7 @@ impl AsyncTick for ParallelNode {
     
             for i in 0..children_count {
                 if !self.completed_list.contains(&i) {
-                    let mut child = self.children[i].borrow_mut();
+                    let mut child = self.children[i].lock().await;
                     match child.execute_tick().await? {
                         NodeStatus::Skipped => skipped_count += 1,
                         NodeStatus::Success => {

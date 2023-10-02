@@ -30,7 +30,7 @@ pub trait ControlNode: TreeNodeBase {
     /// Add child to `ControlNode`
     fn add_child(&mut self, child: TreeNodePtr);
     /// Return reference to `Vec` of children nodes
-    fn children(&self) -> &Vec<Rc<RefCell<dyn TreeNodeBase>>>;
+    fn children(&self) -> &Vec<TreeNodePtr>;
     /// Call `halt()` on child at index
     fn halt_child(&self, index: usize) -> BoxFuture<Result<(), NodeError>>;
     /// Halt all children at and after index

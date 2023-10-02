@@ -31,7 +31,7 @@ impl AsyncTick for WhileDoElseNode {
         
             self.status = NodeStatus::Running;
         
-            let condition_status = self.children[0].borrow_mut().execute_tick().await?;
+            let condition_status = self.children[0].lock().await.execute_tick().await?;
         
             if matches!(condition_status, NodeStatus::Running) {
                 return Ok(NodeStatus::Running);
@@ -42,16 +42,16 @@ impl AsyncTick for WhileDoElseNode {
             match condition_status {
                 NodeStatus::Success => {
                     if children_count == 3 {
-                        self.halt_child(2)?;
+                        self.halt_child(2).await?;
                     }
         
-                    status = self.children[1].borrow_mut().execute_tick().await?;
+                    status = self.children[1].lock().await.execute_tick().await?;
                 }
                 NodeStatus::Failure => {
                     match children_count {
                         3 => {
-                            self.halt_child(1)?;
-                            status = self.children[2].borrow_mut().execute_tick().await?;
+                            self.halt_child(1).await?;
+                            status = self.children[2].lock().await.execute_tick().await?;
                         }
                         2 => {
                             status = NodeStatus::Failure;
@@ -78,7 +78,6 @@ impl NodePorts for WhileDoElseNode {}
 impl AsyncNodeHalt for WhileDoElseNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
-            self.child_idx = 0;
             self.reset_children().await;
         })
     }

@@ -187,10 +187,11 @@ impl Blackboard {
         // Try to get the key
         if let Some(entry) = self.get_entry(key).await {
             let value = {
+                let entry_lock = entry.lock().await;
                 // If value is a String or &str, try to call `FromString` to convert to T
-                if let Some(value) = entry.lock().await.value.downcast_ref::<String>() {
+                if let Some(value) = entry_lock.value.downcast_ref::<String>() {
                     value.to_string()
-                } else if let Some(value) = entry.lock().await.value.downcast_ref::<&str>() {
+                } else if let Some(value) = entry_lock.value.downcast_ref::<&str>() {
                     value.to_string()
                 }
                 // Didn't match either String or &str, so return from __get_allow_string
@@ -244,21 +245,71 @@ impl Blackboard {
     /// use bt_cpp_rust::blackboard::Blackboard;
     /// 
     /// let mut blackboard = Blackboard::new_ptr();
-    /// let mut blackboard_borrowed = blackboard.borrow_mut();
+    /// let mut blackboard_borrowed = blackboard.write().await;
     /// 
-    /// blackboard_borrowed.set("foo", 132u32);
+    /// blackboard_borrowed.set("foo", 132u32).await;
     /// assert_eq!(blackboard_borrowed.get::<u32>("foo"), Some(132u32));
     /// 
-    /// blackboard_borrowed.set("bar", "100");
+    /// blackboard_borrowed.set("bar", "100").await;
     /// 
-    /// assert_eq!(blackboard_borrowed.get::<String>("bar"), Some(String::from("100")));
-    /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
+    /// assert_eq!(blackboard_borrowed.get::<String>("bar").await, Some(String::from("100")));
+    /// assert_eq!(blackboard_borrowed.get::<u32>("bar").await, Some(100u32));
     /// ```
     pub async fn get<T>(&mut self, key: impl AsRef<str>) -> Option<T>
     where T: Any + Clone + FromString + Send,
     {
         // Try without parsing string first, then try with parsing string
         self.__get_no_string(key.as_ref()).await.or(self.__get_allow_string(key.as_ref()).await)
+    }
+
+    /// Sync version of `get<T>`
+    /// 
+    /// Tries to return the value at `key`. The type `T` must implement
+    /// `FromString` when calling this method; it will try to convert
+    /// from `String`/`&str` if there's an entry at `key` but it is not
+    /// of type `T`. If it does convert it successfully, it will replace
+    /// the existing value with `T` so converting from the string type
+    /// won't be needed next time.
+    /// 
+    /// If you want to get an entry that has a type that doesn't implement
+    /// `FromString`, use `get_exact<T>` instead.
+    /// 
+    /// The `Blackboard` tries a few things when reading a `key`:
+    /// - First it checks if it can find `key`:
+    ///     - Check itself for `key`
+    ///     - If it doesn't exist, if`self` has a parent `Blackboard`, it checks for key remapping
+    ///         - If a remapping rule exists for `key`, use the remapped `key`
+    ///         - If `auto_remapping` is enabled, it uses `key` directly
+    ///     - Return `None` if none of the above work
+    /// - If a value is matched, attempt to coerce the value to `T`. If it couldn't 
+    /// be coerced to `T`:
+    ///     - If it's a `String` or `&str`, try calling `parse_str()`
+    /// - If none of those work, return `None`
+    /// 
+    /// __NOTE__: This method borrows `self` mutably because if it finds a remapped
+    /// key from the parent `Blackboard`, it stores the `EntryPtr` in `self` so
+    /// the next lookup for it is quicker.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// 
+    /// let mut blackboard = Blackboard::new_ptr();
+    /// let mut blackboard_borrowed = blackboard.write().await;
+    /// 
+    /// blackboard_borrowed.set("foo", 132u32).await;
+    /// assert_eq!(blackboard_borrowed.get::<u32>("foo"), Some(132u32));
+    /// 
+    /// blackboard_borrowed.set("bar", "100").await;
+    /// 
+    /// assert_eq!(blackboard_borrowed.get::<String>("bar").await, Some(String::from("100")));
+    /// assert_eq!(blackboard_borrowed.get::<u32>("bar").await, Some(100u32));
+    /// ```
+    pub fn get_sync<T>(&mut self, key: impl AsRef<str>) -> Option<T>
+    where T: Any + Clone + FromString + Send,
+    {
+        futures::executor::block_on(self.get(key))
     }
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
@@ -273,21 +324,52 @@ impl Blackboard {
     /// use bt_cpp_rust::blackboard::Blackboard;
     /// 
     /// let mut blackboard = Blackboard::new_ptr();
-    /// let mut blackboard_borrowed = blackboard.borrow_mut();
+    /// let mut blackboard_borrowed = blackboard.write().await;
     /// 
-    /// blackboard_borrowed.set("foo", 132u32);
-    /// assert_eq!(blackboard_borrowed.get_exact::<u32>("foo"), Some(132u32));
+    /// blackboard_borrowed.set("foo", 132u32).await;
+    /// assert_eq!(blackboard_borrowed.get_exact::<u32>("foo").await, Some(132u32));
     /// 
-    /// blackboard_borrowed.set("bar", "100");
+    /// blackboard_borrowed.set("bar", "100").await;
     /// 
-    /// assert_eq!(blackboard_borrowed.get_exact::<&str>("bar"), Some("100"));
-    /// assert_eq!(blackboard_borrowed.get_exact::<String>("bar"), None);
-    /// assert_eq!(blackboard_borrowed.get_exact::<u32>("bar"), None);
+    /// assert_eq!(blackboard_borrowed.get_exact::<&str>("bar").await, Some("100"));
+    /// assert_eq!(blackboard_borrowed.get_exact::<String>("bar").await, None);
+    /// assert_eq!(blackboard_borrowed.get_exact::<u32>("bar").await, None);
     /// ```
     pub async fn get_exact<T>(&mut self, key: impl AsRef<str>) -> Option<T>
     where T: Any + Clone,
     {
         self.__get_no_string(key.as_ref()).await
+    }
+
+    /// Sync version of `get_exact<T>`
+    /// 
+    /// Version of `get<T>` that does _not_ try to convert from string if the type
+    /// doesn't match. This method has the benefit of not requiring the trait
+    /// `FromString`, which allows you to avoid implementing the trait for
+    /// types that don't need it or it's impossible to represent the data
+    /// type as a string.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// 
+    /// let mut blackboard = Blackboard::new_ptr();
+    /// let mut blackboard_borrowed = blackboard.write().await;
+    /// 
+    /// blackboard_borrowed.set_sync("foo", 132u32).await;
+    /// assert_eq!(blackboard_borrowed.get_exact_sync::<u32>("foo"), Some(132u32));
+    /// 
+    /// blackboard_borrowed.set_sync("bar", "100").await;
+    /// 
+    /// assert_eq!(blackboard_borrowed.get_exact_sync::<&str>("bar"), Some("100"));
+    /// assert_eq!(blackboard_borrowed.get_exact_sync::<String>("bar"), None);
+    /// assert_eq!(blackboard_borrowed.get_exact_sync::<u32>("bar"), None);
+    /// ```
+    pub fn get_exact_sync<T>(&mut self, key: impl AsRef<str>) -> Option<T>
+    where T: Any + Clone,
+    {
+        futures::executor::block_on(self.get_exact(key))
     }
 
     /// Sets the `value` in the Blackboard at `key`.
@@ -298,15 +380,15 @@ impl Blackboard {
     /// use bt_cpp_rust::blackboard::Blackboard;
     /// 
     /// let mut blackboard = Blackboard::new_ptr();
-    /// let mut blackboard_borrowed = blackboard.borrow_mut();
+    /// let mut blackboard_borrowed = blackboard.write().await;
     /// 
-    /// blackboard_borrowed.set("foo", 132u32);
-    /// assert_eq!(blackboard_borrowed.get::<u32>("foo"), Some(132u32));
+    /// blackboard_borrowed.set("foo", 132u32).await;
+    /// assert_eq!(blackboard_borrowed.get::<u32>("foo").await, Some(132u32));
     /// 
-    /// blackboard_borrowed.set("bar", "100");
+    /// blackboard_borrowed.set("bar", "100").await;
     /// 
-    /// assert_eq!(blackboard_borrowed.get::<String>("bar"), Some(String::from("100")));
-    /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
+    /// assert_eq!(blackboard_borrowed.get::<String>("bar").await, Some(String::from("100")));
+    /// assert_eq!(blackboard_borrowed.get::<u32>("bar").await, Some(100u32));
     /// ```
     pub async fn set<T: Any + Send + 'static>(
         &mut self,
@@ -319,39 +401,69 @@ impl Blackboard {
             entry.lock().await.value = Box::new(value);
         }
         else {
-            let entry = self.create_entry(&key);
+            let entry = self.create_entry(&key).await;
 
             // Set value of new entry
             entry.lock().await.value = Box::new(value);
         }
     }
 
-    fn create_entry(&mut self, key: &impl AsRef<str>) -> EntryPtr {
-        let entry;
-        
-        // If the entry already exists
-        if let Some(existing_entry) = self.storage.get(key.as_ref()) {
-            return Rc::clone(existing_entry);
-        }
-        // Use explicit remapping rule
-        else if self.internal_to_external.contains_key(key.as_ref()) && self.parent_bb.is_some() {
-            // Safe to unwrap because .contains_key() is true
-            let remapped_key = self.internal_to_external.get(key.as_ref()).unwrap();
+    /// Sync version of `set<T>`
+    /// 
+    /// Sets the `value` in the Blackboard at `key`.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// 
+    /// let mut blackboard = Blackboard::new_ptr();
+    /// let mut blackboard_borrowed = blackboard.write().await;
+    /// 
+    /// blackboard_borrowed.set_sync("foo", 132u32);
+    /// assert_eq!(blackboard_borrowed.get_sync::<u32>("foo"), Some(132u32));
+    /// 
+    /// blackboard_borrowed.set_sync("bar", "100");
+    /// 
+    /// assert_eq!(blackboard_borrowed.get::<String>("bar"), Some(String::from("100")));
+    /// assert_eq!(blackboard_borrowed.get::<u32>("bar"), Some(100u32));
+    /// ```
+    pub fn set_sync<T: Any + Send + 'static>(
+        &mut self,
+        key: impl AsRef<str>,
+        value: T,
+    ) {
+        futures::executor::block_on(self.set(key, value))
+    }
 
-            entry = self.parent_bb.as_ref().unwrap().write().await.create_entry(remapped_key);
-        }
-        // Use autoremapping
-        else if self.auto_remapping && self.parent_bb.is_some() {
-            entry = self.parent_bb.as_ref().unwrap().write().await.create_entry(key);
-        }
-        // No remapping or no parent blackboard
-        else {
-            // Create an entry with an empty placeholder value
-            entry = Rc::new(RefCell::new(Entry { value: Box::new(()) }));
-        }
-
-        self.storage.insert(key.as_ref().to_string(), Rc::clone(&entry));
-        entry
+    fn create_entry(&mut self, key: &(impl AsRef<str> + Sync)) -> BoxFuture<EntryPtr> {
+        Box::pin(async move {
+            let entry;
+            
+            // If the entry already exists
+            if let Some(existing_entry) = self.storage.get(key.as_ref()) {
+                return Arc::clone(existing_entry);
+            }
+            // Use explicit remapping rule
+            else if self.internal_to_external.contains_key(key.as_ref()) && self.parent_bb.is_some() {
+                // Safe to unwrap because .contains_key() is true
+                let remapped_key = self.internal_to_external.get(key.as_ref()).unwrap();
+    
+                entry = self.parent_bb.as_ref().unwrap().write().await.create_entry(remapped_key).await;
+            }
+            // Use autoremapping
+            else if self.auto_remapping && self.parent_bb.is_some() {
+                entry = self.parent_bb.as_ref().unwrap().write().await.create_entry(key).await;
+            }
+            // No remapping or no parent blackboard
+            else {
+                // Create an entry with an empty placeholder value
+                entry = Arc::new(Mutex::new(Entry { value: Box::new(()) }));
+            }
+    
+            self.storage.insert(key.as_ref().to_string(), Arc::clone(&entry));
+            entry
+        })
     }
 }
 
@@ -361,20 +473,20 @@ mod tests {
 
     // TODO: add other tests
 
-    #[test]
-    fn create_entry() {
+    #[tokio::test]
+    async fn create_entry() {
         // With no remapping
 
         let root_bb = Blackboard::new_ptr();
         let left_bb = Blackboard::with_parent(&root_bb);
         let right_bb = Blackboard::with_parent(&root_bb);
 
-        left_bb.borrow_mut().set("foo", 123u32);
+        left_bb.write().await.set("foo", 123u32).await;
 
-        assert!(left_bb.borrow_mut().get::<u32>("foo").is_some());
+        assert!(left_bb.write().await.get::<u32>("foo").await.is_some());
         // These two should be none because remapping is not enabled
-        assert!(right_bb.borrow_mut().get::<u32>("foo").is_none());
-        assert!(root_bb.borrow_mut().get::<u32>("foo").is_none());
+        assert!(right_bb.write().await.get::<u32>("foo").await.is_none());
+        assert!(root_bb.write().await.get::<u32>("foo").await.is_none());
 
         // With autoremapping
 
@@ -382,41 +494,41 @@ mod tests {
         let left_bb = Blackboard::with_parent(&root_bb);
         let right_bb = Blackboard::with_parent(&root_bb);
 
-        root_bb.borrow_mut().enable_auto_remapping(true);
-        left_bb.borrow_mut().enable_auto_remapping(true);
-        right_bb.borrow_mut().enable_auto_remapping(true);
+        root_bb.write().await.enable_auto_remapping(true);
+        left_bb.write().await.enable_auto_remapping(true);
+        right_bb.write().await.enable_auto_remapping(true);
         
-        left_bb.borrow_mut().set("foo", 123u32);
+        left_bb.write().await.set("foo", 123u32).await;
 
-        assert_eq!(left_bb.borrow_mut().get::<u32>("foo"), Some(123));
-        assert_eq!(right_bb.borrow_mut().get::<u32>("foo"), Some(123));
-        assert_eq!(root_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(left_bb.write().await.get::<u32>("foo").await, Some(123));
+        assert_eq!(right_bb.write().await.get::<u32>("foo").await, Some(123));
+        assert_eq!(root_bb.write().await.get::<u32>("foo").await, Some(123));
 
         // With custom remapping
         let root_bb = Blackboard::new_ptr();
         let left_bb = Blackboard::with_parent(&root_bb);
         let right_bb = Blackboard::with_parent(&root_bb);
 
-        right_bb.borrow_mut().add_subtree_remapping(String::from("foo"), String::from("bar"));
-        left_bb.borrow_mut().add_subtree_remapping(String::from("foo"), String::from("bar"));
+        right_bb.write().await.add_subtree_remapping(String::from("foo"), String::from("bar"));
+        left_bb.write().await.add_subtree_remapping(String::from("foo"), String::from("bar"));
         
-        left_bb.borrow_mut().set("foo", 123u32);
+        left_bb.write().await.set("foo", 123u32).await;
 
-        assert_eq!(left_bb.borrow_mut().get::<u32>("foo"), Some(123));
-        assert_eq!(right_bb.borrow_mut().get::<u32>("foo"), Some(123));
-        assert_eq!(root_bb.borrow_mut().get::<u32>("bar"), Some(123));
+        assert_eq!(left_bb.write().await.get::<u32>("foo").await, Some(123));
+        assert_eq!(right_bb.write().await.get::<u32>("foo").await, Some(123));
+        assert_eq!(root_bb.write().await.get::<u32>("bar").await, Some(123));
     }
 
-    #[test]
-    fn remapping() {
+    #[tokio::test]
+    async fn remapping() {
         // No remapping
         
         let root_bb = Blackboard::new_ptr();
         let child_bb = Blackboard::with_parent(&root_bb);
 
-        root_bb.borrow_mut().set("foo", 123u32);
+        root_bb.write().await.set("foo", 123u32).await;
 
-        assert!(child_bb.borrow_mut().get::<u32>("foo").is_none());
+        assert!(child_bb.write().await.get::<u32>("foo").await.is_none());
         
         // Auto remapping
         
@@ -425,15 +537,15 @@ mod tests {
         let child2_bb = Blackboard::with_parent(&child1_bb);
         let child3_bb = Blackboard::with_parent(&child2_bb);
 
-        child1_bb.borrow_mut().enable_auto_remapping(true);
-        child2_bb.borrow_mut().enable_auto_remapping(true);
-        child3_bb.borrow_mut().enable_auto_remapping(true);
+        child1_bb.write().await.enable_auto_remapping(true);
+        child2_bb.write().await.enable_auto_remapping(true);
+        child3_bb.write().await.enable_auto_remapping(true);
 
-        root_bb.borrow_mut().set("foo", 123u32);
+        root_bb.write().await.set("foo", 123u32).await;
 
-        assert_eq!(child1_bb.borrow_mut().get::<u32>("foo"), Some(123));
-        assert_eq!(child2_bb.borrow_mut().get::<u32>("foo"), Some(123));
-        assert_eq!(child3_bb.borrow_mut().get::<u32>("foo"), Some(123));
+        assert_eq!(child1_bb.write().await.get::<u32>("foo").await, Some(123));
+        assert_eq!(child2_bb.write().await.get::<u32>("foo").await, Some(123));
+        assert_eq!(child3_bb.write().await.get::<u32>("foo").await, Some(123));
         
         // Custom remapping
         
@@ -442,31 +554,31 @@ mod tests {
         let child2_bb = Blackboard::with_parent(&child1_bb);
         let child3_bb = Blackboard::with_parent(&child2_bb);
 
-        child1_bb.borrow_mut().add_subtree_remapping(String::from("child1"), String::from("root"));
-        child2_bb.borrow_mut().add_subtree_remapping(String::from("child2"), String::from("child1"));
-        child3_bb.borrow_mut().add_subtree_remapping(String::from("child3"), String::from("child2"));
+        child1_bb.write().await.add_subtree_remapping(String::from("child1"), String::from("root"));
+        child2_bb.write().await.add_subtree_remapping(String::from("child2"), String::from("child1"));
+        child3_bb.write().await.add_subtree_remapping(String::from("child3"), String::from("child2"));
 
-        root_bb.borrow_mut().set("root", 123u32);
+        root_bb.write().await.set("root", 123u32).await;
 
-        assert_eq!(child1_bb.borrow_mut().get::<u32>("child1"), Some(123));
-        assert_eq!(child2_bb.borrow_mut().get::<u32>("child2"), Some(123));
-        assert_eq!(child3_bb.borrow_mut().get::<u32>("child3"), Some(123));
-        assert_eq!(child3_bb.borrow_mut().get::<u32>("foo"), None);
+        assert_eq!(child1_bb.write().await.get::<u32>("child1").await, Some(123));
+        assert_eq!(child2_bb.write().await.get::<u32>("child2").await, Some(123));
+        assert_eq!(child3_bb.write().await.get::<u32>("child3").await, Some(123));
+        assert_eq!(child3_bb.write().await.get::<u32>("foo").await, None);
     }
 
-    #[test]
-    fn type_matching() {
+    #[tokio::test]
+    async fn type_matching() {
         let bb = Blackboard::new_ptr();
 
-        bb.borrow_mut().set("foo", 123u32);
+        bb.write().await.set("foo", 123u32).await;
 
-        assert!(bb.borrow_mut().get::<u32>("foo").is_some());
-        assert!(bb.borrow_mut().get::<String>("foo").is_none());
-        assert!(bb.borrow_mut().get::<f32>("foo").is_none());
+        assert!(bb.write().await.get::<u32>("foo").await.is_some());
+        assert!(bb.write().await.get::<String>("foo").await.is_none());
+        assert!(bb.write().await.get::<f32>("foo").await.is_none());
     }
 
-    #[test]
-    fn custom_type() {
+    #[tokio::test]
+    async fn custom_type() {
         #[derive(Clone, Debug, PartialEq)]
         struct CustomEntry {
             pub foo: u32,
@@ -496,14 +608,14 @@ mod tests {
             bar: String::from("bar")
         };
 
-        bb.borrow_mut().set("custom", custom_value.clone());
-        bb.borrow_mut().set("custom_str", String::from("123,bar"));
-        bb.borrow_mut().set("custom_str_malformed", String::from("not an int,bar"));
+        bb.write().await.set("custom", custom_value.clone()).await;
+        bb.write().await.set("custom_str", String::from("123,bar")).await;
+        bb.write().await.set("custom_str_malformed", String::from("not an int,bar")).await;
 
-        assert_eq!(bb.borrow_mut().get_exact::<CustomEntry>("custom").as_ref(), Some(&custom_value));
+        assert_eq!(bb.write().await.get_exact::<CustomEntry>("custom").await.as_ref(), Some(&custom_value));
         // Check parse from String
-        assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom_str").as_ref(), Some(&custom_value));
+        assert_eq!(bb.write().await.get::<CustomEntry>("custom_str").await.as_ref(), Some(&custom_value));
         // Check it returns None if it cannot be parsed
-        assert_eq!(bb.borrow_mut().get::<CustomEntry>("custom_str_malformed").as_ref(), None);
+        assert_eq!(bb.write().await.get::<CustomEntry>("custom_str_malformed").await.as_ref(), None);
     }
 }

@@ -7,6 +7,7 @@ pub use force_failure::*;
 mod force_success;
 pub use force_success::*;
 mod inverter;
+use futures::future::BoxFuture;
 pub use inverter::*;
 mod keep_running_until_failure;
 pub use keep_running_until_failure::*;
@@ -26,12 +27,10 @@ pub trait DecoratorNode: TreeNodeBase {
     fn set_child(&mut self, child: TreeNodePtr);
     /// Return reference to child
     fn child(&self) -> Result<&TreeNodePtr, NodeError>;
-    /// Decorator-specific implementation of `halt()`
-    fn halt_decorator(&mut self);
     /// Call `halt()` on child, same as `reset_child()`
-    fn halt_child(&self);
+    fn halt_child(&self) -> BoxFuture<()>;
     /// Reset status of child and call `halt()`
-    fn reset_child(&self);
+    fn reset_child(&self) -> BoxFuture<()>;
     /// Creates a cloned version of itself as a `DecoratorNode` trait object
     fn clone_boxed(&self) -> Box<dyn DecoratorNodeBase>;
 }

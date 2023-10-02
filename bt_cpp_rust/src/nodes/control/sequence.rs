@@ -35,8 +35,8 @@ impl AsyncTick for SequenceNode {
             while self.child_idx < self.children.len() {
                 let cur_child = &mut self.children[self.child_idx];
         
-                let _prev_status = cur_child.borrow().status();
-                let child_status = cur_child.borrow_mut().execute_tick().await?;
+                let _prev_status = cur_child.lock().await.status();
+                let child_status = cur_child.lock().await.execute_tick().await?;
         
                 self.all_skipped &= child_status == NodeStatus::Skipped;
         

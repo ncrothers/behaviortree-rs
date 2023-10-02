@@ -35,8 +35,8 @@ impl AsyncTick for SequenceWithMemoryNode {
             while self.child_idx < self.children.len() {
                 let cur_child = &mut self.children[self.child_idx];
         
-                let _prev_status = cur_child.borrow().status();
-                let child_status = cur_child.borrow_mut().execute_tick().await?;
+                let _prev_status = cur_child.lock().await.status();
+                let child_status = cur_child.lock().await.execute_tick().await?;
         
                 self.all_skipped &= child_status == NodeStatus::Skipped;
         
@@ -45,7 +45,7 @@ impl AsyncTick for SequenceWithMemoryNode {
                     NodeStatus::Failure => {
                         // Do NOT reset child_idx on failure
                         // Halt children at and after this index
-                        self.halt_children(self.child_idx)?;
+                        self.halt_children(self.child_idx).await?;
         
                         return Ok(NodeStatus::Failure);
                     }

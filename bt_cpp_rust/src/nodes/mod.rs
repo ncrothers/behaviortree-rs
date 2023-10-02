@@ -33,7 +33,7 @@ pub trait TreeNodeBase: std::fmt::Debug + NodePorts + TreeNodeDefaults + GetNode
 /// Pointer to the most general trait, which encapsulates all 
 /// node types that implement `TreeNodeBase` (all nodes need 
 /// to for it to compile)
-pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase>>;
+pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase + Send>>;
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
@@ -108,7 +108,7 @@ pub trait TreeNodeDefaults {
     fn config(&mut self) -> &mut NodeConfig;
     fn into_boxed(self) -> Box<dyn TreeNodeBase>;
     fn to_tree_node_ptr(&self) -> TreeNodePtr;
-    fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase>;
+    fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase + Send + Sync>;
 }
 
 /// Automatically implemented for all node types. The implementation
@@ -190,7 +190,7 @@ pub struct NodeConfig {
     pub blackboard: BlackboardPtr,
     pub input_ports: PortsRemapping,
     pub output_ports: PortsRemapping,
-    pub manifest: Option<Rc<TreeNodeManifest>>,
+    pub manifest: Option<Arc<TreeNodeManifest>>,
     pub uid: u16,
     /// TODO: doesn't show actual path yet
     pub path: String,
@@ -242,15 +242,15 @@ impl NodeConfig {
 
     /// Returns a pointer to the `TreeNodeManifest` for this node. 
     /// Only used during XML parsing.
-    pub fn manifest(&self) -> Result<Rc<TreeNodeManifest>, ParseError> {
+    pub fn manifest(&self) -> Result<Arc<TreeNodeManifest>, ParseError> {
         match self.manifest.as_ref() {
-            Some(manifest) => Ok(Rc::clone(manifest)),
+            Some(manifest) => Ok(Arc::clone(manifest)),
             None => Err(ParseError::InternalError("Missing manifest. This shouldn't happen; please report this.".to_string())),
         }
     }
 
     /// Replace the inner manifest.
-    pub fn set_manifest(&mut self, manifest: Rc<TreeNodeManifest>) {
+    pub fn set_manifest(&mut self, manifest: Arc<TreeNodeManifest>) {
         let _ = self.manifest.insert(manifest);
     }
 
@@ -262,8 +262,8 @@ impl NodeConfig {
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub fn get_input<T>(&self, port: &str) -> Result<T, NodeError>
-    where T: BTToString + FromString + Clone + 'static,
+    pub async fn get_input<T>(&self, port: &str) -> Result<T, NodeError>
+    where T: BTToString + FromString + Clone + Send + 'static,
     {
         match self.input_ports.get(port) {
             Some(val) => {
@@ -285,7 +285,7 @@ impl NodeConfig {
                 } else {
                     match get_remapped_key(port, val) {
                         // Value is a Blackboard pointer
-                        Some(key) => match self.blackboard.borrow_mut().get::<T>(&key) {
+                        Some(key) => match self.blackboard.write().await.get::<T>(&key).await {
                             Some(val) => Ok(val),
                             None => Err(NodeError::BlackboardError(key)),
                         },
@@ -305,6 +305,22 @@ impl NodeConfig {
         }
     }
 
+    /// Sync version of `get_input<T>`
+    /// 
+    /// Returns the value of the input port at the `port` key as a `Result<T, NodeError>`.
+    /// The value is `Err` in the following situations:
+    /// - The port wasn't found at that key
+    /// - `T` doesn't match the type of the stored value
+    /// - If a default value is needed (value is empty), couldn't parse default value
+    /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
+    /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
+    /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
+    pub fn get_input_sync<T>(&self, port: &str) -> Result<T, NodeError>
+    where T: BTToString + FromString + Clone + Send + 'static,
+    {
+        futures::executor::block_on(self.get_input(port))
+    }
+
     /// Sets `value` into the blackboard. The key is based on the value provided
     /// to the port at `port`.
     /// 
@@ -313,9 +329,9 @@ impl NodeConfig {
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub fn set_output<T>(&self, port: &str, value: T) -> Result<(), NodeError>
+    pub async fn set_output<T>(&self, port: &str, value: T) -> Result<(), NodeError>
     where
-        T: BTToString + Clone + 'static,
+        T: BTToString + Clone + Send + 'static,
     {
         match self.output_ports.get(port) {
             Some(port_value) => {
@@ -329,12 +345,29 @@ impl NodeConfig {
                     }
                 };
 
-                self.blackboard.borrow_mut().set(blackboard_key, value);
+                self.blackboard.write().await.set(blackboard_key, value).await;
 
                 Ok(())
             }
             None => Err(NodeError::PortError(port.to_string()))
         }
+    }
+
+    /// Sync version of `set_output<T>`
+    /// 
+    /// Sets `value` into the blackboard. The key is based on the value provided
+    /// to the port at `port`.
+    /// 
+    /// # Examples
+    /// 
+    /// - Port value: `"="`: uses the port name as the blackboard key
+    /// - `"foo"` uses `"foo"` as the blackboard key
+    /// - `"{foo}"` uses `"foo"` as the blackboard key
+    pub async fn set_output_sync<T>(&self, port: &str, value: T) -> Result<(), NodeError>
+    where
+        T: BTToString + Clone + Send + 'static,
+    {
+        futures::executor::block_on(self.set_output(port, value))
     }
 }
 
@@ -346,6 +379,12 @@ impl Clone for Box<dyn PortValue> {
 
 impl Clone for Box<dyn TreeNodeBase> {
     fn clone(&self) -> Box<dyn TreeNodeBase> {
+        self.clone_node_boxed()
+    }
+}
+
+impl Clone for Box<dyn TreeNodeBase + Send + Sync> {
+    fn clone(&self) -> Box<dyn TreeNodeBase + Send + Sync> {
         self.clone_node_boxed()
     }
 }
