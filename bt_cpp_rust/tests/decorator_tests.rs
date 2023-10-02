@@ -25,11 +25,11 @@ fn force_failure() {
 
     register_node!(factory, "StatusNode", StatusNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -59,11 +59,11 @@ fn force_success() {
 
     register_node!(factory, "StatusNode", StatusNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -93,11 +93,11 @@ fn inverter() {
 
     register_node!(factory, "StatusNode", StatusNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -131,11 +131,11 @@ fn keep_running_until_failure() {
     register_node!(factory, "StatusNode", StatusNode);
     register_node!(factory, "RunFor", RunForNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -165,11 +165,11 @@ fn repeat() {
     register_node!(factory, "RunFor", RunForNode);
     register_node!(factory, "SuccessThenFailure", SuccessThenFailure);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -203,11 +203,11 @@ fn retry() {
     register_node!(factory, "RunFor", RunForNode);
     register_node!(factory, "SuccessThenFailure", SuccessThenFailure);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -239,11 +239,11 @@ fn run_once() {
     register_node!(factory, "RunFor", RunForNode);
     register_node!(factory, "SuccessThenFailure", SuccessThenFailure);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {

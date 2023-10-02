@@ -9,12 +9,15 @@ edition = "2021"
 anyhow = "1.0.75"
 bt-derive = { path = "../bt_derive" }
 crossbeam = "0.8.2"
-futures = { version = "0.3.28", optional = true }
+futures = { version = "0.3.28" }
 log = "0.4.20"
 pretty_env_logger = "0.5.0"
 quick-xml = { version = "0.30.0", features = ["serde", "serialize"] }
 thiserror = "1.0.47"
 tokio = { version = "1.32.0", features = ["sync", "rt", "test-util", "macros"] }
 
-[features]
-async_nodes = ["dep:futures"]
+[dev-dependencies]
+tokio-test = "0.4.3"
+
+# [features]
+# async_nodes = ["dep:futures"]

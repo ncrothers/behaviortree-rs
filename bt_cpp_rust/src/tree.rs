@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, ParseBoolError, PortChecks, FromString},
-    blackboard::{Blackboard, BlackboardPtr, BlackboardString},
+    blackboard::{Blackboard, BlackboardString},
     macros::build_node_ptr,
     nodes::{
         ActionNodeBase, ControlNodeBase, TreeNodeBase, TreeNodePtr, NodeError, self, DecoratorNodeBase,
@@ -103,8 +103,8 @@ impl AsyncTree {
         self.tick_root(TickOption::WhileRunning).await
     }
 
-    pub async fn root_blackboard(&self) -> BlackboardPtr {
-        Arc::clone(&self.root.lock().await.config().blackboard)
+    pub async fn root_blackboard(&self) -> Blackboard {
+        self.root.lock().await.config().blackboard.clone()
     }
 }
 
@@ -130,14 +130,14 @@ impl SyncTree {
         futures::executor::block_on(self.root.tick_while_running())
     }
 
-    pub fn root_blackboard(&self) -> BlackboardPtr {
+    pub fn root_blackboard(&self) -> Blackboard {
         futures::executor::block_on(self.root.root_blackboard())
     }
 }
 
 pub struct Factory {
     node_map: HashMap<String, NodePtrType>,
-    blackboard: BlackboardPtr,
+    blackboard: Blackboard,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
     main_tree_id: Option<String>,
     // TODO: temporary solution, potentially replace later
@@ -146,10 +146,10 @@ pub struct Factory {
 
 impl Factory {
     pub fn new() -> Factory {
-        let blackboard = Blackboard::new_ptr();
+        let blackboard = Blackboard::create();
 
         Self {
-            node_map: builtin_nodes(Arc::clone(&blackboard)),
+            node_map: builtin_nodes(&blackboard),
             blackboard,
             tree_roots: HashMap::new(),
             main_tree_id: None,
@@ -157,7 +157,11 @@ impl Factory {
         }
     }
 
-    pub fn set_blackboard(&mut self, blackboard: BlackboardPtr) {
+    pub fn blackboard(&mut self) -> &Blackboard {
+        &self.blackboard
+    }
+
+    pub fn set_blackboard(&mut self, blackboard: Blackboard) {
         self.blackboard = blackboard;
     }
 
@@ -184,7 +188,7 @@ impl Factory {
         tree_id: &String,
         tree_name: &String,
         path_prefix: &String,
-        blackboard: BlackboardPtr,
+        blackboard: Blackboard,
     ) -> Result<TreeNodePtr, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
@@ -199,7 +203,7 @@ impl Factory {
         }
     }
 
-    pub fn create_sync_tree_from_text(&mut self, text: String, blackboard: &BlackboardPtr) -> Result<SyncTree, ParseError> {
+    pub fn create_sync_tree_from_text(&mut self, text: String, blackboard: &Blackboard) -> Result<SyncTree, ParseError> {
         self.register_bt_from_text(text)?;
 
         if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
@@ -218,7 +222,7 @@ impl Factory {
         }
     }
 
-    pub async fn create_async_tree_from_text(&mut self, text: String, blackboard: &BlackboardPtr) -> Result<AsyncTree, ParseError> {
+    pub async fn create_async_tree_from_text(&mut self, text: String, blackboard: &Blackboard) -> Result<AsyncTree, ParseError> {
         self.register_bt_from_text(text)?;
 
         if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
@@ -239,11 +243,11 @@ impl Factory {
 
     pub fn instantiate_sync_tree(
         &self,
-        blackboard: &BlackboardPtr,
+        blackboard: &Blackboard,
         main_tree_id: &str,
     ) -> Result<SyncTree, ParseError> {
         // Clone ptr to Blackboard
-        let blackboard = Arc::clone(blackboard);
+        let blackboard = blackboard.clone();
 
         let main_tree_id = String::from(main_tree_id);
 
@@ -259,11 +263,11 @@ impl Factory {
 
     pub async fn instantiate_async_tree(
         &self,
-        blackboard: &BlackboardPtr,
+        blackboard: &Blackboard,
         main_tree_id: &str,
     ) -> Result<AsyncTree, ParseError> {
         // Clone ptr to Blackboard
-        let blackboard = Arc::clone(blackboard);
+        let blackboard = blackboard.clone();
 
         let main_tree_id = String::from(main_tree_id);
 
@@ -308,7 +312,7 @@ impl Factory {
     async fn build_children(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
-        blackboard: &BlackboardPtr,
+        blackboard: &Blackboard,
         tree_name: &String,
         path_prefix: &String,
     ) -> Result<Vec<TreeNodePtr>, ParseError> {
@@ -377,7 +381,7 @@ impl Factory {
     fn build_child<'a>(
         &'a self,
         reader: &'a mut Reader<Cursor<Vec<u8>>>,
-        blackboard: &'a BlackboardPtr,
+        blackboard: &'a Blackboard,
         tree_name: &'a String,
         path_prefix: &'a String,
     ) -> BoxFuture<Result<Option<TreeNodePtr>, ParseError>> {
@@ -454,13 +458,13 @@ impl Factory {
                     let node = match node_name.as_str() {
                         "SubTree" => {
                             let attributes = attributes.to_map()?;
-                            let child_blackboard = Blackboard::with_parent(blackboard);
+                            let mut child_blackboard = Blackboard::with_parent(blackboard).await;
     
                             // Process attributes (Ports, special fields, etc)
                             for (attr, value) in attributes.iter() {
                                 // Set autoremapping to true or false
                                 if attr == "_autoremap" {
-                                    child_blackboard.write().await.enable_auto_remapping(<bool as FromString>::from_string(value)?);
+                                    child_blackboard.enable_auto_remapping(<bool as FromString>::from_string(value)?);
                                     continue;
                                 }
                                 else if !attr.is_allowed_port_name() {
@@ -469,11 +473,11 @@ impl Factory {
     
                                 if let Some(port_name) = value.strip_bb_pointer() {
                                     // Add remapping if `value` is a Blackboard pointer
-                                    child_blackboard.write().await.add_subtree_remapping(attr.clone(), port_name);
+                                    child_blackboard.add_subtree_remapping(attr.clone(), port_name);
                                 }
                                 else {
                                     // Set string value into Blackboard
-                                    child_blackboard.write().await.set(attr, value.clone());
+                                    child_blackboard.set(attr, value.clone());
                                 }
                             }
     
@@ -615,7 +619,7 @@ impl Default for Factory {
     }
 }
 
-fn builtin_nodes(blackboard: BlackboardPtr) -> HashMap<String, NodePtrType> {
+fn builtin_nodes(blackboard: &Blackboard) -> HashMap<String, NodePtrType> {
     let mut node_map = HashMap::new();
 
     // Control nodes

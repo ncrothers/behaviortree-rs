@@ -27,11 +27,11 @@ fn fallback() {
 
     register_node!(factory, "StatusNode", StatusNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("{status:?}"),
@@ -60,11 +60,11 @@ fn if_then_else() {
     register_node!(factory, "StatusNode", StatusNode);
     register_node!(factory, "EchoNode", EchoNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -94,11 +94,11 @@ fn parallel_all() {
     register_node!(factory, "StatusNode", StatusNode);
     register_node!(factory, "EchoNode", EchoNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -130,11 +130,11 @@ fn parallel() {
     register_node!(factory, "StatusNode", StatusNode);
     register_node!(factory, "EchoNode", EchoNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -163,11 +163,11 @@ fn reactive_fallback() {
     register_node!(factory, "StatusNode", StatusNode);
     register_node!(factory, "EchoNode", EchoNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -198,11 +198,11 @@ fn reactive_sequence() {
     register_node!(factory, "EchoNode", EchoNode);
     register_node!(factory, "RunForNode", RunForNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -233,11 +233,11 @@ fn sequence_star() {
     register_node!(factory, "EchoNode", EchoNode);
     register_node!(factory, "RunForNode", RunForNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -268,11 +268,11 @@ fn sequence_vanilla() {
     register_node!(factory, "EchoNode", EchoNode);
     register_node!(factory, "RunForNode", RunForNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
@@ -302,11 +302,11 @@ fn while_do_else() {
     register_node!(factory, "EchoNode", EchoNode);
     register_node!(factory, "RunForNode", RunForNode);
 
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),

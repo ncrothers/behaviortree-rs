@@ -110,7 +110,7 @@ macro_rules! __build_node_ptr {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
 
-            let node_config = NodeConfig::new(::std::sync::Arc::clone(&$b));
+            let node_config = NodeConfig::new($b.clone());
             let mut node = <$t>::new($n, node_config);
             let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_type(), $n, node.provided_ports(), "");
             node.config().set_manifest(::std::sync::Arc::new(manifest));
@@ -130,12 +130,12 @@ pub(crate) use __build_node_ptr as build_node_ptr;
 macro_rules! __register_node {
     ($f:ident, $n:expr, $t:ty) => {
         {
-            use $crate::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
+            use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};
             use $crate::tree::NodePtrType;
 
             let blackboard = $f.blackboard();
-            let node_config = NodeConfig::new(blackboard);
+            let node_config = NodeConfig::new(blackboard.clone());
             let mut node = <$t>::new($n, node_config);
             let manifest = TreeNodeManifest {
                 node_type: node.node_type(),
@@ -143,7 +143,7 @@ macro_rules! __register_node {
                 ports: node.provided_ports(),
                 description: String::new(),
             };
-            node.config().set_manifest(::std::rc::Rc::new(manifest));
+            node.config().set_manifest(::std::sync::Arc::new(manifest));
             match node.node_type() {
                 NodeType::Action => {
                     $f.register_node($n, NodePtrType::Action(Box::new(node)));

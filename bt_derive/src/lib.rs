@@ -1,5 +1,3 @@
-use std::f32::consts::E;
-
 use proc_macro::TokenStream;
 use syn::{DeriveInput, token::Comma, parse::Parser, ItemStruct, punctuated::Punctuated, AttrStyle};
 
@@ -64,11 +62,12 @@ impl ToMap<Punctuated<syn::Meta, Comma>, syn::Ident, Option<proc_macro2::TokenSt
 }
 
 trait ConcatTokenStream {
-    fn concat(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+    fn concat_list(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+    fn concat_blocks(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
 }
 
 impl ConcatTokenStream for proc_macro2::TokenStream {
-    fn concat(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    fn concat_list(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         if self.is_empty() {
             if value.is_empty() {
                 // Both are empty
@@ -95,6 +94,34 @@ impl ConcatTokenStream for proc_macro2::TokenStream {
             }
         }
     }
+
+    fn concat_blocks(&self, value: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        if self.is_empty() {
+            if value.is_empty() {
+                // Both are empty
+                proc_macro2::TokenStream::new()
+            }
+            else {
+                // self empty, value not empty
+                quote! {
+                    #value
+                }
+            }
+        } 
+        else if value.is_empty() {
+            // self not empty, value empty
+            quote! {
+                #self
+            }
+        }
+        else {
+            // Both have value
+            quote! {
+                #self
+                #value
+            }
+        }
+    }
 }
 
 fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
@@ -111,28 +138,35 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
 
     let arg = args_parsed_iter.next().unwrap();
 
+    
     // Require parameter to be ident, no prefix path
     arg.require_ident()?;
     
-    let ident = arg.get_ident().unwrap().to_string();
-
-    let (runtime_str, runtime_ident): (String, proc_macro2::TokenStream) = if let Some(runtime) = args_parsed_iter.next() {
+    let type_ident = arg.get_ident().unwrap().to_string();
+    // return Err(syn::Error::new_spanned(arg, format!("{type_ident}")));
+    
+    let runtime_str = if let Some(runtime) = args_parsed_iter.next() {
         runtime.require_ident()?;
+        
+        let ident = runtime.get_ident().unwrap().to_string();
 
-        let ident = arg.get_ident().unwrap().to_string();
+        match ident.as_str() {
+            "Async" | "Sync" => {},
+            _ => { return Err(syn::Error::new_spanned(runtime, format!("unsupported runtime: must be either Async or Sync: {ident}"))) }
+        }
 
-        (ident.clone(), match ident.as_str() {
-            x @ ("Async" | "Sync") => x.parse()?,
-            _ => { return Err(syn::Error::new_spanned(runtime, "unsupported runtime: must be either Async or Sync")) }
-        })
+        ident
     }
     else {
-        (String::from("Async"), "Async".parse()?)
+        String::from("Async")
     };
+
+    let item_ident = &item.ident;
 
     let mut default_fields = proc_macro2::TokenStream::new();
     let mut manual_fields = proc_macro2::TokenStream::new();
     let mut manual_fields_with_types = proc_macro2::TokenStream::new();
+    let mut extra_impls = proc_macro2::TokenStream::new();
 
     match &mut item.fields {
         syn::Fields::Named(fields) => {
@@ -159,15 +193,15 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                                 quote! { <#ty>::default() }
                             };
 
-                            default_fields = default_fields.concat(quote! { #name: #default_value });
+                            default_fields = default_fields.concat_list(quote! { #name: #default_value });
                         }
                     }
                 }
 
                 // Mark field as manually specified if 
                 if !used_default {
-                    manual_fields = manual_fields.concat(quote! { #name });
-                    manual_fields_with_types = manual_fields_with_types.concat(quote! { #name: #ty });
+                    manual_fields = manual_fields.concat_list(quote! { #name });
+                    manual_fields_with_types = manual_fields_with_types.concat_list(quote! { #name: #ty });
                 }
     
                 // Remove the bt attribute, keep all others
@@ -185,7 +219,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
             );
 
             // Match all possible node types
-            match ident.as_str() {
+            match type_ident.as_str() {
                 "SyncActionNode" => {
                     // Add proper derive macros
                     derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::SyncActionNode });
@@ -195,16 +229,71 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                     fields.named.push(
                         syn::Field::parse_named.parse2(quote! { pub halt_requested: bool }).unwrap()
                     );
-                    default_fields = default_fields.concat(quote! { halt_requested: false });
+                    default_fields = default_fields.concat_list(quote! { halt_requested: false });
                     // Add proper derive macros
                     derives.push(quote! { ::bt_cpp_rust::derive::ActionNode, ::bt_cpp_rust::derive::StatefulActionNode });
+
+                    // impl empty tick function
+                    extra_impls = extra_impls.concat_blocks(quote! {
+                        impl ::bt_cpp_rust::nodes::AsyncTick for #item_ident {
+                            fn tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                                ::std::boxed::Box::pin(async move {
+                                    Ok(::bt_cpp_rust::basic_types::NodeStatus::Idle)
+                                })
+                            }
+                        }
+                    });
+
+                    match runtime_str.as_str() {
+                        "Async" => {
+                            extra_impls = extra_impls.concat_blocks(quote! {
+                                impl ::bt_cpp_rust::nodes::action::SyncStatefulActionNode for #item_ident {
+                                    fn on_start(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                                        ::bt_cpp_rust::sync::block_on(::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_start(self))
+                                    }
+                                    
+                                    fn on_running(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                                        ::bt_cpp_rust::sync::block_on(::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_running(self))
+                                    }
+                                    
+                                    fn on_halted(&mut self) {
+                                        ::bt_cpp_rust::sync::block_on(::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_halted(self))
+                                    }
+                                }
+                            });
+                        }
+                        "Sync" => {
+                            extra_impls = extra_impls.concat_blocks(quote! {
+                                impl ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode for #item_ident {
+                                    fn on_start(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                                        ::std::boxed::Box::pin(async move {
+                                            ::bt_cpp_rust::sync::spawn_blocking(move || ::bt_cpp_rust::nodes::action::SyncStatefulActionNode::on_start(self)).await
+                                        })
+                                    }
+                                    
+                                    fn on_running(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                                        ::std::boxed::Box::pin(async move {
+                                            ::bt_cpp_rust::sync::spawn_blocking(move || ::bt_cpp_rust::nodes::action::SyncStatefulActionNode::on_running(self)).await
+                                        })
+                                    }
+                                    
+                                    fn on_halted(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<()>{
+                                        ::std::boxed::Box::pin(async move {
+                                            ::bt_cpp_rust::sync::spawn_blocking(move || ::bt_cpp_rust::nodes::action::SyncStatefulActionNode::on_halted(self)).await
+                                        })
+                                    }
+                                }
+                            });
+                        }
+                        _ => unreachable!()
+                    };
                 }
                 "ControlNode" => {
                     // Add ControlNode-specific fields
                     fields.named.push(
                         syn::Field::parse_named.parse2(quote! { pub children: Vec<::bt_cpp_rust::nodes::TreeNodePtr> }).unwrap()
                     );
-                    default_fields = default_fields.concat(quote! { children: Vec::new() });
+                    default_fields = default_fields.concat_list(quote! { children: Vec::new() });
                     // Add proper derive macros
                     derives.push(quote! { ::bt_cpp_rust::derive::ControlNode });
                 }
@@ -213,7 +302,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
                     fields.named.push(
                         syn::Field::parse_named.parse2(quote! { pub child: Option<::bt_cpp_rust::nodes::TreeNodePtr> }).unwrap()
                     );
-                    default_fields = default_fields.concat(quote! { child: None });
+                    default_fields = default_fields.concat_list(quote! { child: None });
                     // Add proper derive macros
                     derives.push(quote! { ::bt_cpp_rust::derive::DecoratorNode });
                 }
@@ -222,6 +311,9 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
         }
         _ => return Err(syn::Error::new_spanned(item, "expected a struct with named fields"))
     };
+
+    let vis = &item.vis;
+    let struct_fields = &item.fields;
 
     let mut user_attrs = Vec::new();
 
@@ -268,55 +360,49 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
         }
     });
 
-    let mut extra_impls = proc_macro2::TokenStream::new();
-
-    let ident = &item.ident;
-    let vis = &item.vis;
-    let struct_fields = &item.fields;
-
     match runtime_str.as_str() {
         "Async" => {
-            extra_impls = quote! {
-                impl ::bt_cpp_rust::nodes::SyncTick for #ident {
+            extra_impls = extra_impls.concat_blocks(quote! {
+                impl ::bt_cpp_rust::nodes::SyncTick for #item_ident {
                     fn tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
                         Err(::bt_cpp_rust::nodes::NodeError::UnreachableTick)
                     }
                 }
 
-                impl ::bt_cpp_rust::nodes::SyncNodeHalt for #ident {}
-            };
+                impl ::bt_cpp_rust::nodes::SyncNodeHalt for #item_ident {}
+            });
         }
         "Sync" => {
-            extra_impls = quote! {
-                impl ::bt_cpp_rust::nodes::AsyncTick for #ident {
-                    fn tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            extra_impls = extra_impls.concat_blocks(quote! {
+                impl ::bt_cpp_rust::nodes::AsyncTick for #item_ident {
+                    fn tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
                         ::std::boxed::Box::pin(async move {
-                            ::tokio::task::spawn_blocking(|| <#ident as ::bt_cpp_rust::nodes::SyncTick>::tick(self)).await
+                            ::bt_cpp_rust::sync::spawn_blocking(|| <#item_ident as ::bt_cpp_rust::nodes::SyncTick>::tick(self)).await
                         })
                     }
                 }
                 
-                impl ::bt_cpp_rust::nodes::AsyncNodeHalt for #ident {
-                    fn halt(&mut self) -> ::futures::future::BoxFuture<()> {
+                impl ::bt_cpp_rust::nodes::AsyncNodeHalt for #item_ident {
+                    fn halt(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<()> {
                         ::std::boxed::Box::pin(async move {
-                            ::tokio::task::spawn_blocking(|| <#ident as ::bt_cpp_rust::nodes::SyncNodeHalt>::halt(self)).await
+                            ::bt_cpp_rust::sync::spawn_blocking(|| <#item_ident as ::bt_cpp_rust::nodes::SyncNodeHalt>::halt(self)).await
                         })
                     }
                 }
-            }
+            });
         },
         _ => unreachable!(),
     }
 
-    let extra_fields = proc_macro2::TokenStream::new().concat(default_fields).concat(manual_fields);
+    let extra_fields = proc_macro2::TokenStream::new().concat_list(default_fields).concat_list(manual_fields);
 
     let output = quote! {
         #user_attrs
         #[derive(#derives)]
-        #vis struct #ident #struct_fields
+        #vis struct #item_ident #struct_fields
 
-        impl #ident {
-            pub fn new(name: impl AsRef<str>, config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #ident {
+        impl #item_ident {
+            pub fn new(name: impl AsRef<str>, config: ::bt_cpp_rust::nodes::NodeConfig, #manual_fields_with_types) -> #item_ident {
                 Self {
                     name: name.as_ref().to_string(),
                     config,
@@ -345,28 +431,36 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
 /// - `ControlNode`
 /// - `DecoratorNode`
 /// 
+/// By default, the tick method implementation is `async`. To specify this explicitly (or
+/// make it synchronous), add `Async` or `Sync` after the node type.
+/// 
 /// ===
 /// 
 /// ```rust
-/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{TreeNode, NodeError, NodeHalt}};
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodeError, AsyncNodeHalt, NodePorts}, sync::BoxFuture};
 /// 
 /// // Here we are specifying a `SyncActionNode` as the node type.
 /// #[bt_node(SyncActionNode)]
+/// // Defaults to #[bt_node(SyncActionNode, Async)]
 /// struct MyActionNode {} // No additional fields
 /// 
 /// // Now I need to `impl TreeNode`
-/// impl TreeNode for MyActionNode {
-///     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-///         // Do something here
-///         // ...
+/// impl AsyncTick for MyActionNode {
+///     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+///         Box::pin(async move {
+///             // Do something here
+///             // ...
 /// 
-///         Ok(NodeStatus::Success)
+///             Ok(NodeStatus::Success)
+///         })
 ///     }
 /// }
 /// 
+/// impl NodePorts for MyActionNode {}
+/// 
 /// // Also need to `impl NodeHalt`
 /// // However, we'll just use the default implementation
-/// impl NodeHalt for MyActionNode {}
+/// impl AsyncNodeHalt for MyActionNode {}
 /// ```
 /// 
 /// ===
@@ -414,7 +508,7 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
 /// ## Example
 /// 
 /// ```rust
-/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{TreeNode, NodeError, NodeHalt}};
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodePorts, NodeError, AsyncNodeHalt}, sync::BoxFuture};
 /// 
 /// #[bt_node(SyncActionNode)]
 /// struct MyActionNode {
@@ -425,13 +519,17 @@ fn create_bt_node(args: TokenStream, mut item: ItemStruct) -> syn::Result<proc_m
 /// }
 /// 
 /// // Now I need to `impl TreeNode`
-/// impl TreeNode for MyActionNode {
-///     fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-///         Ok(NodeStatus::Success)
+/// impl AsyncTick for MyActionNode {
+///     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+///         Box::pin(async move {
+///             Ok(NodeStatus::Success)
+///         })
 ///     }
 /// }
 /// 
-/// impl NodeHalt for MyActionNode {}
+/// impl NodePorts for MyActionNode {}
+/// 
+/// impl AsyncNodeHalt for MyActionNode {}
 /// ```
 #[proc_macro_attribute]
 pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -470,7 +568,7 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
             }
 
             fn to_tree_node_ptr(&self) -> ::bt_cpp_rust::nodes::TreeNodePtr {
-                ::std::sync::Arc::new(::tokio::sync::Mutex::new(self.clone()))
+                ::std::sync::Arc::new(::bt_cpp_rust::sync::Mutex::new(self.clone()))
             }
 
             fn clone_node_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::TreeNodeBase + ::std::marker::Send + ::std::marker::Sync> {
@@ -493,15 +591,17 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::ActionNode for #ident {
-            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ActionNodeBase> {
+            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ActionNodeBase + ::std::marker::Send + ::std::marker::Sync> {
                 Box::new(self.clone())
             }
 
-            fn execute_action_tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
-                match self.tick()? {
-                    ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
-                    status => Ok(status)
-                }
+            fn execute_action_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    match self.tick().await? {
+                        ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
+                        status => Ok(status)
+                    }
+                })
             }
         }
 
@@ -533,7 +633,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 &self.children
             }
 
-            fn halt_child(&self, index: usize) -> ::futures::future::BoxFuture<Result<(), ::bt_cpp_rust::nodes::NodeError>> {
+            fn halt_child(&self, index: usize) -> ::bt_cpp_rust::sync::BoxFuture<Result<(), ::bt_cpp_rust::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
                     match self.children.get(index) {
                         Some(child) => {
@@ -547,7 +647,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 })
             }
 
-            fn halt_children(&self, start: usize) -> ::futures::future::BoxFuture<Result<(), ::bt_cpp_rust::nodes::NodeError>> {
+            fn halt_children(&self, start: usize) -> ::bt_cpp_rust::sync::BoxFuture<Result<(), ::bt_cpp_rust::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
                     
                     if start >= self.children.len() {
@@ -564,19 +664,19 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 })
             }
 
-            fn reset_children(&self) -> ::futures::future::BoxFuture<()> {
+            fn reset_children(&self) -> ::bt_cpp_rust::sync::BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
                     self.halt_children(0).await.unwrap();
                 })
             }
 
-            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ControlNodeBase> {
+            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::ControlNodeBase + ::std::marker::Send + ::std::marker::Sync> {
                 Box::new(self.clone())
             }
         }
 
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
                     <Self as ::bt_cpp_rust::nodes::AsyncTick>::tick(self).await
                 })
@@ -623,7 +723,7 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
             fn reset_child(&self) -> BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
                     if let Some(child) = self.child.as_ref() {
-                        let child = child.lock().await;
+                        let mut child = child.lock().await;
                         if matches!(child.status(), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
                             ::bt_cpp_rust::nodes::AsyncNodeHalt::halt(&mut (*child)).await;
                         }
@@ -633,13 +733,13 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
                 })
             }
 
-            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::DecoratorNodeBase> {
+            fn clone_boxed(&self) -> Box<dyn ::bt_cpp_rust::nodes::DecoratorNodeBase + ::std::marker::Send + ::std::marker::Sync> {
                 Box::new(self.clone())
             }
         }
 
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
                     if self.child.is_none() {
                         return Err(::bt_cpp_rust::nodes::NodeError::ChildMissing);
@@ -671,11 +771,13 @@ pub fn derive_sync_action_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
-                match <Self as ::bt_cpp_rust::nodes::ActionNode>::execute_action_tick(self)? {
-                    ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
-                    status => Ok(status)
-                }
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    match <Self as ::bt_cpp_rust::nodes::ActionNode>::execute_action_tick(self).await? {
+                        ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
+                        status => Ok(status)
+                    }
+                })
             }
         }
     };
@@ -691,41 +793,45 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
     let ident = input.ident;
 
     let expanded = quote! {
-        impl ::bt_cpp_rust::nodes::ExecuteTick for #ident where #ident: ::bt_cpp_rust::nodes::StatefulActionNode {
-            fn execute_tick(&mut self) -> ::futures::future::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
-                let prev_status = <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self);
-
-                let new_status = match prev_status {
-                    ::bt_cpp_rust::basic_types::NodeStatus::Idle => {
-                        let new_status = self.on_start()?;
-                        if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
-                            return Err(NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
+        impl ::bt_cpp_rust::nodes::ExecuteTick for #ident where #ident: ::bt_cpp_rust::nodes::AsyncStatefulActionNode {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                ::std::boxed::Box::pin(async move {
+                    let prev_status = <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self);
+    
+                    let new_status = match prev_status {
+                        ::bt_cpp_rust::basic_types::NodeStatus::Idle => {
+                            let new_status = ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_start(self).await?;
+                            if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
+                                return Err(NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
+                            }
+                            new_status
                         }
-                        new_status
-                    }
-                    ::bt_cpp_rust::basic_types::NodeStatus::Running => {
-                        let new_status = self.on_running()?;
-                        if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
-                            return Err(NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
+                        ::bt_cpp_rust::basic_types::NodeStatus::Running => {
+                            let new_status = ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_running(self).await?;
+                            if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
+                                return Err(NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
+                            }
+                            new_status
                         }
-                        new_status
-                    }
-                    prev_status => prev_status
-                };
-
-                <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::set_status(self, new_status.clone());
-
-                Ok(new_status)
+                        prev_status => prev_status
+                    };
+    
+                    <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::set_status(self, new_status.clone());
+    
+                    Ok(new_status)
+                })
             }
         }
 
-        impl ::bt_cpp_rust::nodes::NodeHalt for #ident {
-            fn halt(&mut self) {
-                *self.halt_requested.borrow_mut() = true;
-
-                if matches!(<Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
-                    self.on_halted();
-                }
+        impl ::bt_cpp_rust::nodes::AsyncNodeHalt for #ident {
+            fn halt(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<()> {
+                ::std::boxed::Box::pin(async move {
+                    self.halt_requested = true;
+    
+                    if matches!(<Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
+                        self.on_halted().await;
+                    }
+                })
             }
         }
     };

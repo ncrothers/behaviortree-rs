@@ -23,9 +23,9 @@ fn main_tree_attr() {
 
     let mut factory = Factory::new();
     register_node!(factory, "StatusNode", StatusNode);
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 
@@ -44,9 +44,9 @@ fn main_tree_attr() {
 
     let mut factory = Factory::new();
     register_node!(factory, "StatusNode", StatusNode);
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 
@@ -61,9 +61,9 @@ fn main_tree_attr() {
 
     let mut factory = Factory::new();
     register_node!(factory, "StatusNode", StatusNode);
-    let blackboard = Blackboard::new_ptr();
+    let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 }
@@ -92,8 +92,8 @@ fn subtrees() {
 
     register_node!(factory, "StatusNode", StatusNode);
 
-    let blackboard = Blackboard::new_ptr();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let blackboard = Blackboard::create();
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();
@@ -122,8 +122,8 @@ fn node_not_registered() {
 
     // Don't register StatusNode
 
-    let blackboard = Blackboard::new_ptr();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let blackboard = Blackboard::create();
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 }
@@ -148,8 +148,8 @@ fn ignore_treenodesmodel() {
 
     register_node!(factory, "StatusNode", StatusNode);
 
-    let blackboard = Blackboard::new_ptr();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let blackboard = Blackboard::create();
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());

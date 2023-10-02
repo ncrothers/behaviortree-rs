@@ -10,7 +10,7 @@ use crate::{
         PortsRemapping, FromString, TreeNodeManifest, ParseStr,
     },
     blackboard::{BlackboardString, BlackboardPtr},
-    tree::ParseError,
+    tree::ParseError, Blackboard,
 };
 
 pub mod control;
@@ -187,7 +187,7 @@ pub enum NodeRuntime {
 /// Contains all common configuration that all types of nodes use.
 #[derive(Clone, Debug)]
 pub struct NodeConfig {
-    pub blackboard: BlackboardPtr,
+    pub blackboard: Blackboard,
     pub input_ports: PortsRemapping,
     pub output_ports: PortsRemapping,
     pub manifest: Option<Arc<TreeNodeManifest>>,
@@ -201,7 +201,7 @@ pub struct NodeConfig {
 }
 
 impl NodeConfig {
-    pub fn new(blackboard: BlackboardPtr) -> NodeConfig {
+    pub fn new(blackboard: Blackboard) -> NodeConfig {
         Self {
             blackboard,
             input_ports: HashMap::new(),
@@ -215,7 +215,7 @@ impl NodeConfig {
     }
 
     /// Returns a reference to the blackboard.
-    pub fn blackboard(&self) -> &BlackboardPtr {
+    pub fn blackboard(&self) -> &Blackboard {
         &self.blackboard
     }
 
@@ -262,7 +262,7 @@ impl NodeConfig {
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub async fn get_input<T>(&self, port: &str) -> Result<T, NodeError>
+    pub async fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
     where T: BTToString + FromString + Clone + Send + 'static,
     {
         match self.input_ports.get(port) {
@@ -285,7 +285,7 @@ impl NodeConfig {
                 } else {
                     match get_remapped_key(port, val) {
                         // Value is a Blackboard pointer
-                        Some(key) => match self.blackboard.write().await.get::<T>(&key).await {
+                        Some(key) => match self.blackboard.get::<T>(&key).await {
                             Some(val) => Ok(val),
                             None => Err(NodeError::BlackboardError(key)),
                         },
@@ -315,7 +315,7 @@ impl NodeConfig {
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub fn get_input_sync<T>(&self, port: &str) -> Result<T, NodeError>
+    pub fn get_input_sync<T>(&mut self, port: &str) -> Result<T, NodeError>
     where T: BTToString + FromString + Clone + Send + 'static,
     {
         futures::executor::block_on(self.get_input(port))
@@ -329,7 +329,7 @@ impl NodeConfig {
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub async fn set_output<T>(&self, port: &str, value: T) -> Result<(), NodeError>
+    pub async fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
     where
         T: BTToString + Clone + Send + 'static,
     {
@@ -345,7 +345,7 @@ impl NodeConfig {
                     }
                 };
 
-                self.blackboard.write().await.set(blackboard_key, value).await;
+                self.blackboard.set(blackboard_key, value).await;
 
                 Ok(())
             }
@@ -363,7 +363,7 @@ impl NodeConfig {
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub async fn set_output_sync<T>(&self, port: &str, value: T) -> Result<(), NodeError>
+    pub async fn set_output_sync<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
     where
         T: BTToString + Clone + Send + 'static,
     {

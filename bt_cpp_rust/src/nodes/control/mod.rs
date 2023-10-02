@@ -38,11 +38,11 @@ pub trait ControlNode: TreeNodeBase {
     /// Reset status of all child nodes
     fn reset_children(&self) -> BoxFuture<()>;
     /// Creates a cloned version of itself as a `ControlNode` trait object
-    fn clone_boxed(&self) -> Box<dyn ControlNodeBase>;
+    fn clone_boxed(&self) -> Box<dyn ControlNodeBase + Send + Sync>;
 }
 
-impl Clone for Box<dyn ControlNodeBase> {
-    fn clone(&self) -> Box<dyn ControlNodeBase> {
+impl Clone for Box<dyn ControlNodeBase + Send + Sync> {
+    fn clone(&self) -> Box<dyn ControlNodeBase + Send + Sync> {
         self.clone_boxed()
     }
 }

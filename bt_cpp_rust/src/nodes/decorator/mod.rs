@@ -32,11 +32,17 @@ pub trait DecoratorNode: TreeNodeBase {
     /// Reset status of child and call `halt()`
     fn reset_child(&self) -> BoxFuture<()>;
     /// Creates a cloned version of itself as a `DecoratorNode` trait object
-    fn clone_boxed(&self) -> Box<dyn DecoratorNodeBase>;
+    fn clone_boxed(&self) -> Box<dyn DecoratorNodeBase + Send + Sync>;
 }
 
 impl Clone for Box<dyn DecoratorNodeBase> {
     fn clone(&self) -> Box<dyn DecoratorNodeBase> {
+        self.clone_boxed()
+    }
+}
+
+impl Clone for Box<dyn DecoratorNodeBase + Send + Sync> {
+    fn clone(&self) -> Box<dyn DecoratorNodeBase + Send + Sync> {
         self.clone_boxed()
     }
 }
