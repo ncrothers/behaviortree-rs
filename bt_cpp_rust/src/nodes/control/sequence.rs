@@ -4,7 +4,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     nodes::{
-        AsyncNodeHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncNodeHalt, TreeNodePtr,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncHalt, TreeNodePtr,
     },
 };
 
@@ -73,7 +73,7 @@ impl AsyncTick for SequenceNode {
 
 impl NodePorts for SequenceNode {}
 
-impl AsyncNodeHalt for SequenceNode {
+impl AsyncHalt for SequenceNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;

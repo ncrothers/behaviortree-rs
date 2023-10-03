@@ -403,7 +403,7 @@ fn create_bt_node(
                     }
                 }
 
-                impl ::bt_cpp_rust::nodes::SyncNodeHalt for #item_ident {}
+                impl ::bt_cpp_rust::nodes::SyncHalt for #item_ident {}
             });
         }
         "Sync" => {
@@ -416,10 +416,10 @@ fn create_bt_node(
                     }
                 }
 
-                impl ::bt_cpp_rust::nodes::AsyncNodeHalt for #item_ident {
+                impl ::bt_cpp_rust::nodes::AsyncHalt for #item_ident {
                     fn halt(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<()> {
                         ::std::boxed::Box::pin(async move {
-                            ::bt_cpp_rust::sync::spawn_blocking(|| <#item_ident as ::bt_cpp_rust::nodes::SyncNodeHalt>::halt(self)).await
+                            ::bt_cpp_rust::sync::spawn_blocking(|| <#item_ident as ::bt_cpp_rust::nodes::SyncHalt>::halt(self)).await
                         })
                     }
                 }
@@ -473,7 +473,7 @@ fn create_bt_node(
 /// ===
 ///
 /// ```rust
-/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodeError, AsyncNodeHalt, NodePorts}, sync::BoxFuture};
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodeError, AsyncHalt, NodePorts}, sync::BoxFuture};
 ///
 /// // Here we are specifying a `SyncActionNode` as the node type.
 /// #[bt_node(SyncActionNode)]
@@ -496,7 +496,7 @@ fn create_bt_node(
 ///
 /// // Also need to `impl NodeHalt`
 /// // However, we'll just use the default implementation
-/// impl AsyncNodeHalt for MyActionNode {}
+/// impl AsyncHalt for MyActionNode {}
 /// ```
 ///
 /// ===
@@ -544,7 +544,7 @@ fn create_bt_node(
 /// ## Example
 ///
 /// ```rust
-/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodePorts, NodeError, AsyncNodeHalt}, sync::BoxFuture};
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodePorts, NodeError, AsyncHalt}, sync::BoxFuture};
 ///
 /// #[bt_node(SyncActionNode)]
 /// struct MyActionNode {
@@ -565,7 +565,7 @@ fn create_bt_node(
 ///
 /// impl NodePorts for MyActionNode {}
 ///
-/// impl AsyncNodeHalt for MyActionNode {}
+/// impl AsyncHalt for MyActionNode {}
 /// ```
 #[proc_macro_attribute]
 pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -676,7 +676,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                     match self.children.get(index) {
                         Some(child) => {
                             if child.lock().await.status() == NodeStatus::Running {
-                                ::bt_cpp_rust::nodes::AsyncNodeHalt::halt(&mut (*child.lock().await)).await;
+                                ::bt_cpp_rust::nodes::AsyncHalt::halt(&mut (*child.lock().await)).await;
                             }
                             Ok(child.lock().await.reset_status())
                         }
@@ -763,7 +763,7 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
                     if let Some(child) = self.child.as_ref() {
                         let mut child = child.lock().await;
                         if matches!(child.status(), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
-                            ::bt_cpp_rust::nodes::AsyncNodeHalt::halt(&mut (*child)).await;
+                            ::bt_cpp_rust::nodes::AsyncHalt::halt(&mut (*child)).await;
                         }
 
                         child.reset_status();
@@ -861,7 +861,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl ::bt_cpp_rust::nodes::AsyncNodeHalt for #ident {
+        impl ::bt_cpp_rust::nodes::AsyncHalt for #ident {
             fn halt(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
                     self.halt_requested = true;

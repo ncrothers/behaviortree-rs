@@ -1,7 +1,7 @@
 use bt_cpp_rust::{
     basic_types::{BTToString, NodeStatus, PortsList},
     macros::{define_ports, input_port},
-    nodes::{AsyncNodeHalt, AsyncStatefulActionNode, AsyncTick, NodeError, NodePorts},
+    nodes::{AsyncHalt, AsyncStatefulActionNode, AsyncTick, NodeError, NodePorts},
 };
 use bt_derive::bt_node;
 use futures::future::BoxFuture;
@@ -35,7 +35,7 @@ impl NodePorts for StatusNode {
     }
 }
 
-impl AsyncNodeHalt for StatusNode {}
+impl AsyncHalt for StatusNode {}
 
 #[bt_node(SyncActionNode)]
 pub struct SuccessThenFailure {
@@ -66,7 +66,7 @@ impl NodePorts for SuccessThenFailure {
     }
 }
 
-impl AsyncNodeHalt for SuccessThenFailure {}
+impl AsyncHalt for SuccessThenFailure {}
 
 #[bt_node(SyncActionNode, Async)]
 pub struct EchoNode {}
@@ -89,7 +89,7 @@ impl NodePorts for EchoNode {
     }
 }
 
-impl AsyncNodeHalt for EchoNode {}
+impl AsyncHalt for EchoNode {}
 
 #[bt_node(StatefulActionNode)]
 pub struct RunForNode {

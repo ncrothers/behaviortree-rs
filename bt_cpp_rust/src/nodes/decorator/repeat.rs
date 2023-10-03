@@ -5,7 +5,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncNodeHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, SyncNodeHalt,
+        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, SyncHalt,
         TreeNodeDefaults,
     },
 };
@@ -106,7 +106,7 @@ impl NodePorts for RepeatNode {
     }
 }
 
-impl AsyncNodeHalt for RepeatNode {
+impl AsyncHalt for RepeatNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.repeat_count = 0;

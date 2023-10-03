@@ -7,7 +7,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncNodeHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncNodeHalt,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncHalt,
         TreeNodeDefaults, TreeNodePtr,
     },
 };
@@ -117,7 +117,7 @@ impl NodePorts for ParallelAllNode {
     }
 }
 
-impl AsyncNodeHalt for ParallelAllNode {
+impl AsyncHalt for ParallelAllNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_children().await;

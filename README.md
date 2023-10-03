@@ -105,22 +105,55 @@ struct DummyActionNode {
 }
 ```
 
-### Implement traits
+### Async vs Sync
 
-At the minimum, you also need to implement the `TreeNode` and `NodeHalt` traits. The only required method to implement is `tick()`. If you are using ports with your node, you also need to implement `provided_ports()`. You can choose to implement `halt()` if you need to do any cleanup when the node is stopped externally.
-
-Example:
+At this moment, all nodes are implemented as `async` behind the scenes. However, when building your own nodes you have the choice to implement it as either sync or async. By default, `bt_cpp_rust` will expect you to implement the `async` version of the required traits. However, you can specify this explicitly by adding keywords to the `#[bt_node(...)]` macro.
 
 ```rust
-impl TreeNode for DummyActionNode {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
-        // Your code goes here
-        // ...
+// Default behavior
+#[bt_node(SyncActionNode, Async)]
+struct DummyActionNode {}
 
-        // You must return a `NodeStatus` or an `Err`.
-        Ok(NodeStatus::Success)
+// Require implementation of the sync version of the traits
+#[bt_node(SyncActionNode, Sync)]
+struct DummyActionNode {}
+```
+
+You'll see how the implementation differs between the two in the next section.
+
+### Implement traits
+
+You have the choice of implementing either a synchronous or asynchronous `tick()` and `halt()` method. If you are doing any I/O operations (network calls, file operations, etc.), especially those that use an `async` interface, you should implement the `async` version (which is the default unless you specify otherwise). For very simple nodes, you can just implement the sync version to avoid the minor extra boilerplate for the `async` methods.
+
+Based on the runtime style you choose, you need to implement two traits:
+- Async: `AsyncTick` and `AsyncHalt`
+- Sync: `SyncTick` and `SyncHalt`
+
+You also need to implement the `NodePorts` trait regardless of sync vs. async. The details for each of these traits is detailed below.
+
+### `AsyncTick`
+
+```rust
+use bt_cpp_rust::{bt_node, nodes::{AsyncTick, AsyncHalt, NodeStatus, NodeError, PortsList}, sync::BoxFuture}
+#[bt_node(SyncActionNode)]
+struct DummyActionStruct {}
+
+impl AsyncTick for DummyActionStruct {
+    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+        Box::pin(async move {
+            // Some implementation
+            // ...
+
+            // You must return a `NodeStatus` (i.e. Failure, Success, Running, or Skipped)
+            // Or an Err
+            Ok(NodeStatus::Success)
+        })
     }
+}
 
+// If you don't use any ports, this can be left empty
+// impl NodePorts for DummyActionStruct {}
+impl NodePorts for DummyActionStruct {
     fn provided_ports(&self) -> PortsList {
         define_ports!(
             // No default value
@@ -131,14 +164,43 @@ impl TreeNode for DummyActionNode {
     }
 }
 
-impl NodeHalt for DummyActionNode {
-    // Only need to add this if you want to clean up.
-    // Otherwise just: `impl NodeHalt for DummyActionNode {}` will suffice.
-    fn halt(&mut self) {
-        // Cleanup code here
+// If you don't need to do cleanup, leave as-is
+impl AsyncHalt for DummyActionStruct {}
+```
+
+### `SyncTick`
+
+```rust
+use bt_cpp_rust::{bt_node, nodes::{SyncTick, SyncHalt, NodeStatus, NodeError, PortsList}}
+#[bt_node(SyncActionNode, Sync)]
+struct DummyActionStruct {}
+
+impl SyncTick for DummyActionStruct {
+    fn tick(&mut self) -> Result<NodeStatus, NodeError> {
+        // Some implementation
         // ...
+
+        // You must return a `NodeStatus` (i.e. Failure, Success, Running, or Skipped)
+        // Or an Err
+        Ok(NodeStatus::Success)
     }
 }
+
+// If you don't use any ports, this can be left empty
+// impl NodePorts for DummyActionStruct {}
+impl NodePorts for DummyActionStruct {
+    fn provided_ports(&self) -> PortsList {
+        define_ports!(
+            // No default value
+            input_port!("foo"),
+            // With default value 
+            input_port!("bar", 16)
+        )
+    }
+}
+
+// If you don't need to do cleanup, leave as-is
+impl SyncHalt for DummyActionStruct {}
 ```
 
 # Feature Progress

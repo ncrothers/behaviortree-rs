@@ -12,13 +12,15 @@ use tokio::sync::Mutex;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, BTToString, FromString, NodeStatus, ParseStr, PortDirection,
-        PortValue, PortsList, PortsRemapping, TreeNodeManifest,
+        self, get_remapped_key, BTToString, FromString, ParseStr, PortDirection,
+        PortValue, PortsRemapping, TreeNodeManifest,
     },
-    blackboard::{BlackboardPtr, BlackboardString},
+    blackboard::BlackboardString,
     tree::ParseError,
     Blackboard,
 };
+
+pub use crate::basic_types::{NodeStatus, PortsList};
 
 pub mod control;
 pub use control::{ControlNode, ControlNodeBase, ControlNodePtr};
@@ -41,8 +43,8 @@ pub trait TreeNodeBase:
     + TreeNodeDefaults
     + GetNodeType
     + ExecuteTick
-    + SyncNodeHalt
-    + AsyncNodeHalt
+    + SyncHalt
+    + AsyncHalt
     + SyncTick
     + AsyncTick
 {
@@ -82,14 +84,14 @@ pub trait AsyncTick {
 /// Trait that defines the `halt()` function, which gets called
 /// when a node is stopped. This function typically contains any
 /// cleanup code for the node.
-pub trait SyncNodeHalt {
+pub trait SyncHalt {
     fn halt(&mut self) {}
 }
 
 /// Trait that defines the `halt()` function, which gets called
 /// when a node is stopped. This function typically contains any
 /// cleanup code for the node.
-pub trait AsyncNodeHalt {
+pub trait AsyncHalt {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {})
     }

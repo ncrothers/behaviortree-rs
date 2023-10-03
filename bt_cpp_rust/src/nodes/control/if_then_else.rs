@@ -5,7 +5,7 @@ use log::warn;
 use crate::{
     basic_types::NodeStatus,
     nodes::{
-        AsyncNodeHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncNodeHalt, TreeNodePtr,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncHalt, TreeNodePtr,
     },
 };
 
@@ -87,7 +87,7 @@ impl AsyncTick for IfThenElseNode {
 
 impl NodePorts for IfThenElseNode {}
 
-impl AsyncNodeHalt for IfThenElseNode {
+impl AsyncHalt for IfThenElseNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;
