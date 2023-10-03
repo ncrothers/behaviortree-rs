@@ -1,4 +1,4 @@
-use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use futures::future::BoxFuture;
 use tokio::sync::{Mutex, RwLock};
@@ -117,10 +117,6 @@ impl Blackboard {
             })),
             parent_bb: Box::new(parent_bb),
         }
-    }
-
-    fn data_ptr(&self) -> BlackboardDataPtr {
-        Arc::clone(&self.data)
     }
 
     fn parent(&self) -> Option<Blackboard> {

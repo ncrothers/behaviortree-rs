@@ -4,7 +4,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncHalt, SyncTick,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts,
         TreeNodePtr,
     },
 };

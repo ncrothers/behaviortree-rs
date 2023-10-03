@@ -4,7 +4,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncHalt, TreeNodePtr,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, TreeNodePtr,
     },
 };
 /// The SequenceStarNode is used to tick children in an ordered sequence.

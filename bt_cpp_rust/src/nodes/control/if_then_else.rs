@@ -5,7 +5,7 @@ use log::warn;
 use crate::{
     basic_types::NodeStatus,
     nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncHalt, TreeNodePtr,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, TreeNodePtr,
     },
 };
 
