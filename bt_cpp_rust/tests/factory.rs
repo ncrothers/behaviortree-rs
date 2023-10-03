@@ -1,4 +1,6 @@
-use bt_cpp_rust::{macros::register_node, blackboard::Blackboard, tree::Factory, basic_types::NodeStatus};
+use bt_cpp_rust::{
+    basic_types::NodeStatus, blackboard::Blackboard, macros::register_node, tree::Factory,
+};
 
 use crate::nodes::StatusNode;
 
@@ -19,7 +21,8 @@ fn main_tree_attr() {
                 <StatusNode status="Success" />
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
     register_node!(factory, "StatusNode", StatusNode);
@@ -40,7 +43,8 @@ fn main_tree_attr() {
                 <StatusNode status="Success" />
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
     register_node!(factory, "StatusNode", StatusNode);
@@ -57,7 +61,8 @@ fn main_tree_attr() {
                 <StatusNode status="Success" />
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
     register_node!(factory, "StatusNode", StatusNode);
@@ -86,7 +91,8 @@ fn subtrees() {
                 <StatusNode status="Failure" />
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -116,7 +122,8 @@ fn node_not_registered() {
                 <StatusNode status="Failure" />
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -142,7 +149,8 @@ fn ignore_treenodesmodel() {
                 <Action></Action>
             </TreeNodesModel>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 

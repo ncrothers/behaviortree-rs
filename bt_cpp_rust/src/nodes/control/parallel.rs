@@ -6,25 +6,28 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{ControlNode, NodePorts, TreeNodeDefaults, TreeNodePtr, NodeError, SyncNodeHalt, AsyncTick, AsyncNodeHalt},
+    nodes::{
+        AsyncNodeHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncNodeHalt,
+        TreeNodeDefaults, TreeNodePtr,
+    },
 };
 
 /// The ParallelNode execute all its children
 /// __concurrently__, but not in separate threads!
-/// 
+///
 /// Even if this may look similar to ReactiveSequence,
 /// this Control Node is the __only__ one that can have
 /// multiple children RUNNING at the same time.
-/// 
+///
 /// The Node is completed either when the THRESHOLD_SUCCESS
 /// or THRESHOLD_FAILURE number is reached (both configured using ports).
-/// 
+///
 /// If any of the thresholds is reached, and other children are still running,
 /// they will be halted.
-/// 
+///
 /// Note that threshold indexes work as in Python:
 /// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
-/// 
+///
 /// Therefore -1 is equivalent to the number of children.
 #[bt_node(ControlNode)]
 pub struct ParallelNode {
@@ -69,19 +72,23 @@ impl AsyncTick for ParallelNode {
         Box::pin(async move {
             self.success_threshold = self.config().get_input("success_count").await.unwrap();
             self.failure_threshold = self.config().get_input("failure_count").await.unwrap();
-    
+
             let children_count = self.children.len();
-    
+
             if children_count < self.success_threshold() {
-                return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never succeed.".to_string()));
+                return Err(NodeError::NodeStructureError(
+                    "Number of children is less than the threshold. Can never succeed.".to_string(),
+                ));
             }
-    
+
             if children_count < self.failure_threshold() {
-                return Err(NodeError::NodeStructureError("Number of children is less than the threshold. Can never fail.".to_string()));
+                return Err(NodeError::NodeStructureError(
+                    "Number of children is less than the threshold. Can never fail.".to_string(),
+                ));
             }
-    
+
             let mut skipped_count = 0;
-    
+
             for i in 0..children_count {
                 if !self.completed_list.contains(&i) {
                     let mut child = self.children[i].lock().await;
@@ -100,9 +107,9 @@ impl AsyncTick for ParallelNode {
                         NodeStatus::Idle => {}
                     }
                 }
-    
+
                 let required_success_count = self.success_threshold();
-    
+
                 // Check if success condition has been met
                 if self.success_count >= required_success_count
                     || (self.success_threshold < 0
@@ -112,7 +119,7 @@ impl AsyncTick for ParallelNode {
                     self.reset_children();
                     return Ok(NodeStatus::Success);
                 }
-    
+
                 if (children_count - self.failure_count) < required_success_count
                     || self.failure_count == self.failure_threshold()
                 {
@@ -121,7 +128,7 @@ impl AsyncTick for ParallelNode {
                     return Ok(NodeStatus::Failure);
                 }
             }
-    
+
             // If all children were skipped, return Skipped
             // Otherwise return Running
             match skipped_count == children_count {

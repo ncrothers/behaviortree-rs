@@ -1,4 +1,10 @@
-use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc, sync::{PoisonError, LockResult, RwLock, TryLockError, Arc}};
+use std::{
+    any::TypeId,
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, LockResult, PoisonError, RwLock, TryLockError},
+};
 
 use futures::future::BoxFuture;
 use thiserror::Error;
@@ -6,11 +12,12 @@ use tokio::sync::Mutex;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, BTToString, NodeStatus, PortDirection, PortValue, PortsList,
-        PortsRemapping, FromString, TreeNodeManifest, ParseStr,
+        self, get_remapped_key, BTToString, FromString, NodeStatus, ParseStr, PortDirection,
+        PortValue, PortsList, PortsRemapping, TreeNodeManifest,
     },
-    blackboard::{BlackboardString, BlackboardPtr},
-    tree::ParseError, Blackboard,
+    blackboard::{BlackboardPtr, BlackboardString},
+    tree::ParseError,
+    Blackboard,
 };
 
 pub mod control;
@@ -26,18 +33,29 @@ pub use action::*;
 // Trait Definitions
 // =============================
 
-/// Supertrait that requires all of the base functions that need to 
+/// Supertrait that requires all of the base functions that need to
 /// be implemented for every tree node.
-pub trait TreeNodeBase: std::fmt::Debug + NodePorts + TreeNodeDefaults + GetNodeType + ExecuteTick + SyncNodeHalt + AsyncNodeHalt + SyncTick + AsyncTick {}
+pub trait TreeNodeBase:
+    std::fmt::Debug
+    + NodePorts
+    + TreeNodeDefaults
+    + GetNodeType
+    + ExecuteTick
+    + SyncNodeHalt
+    + AsyncNodeHalt
+    + SyncTick
+    + AsyncTick
+{
+}
 
-/// Pointer to the most general trait, which encapsulates all 
-/// node types that implement `TreeNodeBase` (all nodes need 
+/// Pointer to the most general trait, which encapsulates all
+/// node types that implement `TreeNodeBase` (all nodes need
 /// to for it to compile)
 pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase + Send>>;
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with 
+/// the `tick()` is defined as well as the ports, with
 /// `provided_ports()`.
 pub trait NodePorts {
     fn provided_ports(&self) -> PortsList {
@@ -47,7 +65,7 @@ pub trait NodePorts {
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with 
+/// the `tick()` is defined as well as the ports, with
 /// `provided_ports()`.
 pub trait SyncTick {
     fn tick(&mut self) -> Result<NodeStatus, NodeError>;
@@ -55,24 +73,26 @@ pub trait SyncTick {
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with 
+/// the `tick()` is defined as well as the ports, with
 /// `provided_ports()`.
 pub trait AsyncTick {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
 }
 
-/// Trait that defines the `halt()` function, which gets called 
-/// when a node is stopped. This function typically contains any 
+/// Trait that defines the `halt()` function, which gets called
+/// when a node is stopped. This function typically contains any
 /// cleanup code for the node.
 pub trait SyncNodeHalt {
     fn halt(&mut self) {}
 }
 
-/// Trait that defines the `halt()` function, which gets called 
-/// when a node is stopped. This function typically contains any 
+/// Trait that defines the `halt()` function, which gets called
+/// when a node is stopped. This function typically contains any
 /// cleanup code for the node.
 pub trait AsyncNodeHalt {
-    fn halt(&mut self) -> BoxFuture<()> { Box::pin(async move {}) }
+    fn halt(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {})
+    }
 }
 
 pub trait RuntimeType {
@@ -81,20 +101,20 @@ pub trait RuntimeType {
 
 /// Trait that should only be implemented with a derive macro.
 /// The automatic implementation defines helper functions.
-/// 
+///
 /// The automatic implementation relies on certain named fields
 /// within the struct that it gets derived on.
-/// 
+///
 /// # Examples
-/// 
+///
 /// The struct below won't compile, but it contains the base derived
 /// traits and struct fields needed for all node definitions.
-/// 
+///
 /// ```ignore
 /// use bt_cpp_rust::basic_types::NodeStatus;
 /// use bt_cpp_rust::nodes::NodeConfig;
 /// use bt_cpp_rust::derive::TreeNodeDefaults;
-/// 
+///
 /// #[derive(Debug, Clone, TreeNodeDefaults)]
 /// struct MyTreeNode {
 ///     config: NodeConfig,
@@ -131,7 +151,9 @@ pub trait GetNodeType {
 
 #[derive(Debug, Error)]
 pub enum NodeError {
-    #[error("Child node of [{0}] returned invalid status [NodeStatus::{1}] when it is not allowed")]
+    #[error(
+        "Child node of [{0}] returned invalid status [NodeStatus::{1}] when it is not allowed"
+    )]
     StatusError(String, String),
     #[error("Out of bounds index")]
     IndexError,
@@ -177,7 +199,7 @@ pub enum PostCond {
 pub enum NodeRuntime {
     Async,
     Sync,
-    All
+    All,
 }
 
 // =========================================
@@ -240,12 +262,14 @@ impl NodeConfig {
         }
     }
 
-    /// Returns a pointer to the `TreeNodeManifest` for this node. 
+    /// Returns a pointer to the `TreeNodeManifest` for this node.
     /// Only used during XML parsing.
     pub fn manifest(&self) -> Result<Arc<TreeNodeManifest>, ParseError> {
         match self.manifest.as_ref() {
             Some(manifest) => Ok(Arc::clone(manifest)),
-            None => Err(ParseError::InternalError("Missing manifest. This shouldn't happen; please report this.".to_string())),
+            None => Err(ParseError::InternalError(
+                "Missing manifest. This shouldn't happen; please report this.".to_string(),
+            )),
         }
     }
 
@@ -263,7 +287,8 @@ impl NodeConfig {
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub async fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
-    where T: BTToString + FromString + Clone + Send + 'static,
+    where
+        T: BTToString + FromString + Clone + Send + 'static,
     {
         match self.input_ports.get(port) {
             Some(val) => {
@@ -306,7 +331,7 @@ impl NodeConfig {
     }
 
     /// Sync version of `get_input<T>`
-    /// 
+    ///
     /// Returns the value of the input port at the `port` key as a `Result<T, NodeError>`.
     /// The value is `Err` in the following situations:
     /// - The port wasn't found at that key
@@ -316,16 +341,17 @@ impl NodeConfig {
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub fn get_input_sync<T>(&mut self, port: &str) -> Result<T, NodeError>
-    where T: BTToString + FromString + Clone + Send + 'static,
+    where
+        T: BTToString + FromString + Clone + Send + 'static,
     {
         futures::executor::block_on(self.get_input(port))
     }
 
     /// Sets `value` into the blackboard. The key is based on the value provided
     /// to the port at `port`.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key
@@ -337,29 +363,27 @@ impl NodeConfig {
             Some(port_value) => {
                 let blackboard_key = match port_value.as_str() {
                     "=" => port.to_string(),
-                    value => {
-                        match value.is_bb_pointer() {
-                            true => value.strip_bb_pointer().unwrap(),
-                            false => value.to_string(),
-                        }
-                    }
+                    value => match value.is_bb_pointer() {
+                        true => value.strip_bb_pointer().unwrap(),
+                        false => value.to_string(),
+                    },
                 };
 
                 self.blackboard.set(blackboard_key, value).await;
 
                 Ok(())
             }
-            None => Err(NodeError::PortError(port.to_string()))
+            None => Err(NodeError::PortError(port.to_string())),
         }
     }
 
     /// Sync version of `set_output<T>`
-    /// 
+    ///
     /// Sets `value` into the blackboard. The key is based on the value provided
     /// to the port at `port`.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key

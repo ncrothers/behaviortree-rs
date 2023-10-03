@@ -1,4 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, io::Cursor, rc::Rc, string::FromUtf8Error, sync::Arc};
+use std::{
+    cell::RefCell, collections::HashMap, io::Cursor, rc::Rc, string::FromUtf8Error, sync::Arc,
+};
 
 use futures::future::BoxFuture;
 use log::{debug, info};
@@ -10,11 +12,15 @@ use quick_xml::{
 use thiserror::Error;
 
 use crate::{
-    basic_types::{AttrsToMap, NodeStatus, PortDirection, PortsRemapping, ParseBoolError, PortChecks, FromString},
+    basic_types::{
+        AttrsToMap, FromString, NodeStatus, ParseBoolError, PortChecks, PortDirection,
+        PortsRemapping,
+    },
     blackboard::{Blackboard, BlackboardString},
     macros::build_node_ptr,
     nodes::{
-        ActionNodeBase, ControlNodeBase, TreeNodeBase, TreeNodePtr, NodeError, self, DecoratorNodeBase,
+        self, ActionNodeBase, ControlNodeBase, DecoratorNodeBase, NodeError, TreeNodeBase,
+        TreeNodePtr,
     },
 };
 
@@ -78,7 +84,9 @@ impl AsyncTree {
     async fn tick_root(&mut self, opt: TickOption) -> Result<NodeStatus, NodeError> {
         let mut status = NodeStatus::Idle;
 
-        while status == NodeStatus::Idle || (matches!(opt, TickOption::WhileRunning) && matches!(status, NodeStatus::Running)) {
+        while status == NodeStatus::Idle
+            || (matches!(opt, TickOption::WhileRunning) && matches!(status, NodeStatus::Running))
+        {
             status = self.root.lock().await.execute_tick().await?;
 
             // Not implemented: Check for wake-up conditions and tick again if so
@@ -110,12 +118,14 @@ impl AsyncTree {
 
 #[derive(Debug)]
 pub struct SyncTree {
-    root: AsyncTree
+    root: AsyncTree,
 }
 
 impl SyncTree {
     pub fn new(root: TreeNodePtr) -> SyncTree {
-        Self { root: AsyncTree::new(root) }
+        Self {
+            root: AsyncTree::new(root),
+        }
     }
 
     pub fn tick_exactly_once(&mut self) -> Result<NodeStatus, NodeError> {
@@ -197,47 +207,55 @@ impl Factory {
             }
         };
 
-        match self.build_child(&mut reader, &blackboard, tree_name, path_prefix).await? {
+        match self
+            .build_child(&mut reader, &blackboard, tree_name, path_prefix)
+            .await?
+        {
             Some(child) => Ok(child),
             None => Err(ParseError::NodeTypeMismatch("SubTree".to_string())),
         }
     }
 
-    pub fn create_sync_tree_from_text(&mut self, text: String, blackboard: &Blackboard) -> Result<SyncTree, ParseError> {
+    pub fn create_sync_tree_from_text(
+        &mut self,
+        text: String,
+        blackboard: &Blackboard,
+    ) -> Result<SyncTree, ParseError> {
         self.register_bt_from_text(text)?;
 
         if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
             Err(ParseError::NoMainTree)
-        }
-        else if self.tree_roots.len() == 1 {
+        } else if self.tree_roots.len() == 1 {
             // Unwrap is safe because we check that tree_roots.len() == 1
             let main_tree_id = self.tree_roots.iter().next().unwrap().0;
-    
+
             self.instantiate_sync_tree(blackboard, main_tree_id)
-        }
-        else {
-            // Unwrap is safe here because there are more than 1 root and 
+        } else {
+            // Unwrap is safe here because there are more than 1 root and
             // self.main_tree_id is Some
             self.instantiate_sync_tree(blackboard, self.main_tree_id.as_ref().unwrap())
         }
     }
 
-    pub async fn create_async_tree_from_text(&mut self, text: String, blackboard: &Blackboard) -> Result<AsyncTree, ParseError> {
+    pub async fn create_async_tree_from_text(
+        &mut self,
+        text: String,
+        blackboard: &Blackboard,
+    ) -> Result<AsyncTree, ParseError> {
         self.register_bt_from_text(text)?;
 
         if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
             Err(ParseError::NoMainTree)
-        }
-        else if self.tree_roots.len() == 1 {
+        } else if self.tree_roots.len() == 1 {
             // Unwrap is safe because we check that tree_roots.len() == 1
             let main_tree_id = self.tree_roots.iter().next().unwrap().0;
-    
+
             self.instantiate_async_tree(blackboard, main_tree_id).await
-        }
-        else {
-            // Unwrap is safe here because there are more than 1 root and 
+        } else {
+            // Unwrap is safe here because there are more than 1 root and
             // self.main_tree_id is Some
-            self.instantiate_async_tree(blackboard, self.main_tree_id.as_ref().unwrap()).await
+            self.instantiate_async_tree(blackboard, self.main_tree_id.as_ref().unwrap())
+                .await
         }
     }
 
@@ -271,12 +289,9 @@ impl Factory {
 
         let main_tree_id = String::from(main_tree_id);
 
-        let root_node = self.recursively_build_subtree(
-            &main_tree_id,
-            &String::new(),
-            &String::new(),
-            blackboard,
-        ).await?;
+        let root_node = self
+            .recursively_build_subtree(&main_tree_id, &String::new(), &String::new(), blackboard)
+            .await?;
 
         Ok(AsyncTree::new(root_node))
     }
@@ -297,7 +312,7 @@ impl Factory {
         };
 
         let new_prefix = path_prefix.to_owned() + node_name;
-                        
+
         node.config().path = new_prefix;
 
         // Get list of defined ports from node
@@ -318,7 +333,10 @@ impl Factory {
     ) -> Result<Vec<TreeNodePtr>, ParseError> {
         let mut nodes = Vec::new();
 
-        while let Some(node) = self.build_child(reader, blackboard, tree_name, path_prefix).await? {
+        while let Some(node) = self
+            .build_child(reader, blackboard, tree_name, path_prefix)
+            .await?
+        {
             nodes.push(node);
         }
 
@@ -387,7 +405,7 @@ impl Factory {
     ) -> BoxFuture<Result<Option<TreeNodePtr>, ParseError>> {
         Box::pin(async move {
             let mut buf = Vec::new();
-    
+
             let node = match reader.read_event_into(&mut buf)? {
                 // exits the loop when reaching end of file
                 Event::Eof => {
@@ -398,55 +416,74 @@ impl Factory {
                 Event::Start(e) => {
                     let node_name = String::from_utf8(e.name().0.into())?;
                     let attributes = e.attributes();
-    
+
                     debug!("build_child Start: {node_name}");
-    
+
                     let node_ref = self.get_node(&node_name)?;
-    
+
                     let node = match node_ref {
                         NodePtrType::Control(node) => {
                             let mut node = node.clone();
                             let new_prefix = path_prefix.to_owned() + &node_name;
-                            
+
                             node.config().path = new_prefix;
-    
-                            let children = self.build_children(reader, blackboard, tree_name, &(node.config().path.to_owned() + "/")).await?;
-    
+
+                            let children = self
+                                .build_children(
+                                    reader,
+                                    blackboard,
+                                    tree_name,
+                                    &(node.config().path.to_owned() + "/"),
+                                )
+                                .await?;
+
                             for child in children {
                                 node.add_child(child);
                             }
-    
+
                             let node = node.to_tree_node_ptr();
-    
-                            self.add_ports_to_node(&node, &node_name, attributes).await?;
-    
+
+                            self.add_ports_to_node(&node, &node_name, attributes)
+                                .await?;
+
                             node
                         }
                         NodePtrType::Decorator(node) => {
                             let mut node = node.clone();
                             let new_prefix = path_prefix.to_owned() + &node_name;
-                            
+
                             node.config().path = new_prefix;
-    
-                            let child = match self.build_child(reader, blackboard, tree_name, &(node.config().path.to_owned() + "/")).await? {
+
+                            let child = match self
+                                .build_child(
+                                    reader,
+                                    blackboard,
+                                    tree_name,
+                                    &(node.config().path.to_owned() + "/"),
+                                )
+                                .await?
+                            {
                                 Some(node) => node,
                                 None => {
-                                    return Err(ParseError::NodeTypeMismatch("Decorator".to_string()));
+                                    return Err(ParseError::NodeTypeMismatch(
+                                        "Decorator".to_string(),
+                                    ));
                                 }
                             };
-    
+
                             node.set_child(child);
-    
+
                             let node = node.to_tree_node_ptr();
-    
-                            self.add_ports_to_node(&node, &node_name, attributes).await?;
-    
+
+                            self.add_ports_to_node(&node, &node_name, attributes)
+                                .await?;
+
                             node
                         }
                         // TODO: expand more
                         x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
                     };
-    
+
                     Some(node)
                 }
                 // Leaf Node
@@ -454,75 +491,78 @@ impl Factory {
                     let node_name = String::from_utf8(e.name().0.into())?;
                     debug!("[Leaf node]: {node_name}");
                     let attributes = e.attributes();
-    
+
                     let node = match node_name.as_str() {
                         "SubTree" => {
                             let attributes = attributes.to_map()?;
                             let mut child_blackboard = Blackboard::with_parent(blackboard).await;
-    
+
                             // Process attributes (Ports, special fields, etc)
                             for (attr, value) in attributes.iter() {
                                 // Set autoremapping to true or false
                                 if attr == "_autoremap" {
-                                    child_blackboard.enable_auto_remapping(<bool as FromString>::from_string(value)?);
+                                    child_blackboard.enable_auto_remapping(
+                                        <bool as FromString>::from_string(value)?,
+                                    );
+                                    continue;
+                                } else if !attr.is_allowed_port_name() {
                                     continue;
                                 }
-                                else if !attr.is_allowed_port_name() {
-                                    continue;
-                                }
-    
+
                                 if let Some(port_name) = value.strip_bb_pointer() {
                                     // Add remapping if `value` is a Blackboard pointer
                                     child_blackboard.add_subtree_remapping(attr.clone(), port_name);
-                                }
-                                else {
+                                } else {
                                     // Set string value into Blackboard
                                     child_blackboard.set(attr, value.clone());
                                 }
                             }
-    
+
                             let id = match attributes.get("ID") {
                                 Some(id) => id,
                                 None => return Err(ParseError::MissingAttribute("ID".to_string())),
                             };
-    
+
                             let mut subtree_name = tree_name.clone();
                             if !subtree_name.is_empty() {
                                 subtree_name += "/";
                             }
-    
+
                             if let Some(name_attr) = attributes.get("name") {
                                 subtree_name += name_attr;
-                            }
-                            else {
+                            } else {
                                 subtree_name += &format!("{id}::{}", self.get_uid());
                             }
-    
+
                             let new_prefix = format!("{subtree_name}/");
-    
+
                             self.recursively_build_subtree(
                                 id,
                                 &subtree_name,
                                 &new_prefix,
                                 child_blackboard,
-                            ).await?
+                            )
+                            .await?
                         }
-                        _ => self.build_leaf_node(&node_name, attributes, path_prefix).await?,
+                        _ => {
+                            self.build_leaf_node(&node_name, attributes, path_prefix)
+                                .await?
+                        }
                     };
-    
+
                     Some(node)
                 }
                 Event::End(_e) => None,
                 e => {
                     debug!("Other - SHOULDN'T BE HERE");
                     debug!("{e:?}");
-    
+
                     return Err(ParseError::InternalError(
                         "Didn't match one of the expected XML tag types.".to_string(),
                     ));
                 }
             };
-    
+
             Ok(node)
         })
     }
@@ -546,7 +586,7 @@ impl Factory {
                 if name.as_str() != "root" {
                     return Err(ParseError::ExpectedRoot(name));
                 }
-                
+
                 if let Some(tree_id) = attributes.get("main_tree_to_execute") {
                     info!("Found main tree ID: {tree_id}");
                     self.main_tree_id = Some(tree_id.clone());
@@ -576,20 +616,19 @@ impl Factory {
                     // For now, just ignore it
                     if name.as_str() == "TreeNodesModel" {
                         reader.read_to_end_into(end_name, &mut buf)?;
-                    }
-                    else {
+                    } else {
                         // Add error for missing BT
                         if name.as_str() != "BehaviorTree" {
                             return Err(ParseError::ExpectedRoot(name));
                         }
-    
+
                         // Save position of Reader for each BT
                         if let Some(id) = attributes.get("ID") {
                             self.tree_roots.insert(id.clone(), reader.clone());
                         } else {
                             return Err(ParseError::MissingAttribute("Found BehaviorTree definition without ID. Cannot continue parsing.".to_string()));
                         }
-    
+
                         reader.read_to_end_into(end_name, &mut buf)?;
                     }
                 }
@@ -602,7 +641,9 @@ impl Factory {
                     }
                 }
                 _ => {
-                    return Err(ParseError::InternalError("Something bad has happened. Please report this.".to_string()))
+                    return Err(ParseError::InternalError(
+                        "Something bad has happened. Please report this.".to_string(),
+                    ))
                 }
             };
         }
@@ -623,39 +664,103 @@ fn builtin_nodes(blackboard: &Blackboard) -> HashMap<String, NodePtrType> {
     let mut node_map = HashMap::new();
 
     // Control nodes
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "Sequence", nodes::control::SequenceNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "Sequence",
+        nodes::control::SequenceNode
+    ));
     node_map.insert(String::from("Sequence"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "ReactiveSequence", nodes::control::ReactiveSequenceNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "ReactiveSequence",
+        nodes::control::ReactiveSequenceNode
+    ));
     node_map.insert(String::from("ReactiveSequence"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "SequenceStar", nodes::control::SequenceWithMemoryNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "SequenceStar",
+        nodes::control::SequenceWithMemoryNode
+    ));
     node_map.insert(String::from("SequenceStar"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "Parallel", nodes::control::ParallelNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "Parallel",
+        nodes::control::ParallelNode
+    ));
     node_map.insert(String::from("Parallel"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "ParallelAll", nodes::control::ParallelAllNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "ParallelAll",
+        nodes::control::ParallelAllNode
+    ));
     node_map.insert(String::from("ParallelAll"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "Fallback", nodes::control::FallbackNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "Fallback",
+        nodes::control::FallbackNode
+    ));
     node_map.insert(String::from("Fallback"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "ReactiveFallback", nodes::control::ReactiveFallbackNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "ReactiveFallback",
+        nodes::control::ReactiveFallbackNode
+    ));
     node_map.insert(String::from("ReactiveFallback"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "IfThenElse", nodes::control::IfThenElseNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "IfThenElse",
+        nodes::control::IfThenElseNode
+    ));
     node_map.insert(String::from("IfThenElse"), node);
-    let node = NodePtrType::Control(build_node_ptr!(blackboard, "WhileDoElse", nodes::control::WhileDoElseNode));
+    let node = NodePtrType::Control(build_node_ptr!(
+        blackboard,
+        "WhileDoElse",
+        nodes::control::WhileDoElseNode
+    ));
     node_map.insert(String::from("WhileDoElse"), node);
-    
+
     // Decorator nodes
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "ForceFailure", nodes::decorator::ForceFailureNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "ForceFailure",
+        nodes::decorator::ForceFailureNode
+    ));
     node_map.insert(String::from("ForceFailure"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "ForceSuccess", nodes::decorator::ForceSuccessNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "ForceSuccess",
+        nodes::decorator::ForceSuccessNode
+    ));
     node_map.insert(String::from("ForceSuccess"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "Inverter", nodes::decorator::InverterNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "Inverter",
+        nodes::decorator::InverterNode
+    ));
     node_map.insert(String::from("Inverter"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "KeepRunningUntilFailure", nodes::decorator::KeepRunningUntilFailureNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "KeepRunningUntilFailure",
+        nodes::decorator::KeepRunningUntilFailureNode
+    ));
     node_map.insert(String::from("KeepRunningUntilFailure"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "Repeat", nodes::decorator::RepeatNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "Repeat",
+        nodes::decorator::RepeatNode
+    ));
     node_map.insert(String::from("Repeat"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "Retry", nodes::decorator::RetryNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "Retry",
+        nodes::decorator::RetryNode
+    ));
     node_map.insert(String::from("Retry"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(blackboard, "RunOnce", nodes::decorator::RunOnceNode));
+    let node = NodePtrType::Decorator(build_node_ptr!(
+        blackboard,
+        "RunOnce",
+        nodes::decorator::RunOnceNode
+    ));
     node_map.insert(String::from("RunOnce"), node);
 
     node_map

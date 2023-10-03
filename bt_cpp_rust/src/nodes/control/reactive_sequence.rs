@@ -3,18 +3,20 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodePorts, TreeNodePtr, NodeError, SyncNodeHalt, AsyncTick, AsyncNodeHalt},
+    nodes::{
+        AsyncNodeHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncNodeHalt, TreeNodePtr,
+    },
 };
 
 /// The ReactiveSequence is similar to a ParallelNode.
 /// All the children are ticked from first to last:
-/// 
+///
 /// - If a child returns RUNNING, halt the remaining siblings in the sequence and return RUNNING.
 /// - If a child returns SUCCESS, tick the next sibling.
 /// - If a child returns FAILURE, stop and return FAILURE.
-/// 
+///
 /// If all the children return SUCCESS, this node returns SUCCESS.
-/// 
+///
 /// IMPORTANT: to work properly, this node should not have more than a single
 ///            asynchronous child.
 #[bt_node(ControlNode)]
@@ -27,14 +29,14 @@ impl AsyncTick for ReactiveSequenceNode {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             let mut all_skipped = true;
-        
+
             self.status = NodeStatus::Running;
-        
+
             for (counter, child) in self.children.iter().enumerate() {
                 let child_status = child.lock().await.execute_tick().await?;
-        
+
                 all_skipped &= child_status == NodeStatus::Skipped;
-        
+
                 match child_status {
                     NodeStatus::Running => {
                         for i in 0..counter {
@@ -44,7 +46,10 @@ impl AsyncTick for ReactiveSequenceNode {
                             self.running_child = counter as i32;
                         } else if self.running_child != counter as i32 {
                             // Multiple children running at the same time
-                            return Err(NodeError::NodeStructureError("[ReactiveSequence]: Only a single child can return Running.".to_string()))
+                            return Err(NodeError::NodeStructureError(
+                                "[ReactiveSequence]: Only a single child can return Running."
+                                    .to_string(),
+                            ));
                         }
                         return Ok(NodeStatus::Running);
                     }
@@ -59,13 +64,16 @@ impl AsyncTick for ReactiveSequenceNode {
                         self.halt_child(counter).await;
                     }
                     NodeStatus::Idle => {
-                        return Err(NodeError::StatusError(child.lock().await.config().path.clone(), "Idle".to_string()));
+                        return Err(NodeError::StatusError(
+                            child.lock().await.config().path.clone(),
+                            "Idle".to_string(),
+                        ));
                     }
                 }
             }
-        
+
             self.reset_children();
-        
+
             match all_skipped {
                 true => Ok(NodeStatus::Skipped),
                 false => Ok(NodeStatus::Success),

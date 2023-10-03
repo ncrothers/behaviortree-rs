@@ -3,7 +3,10 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodePorts, TreeNodePtr, NodeError, SyncNodeHalt, SyncTick, AsyncTick, AsyncNodeHalt},
+    nodes::{
+        AsyncNodeHalt, AsyncTick, ControlNode, NodeError, NodePorts, SyncNodeHalt, SyncTick,
+        TreeNodePtr,
+    },
 };
 
 /// The FallbackNode is used to try different strategies,
@@ -30,17 +33,17 @@ impl AsyncTick for FallbackNode {
             if self.status == NodeStatus::Idle {
                 self.all_skipped = true;
             }
-    
+
             self.status = NodeStatus::Running;
-    
+
             while self.child_idx < self.children.len() {
                 let cur_child = &mut self.children[self.child_idx];
-    
+
                 let _prev_status = cur_child.lock().await.status();
                 let child_status = cur_child.lock().await.execute_tick().await?;
-    
+
                 self.all_skipped &= child_status == NodeStatus::Skipped;
-    
+
                 match &child_status {
                     NodeStatus::Running => {
                         return Ok(NodeStatus::Running);
@@ -57,16 +60,19 @@ impl AsyncTick for FallbackNode {
                         self.child_idx += 1;
                     }
                     NodeStatus::Idle => {
-                        return Err(NodeError::StatusError("Name here".to_string(), "Idle".to_string()));
+                        return Err(NodeError::StatusError(
+                            "Name here".to_string(),
+                            "Idle".to_string(),
+                        ));
                     }
                 };
             }
-    
+
             if self.child_idx == self.children.len() {
                 self.reset_children().await;
                 self.child_idx = 0;
             }
-    
+
             match self.all_skipped {
                 true => Ok(NodeStatus::Skipped),
                 false => Ok(NodeStatus::Failure),

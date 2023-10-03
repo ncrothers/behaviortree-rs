@@ -1,5 +1,7 @@
-use bt_cpp_rust::{macros::register_node, tree::Factory, blackboard::Blackboard, basic_types::NodeStatus};
-use log::{info, error};
+use bt_cpp_rust::{
+    basic_types::NodeStatus, blackboard::Blackboard, macros::register_node, tree::Factory,
+};
+use log::{error, info};
 
 mod nodes;
 
@@ -19,7 +21,8 @@ fn force_failure() {
                 </ForceFailure>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -37,7 +40,7 @@ fn force_failure() {
 
             assert!(matches!(status, NodeStatus::Failure));
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -53,7 +56,8 @@ fn force_success() {
                 </ForceSuccess>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -71,7 +75,7 @@ fn force_success() {
 
             assert!(matches!(status, NodeStatus::Success));
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -87,7 +91,8 @@ fn inverter() {
                 </Inverter>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -105,7 +110,7 @@ fn inverter() {
 
             assert!(matches!(status, NodeStatus::Failure));
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -124,7 +129,8 @@ fn keep_running_until_failure() {
                 </KeepRunningUntilFailure>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -141,7 +147,7 @@ fn keep_running_until_failure() {
         Ok(status) => {
             info!("{status:?}");
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -157,7 +163,8 @@ fn repeat() {
                 </Repeat>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -177,7 +184,7 @@ fn repeat() {
 
             assert!(matches!(status, NodeStatus::Failure));
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -195,7 +202,8 @@ fn retry() {
                 </Retry>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -215,7 +223,7 @@ fn retry() {
 
             assert!(matches!(status, NodeStatus::Success));
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -231,7 +239,8 @@ fn run_once() {
                 </RunOnce>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -251,6 +260,6 @@ fn run_once() {
 
             assert!(matches!(status, NodeStatus::Success));
         }
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }

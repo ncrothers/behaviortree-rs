@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::nodes::{TreeNodeBase, TreeNodePtr, NodeError};
+use crate::nodes::{NodeError, TreeNodeBase, TreeNodePtr};
 
 mod force_failure;
 pub use force_failure::*;

@@ -1,5 +1,5 @@
-use bt_cpp_rust::{macros::register_node, tree::Factory, blackboard::Blackboard};
-use log::{info, error};
+use bt_cpp_rust::{blackboard::Blackboard, macros::register_node, tree::Factory};
+use log::{error, info};
 
 mod nodes;
 
@@ -21,7 +21,8 @@ fn fallback() {
                 </Fallback>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -35,7 +36,7 @@ fn fallback() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("{status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -53,7 +54,8 @@ fn if_then_else() {
                 </IfThenElse>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -68,7 +70,7 @@ fn if_then_else() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -87,7 +89,8 @@ fn parallel_all() {
                 </ParallelAll>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -102,7 +105,7 @@ fn parallel_all() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -123,7 +126,8 @@ fn parallel() {
                 </Parallel>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -138,7 +142,7 @@ fn parallel() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -156,7 +160,8 @@ fn reactive_fallback() {
                 </ReactiveFallback>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -171,7 +176,7 @@ fn reactive_fallback() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -190,7 +195,8 @@ fn reactive_sequence() {
                 </ReactiveSequence>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -206,7 +212,7 @@ fn reactive_sequence() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -225,7 +231,8 @@ fn sequence_star() {
                 </SequenceStar>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -241,7 +248,7 @@ fn sequence_star() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -260,7 +267,8 @@ fn sequence_vanilla() {
                 </Sequence>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -276,7 +284,7 @@ fn sequence_vanilla() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }
 
@@ -294,7 +302,8 @@ fn while_do_else() {
                 </WhileDoElse>
             </BehaviorTree>
         </root>
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut factory = Factory::new();
 
@@ -310,6 +319,6 @@ fn while_do_else() {
 
     match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}")
+        Err(e) => error!("{e}"),
     }
 }

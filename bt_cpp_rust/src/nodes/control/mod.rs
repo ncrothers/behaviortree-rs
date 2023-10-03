@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::nodes::{TreeNodeBase, TreeNodePtr, NodeError};
+use crate::nodes::{NodeError, TreeNodeBase, TreeNodePtr};
 
 mod if_then_else;
 use futures::future::BoxFuture;

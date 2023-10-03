@@ -1,8 +1,11 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
 use futures::future::BoxFuture;
 
-use crate::{nodes::{TreeNodeBase, NodeError}, basic_types::NodeStatus};
+use crate::{
+    basic_types::NodeStatus,
+    nodes::{NodeError, TreeNodeBase},
+};
 
 pub trait ActionNodeBase: TreeNodeBase + ActionNode {}
 
@@ -25,7 +28,9 @@ pub type ActionNodePtr = Rc<RefCell<dyn ActionNodeBase>>;
 pub trait AsyncStatefulActionNode {
     fn on_start(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
     fn on_running(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
-    fn on_halted(&mut self) -> BoxFuture<()> { Box::pin(async move {}) }
+    fn on_halted(&mut self) -> BoxFuture<()> {
+        Box::pin(async move {})
+    }
 }
 
 pub trait SyncStatefulActionNode {

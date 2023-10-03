@@ -1,14 +1,11 @@
-use std::{
-    any::Any, collections::HashMap, convert::Infallible, fmt::Debug,
-    str::FromStr,
-};
+use std::{any::Any, collections::HashMap, convert::Infallible, fmt::Debug, str::FromStr};
 
 use quick_xml::events::attributes::Attributes;
 use thiserror::Error;
 
 use crate::{
     blackboard::BlackboardString,
-    macros::{impl_into_string, impl_from_string},
+    macros::{impl_from_string, impl_into_string},
     tree::ParseError,
 };
 
@@ -44,7 +41,7 @@ impl std::fmt::Display for NodeType {
     }
 }
 
-/// Specifies the status of a node's execution. Returned from 
+/// Specifies the status of a node's execution. Returned from
 /// functions `execute_tick()` and `tick()`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeStatus {
@@ -145,10 +142,10 @@ impl std::fmt::Display for PortDirection {
 /// to implement `FromStr` that also provides the `::parse()` function.
 ///
 /// # Example
-/// 
+///
 /// ```
 /// use bt_cpp_rust::derive::FromString;
-/// 
+///
 /// #[derive(FromString)]
 /// struct MyType {
 ///     foo: String
@@ -172,9 +169,9 @@ pub trait ParseStr<T> {
 
 // Implements ParseStr<T> for all T that implements FromString
 impl<T, U> ParseStr<T> for U
-where 
+where
     T: FromString,
-    U: AsRef<str>
+    U: AsRef<str>,
 {
     type Err = <T as FromString>::Err;
 
@@ -183,14 +180,18 @@ where
     }
 }
 
-pub trait FromString where Self: Sized {
+pub trait FromString
+where
+    Self: Sized,
+{
     type Err;
 
     fn from_string(value: impl AsRef<str>) -> Result<Self, Self::Err>;
 }
 
 impl<T> FromString for Vec<T>
-where T: FromString
+where
+    T: FromString,
 {
     type Err = <T as FromString>::Err;
 
@@ -231,8 +232,7 @@ impl FromString for bool {
     }
 }
 
-impl FromString for NodeStatus
-{
+impl FromString for NodeStatus {
     type Err = ParseNodeStatusError;
 
     fn from_string(value: impl AsRef<str>) -> Result<NodeStatus, Self::Err> {
@@ -247,8 +247,7 @@ impl FromString for NodeStatus
     }
 }
 
-impl FromString for NodeType
-{
+impl FromString for NodeType {
     type Err = ParseNodeTypeError;
 
     fn from_string(value: impl AsRef<str>) -> Result<NodeType, Self::Err> {
@@ -264,8 +263,7 @@ impl FromString for NodeType
     }
 }
 
-impl FromString for PortDirection
-{
+impl FromString for PortDirection {
     type Err = ParsePortDirectionError;
 
     fn from_string(value: impl AsRef<str>) -> Result<PortDirection, Self::Err> {
@@ -354,14 +352,11 @@ impl<T: AsRef<str>> PortChecks for T {
 
         if name.is_empty() {
             false
-        }
-        else if name == "_autoremap" {
+        } else if name == "_autoremap" {
             true
-        }
-        else if !name.chars().next().unwrap().is_ascii_alphabetic() {
+        } else if !name.chars().next().unwrap().is_ascii_alphabetic() {
             false
-        }
-        else {
+        } else {
             // If the name isn't name or ID, it's valid
             !(name == "name" || name == "ID")
         }

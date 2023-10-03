@@ -1,4 +1,8 @@
-use bt_cpp_rust::{nodes::{NodeError, NodePorts, AsyncTick, AsyncNodeHalt, AsyncStatefulActionNode}, basic_types::{NodeStatus, PortsList, BTToString}, macros::{define_ports, input_port}};
+use bt_cpp_rust::{
+    basic_types::{BTToString, NodeStatus, PortsList},
+    macros::{define_ports, input_port},
+    nodes::{AsyncNodeHalt, AsyncStatefulActionNode, AsyncTick, NodeError, NodePorts},
+};
 use bt_derive::bt_node;
 use futures::future::BoxFuture;
 use log::info;
@@ -17,9 +21,9 @@ impl AsyncTick for StatusNode {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             let status: NodeStatus = self.config.get_input("status").await?;
-    
+
             info!("I am a node that returns {}!", status.bt_to_string());
-    
+
             Ok(status)
         })
     }
@@ -43,14 +47,13 @@ impl AsyncTick for SuccessThenFailure {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             let max_iters: usize = self.config.get_input("iters").await?;
-            
+
             info!("SuccessThenFailure!");
-            
+
             if self.iter < max_iters {
                 self.iter += 1;
                 Ok(NodeStatus::Success)
-            }
-            else {
+            } else {
                 Ok(NodeStatus::Failure)
             }
         })
@@ -72,9 +75,9 @@ impl AsyncTick for EchoNode {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             let msg: String = self.config.get_input("msg").await?;
-            
+
             info!("{msg}");
-            
+
             Ok(NodeStatus::Success)
         })
     }
@@ -94,17 +97,12 @@ pub struct RunForNode {
     counter: usize,
 }
 
-// impl AsyncTick for StatusNode {
-//     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
-//         Box::pin(async move {
-//             Ok(NodeStatus::Idle)
-//         })
-//     }
-// }
-
 impl NodePorts for RunForNode {
     fn provided_ports(&self) -> PortsList {
-        define_ports!(input_port!("iters"), input_port!("status", NodeStatus::Success))
+        define_ports!(
+            input_port!("iters"),
+            input_port!("status", NodeStatus::Success)
+        )
     }
 }
 
@@ -112,7 +110,7 @@ impl AsyncStatefulActionNode for RunForNode {
     fn on_start(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             info!("on_start()");
-    
+
             Ok(NodeStatus::Running)
         })
     }
@@ -120,13 +118,12 @@ impl AsyncStatefulActionNode for RunForNode {
     fn on_running(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             let limit: usize = self.config.get_input("iters").await?;
-    
+
             if self.counter < limit {
                 info!("RunFor {}", self.counter);
                 self.counter += 1;
                 Ok(NodeStatus::Running)
-            }
-            else {
+            } else {
                 Ok(self.config.get_input("status").await?)
             }
         })

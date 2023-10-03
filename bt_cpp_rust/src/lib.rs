@@ -13,16 +13,16 @@ pub mod derive {
 }
 
 // Re-exports for convenience
-pub use tree::Factory;
 pub use blackboard::Blackboard;
 pub use derive::bt_node;
+pub use tree::Factory;
 
 extern crate futures as futures_internal;
 extern crate tokio as tokio_internal;
 
 pub mod sync {
-    pub use futures::{future::BoxFuture, executor::block_on};
-    
+    pub use futures::{executor::block_on, future::BoxFuture};
+
     pub use tokio::sync::Mutex;
     pub use tokio::task::spawn_blocking;
 }
