@@ -261,7 +261,7 @@ fn create_bt_node(
                     // impl empty tick function
                     extra_impls = extra_impls.concat_blocks(quote! {
                         impl ::bt_cpp_rust::nodes::AsyncTick for #item_ident {
-                            fn tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                            fn tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                                 ::std::boxed::Box::pin(async move {
                                     Ok(::bt_cpp_rust::basic_types::NodeStatus::Idle)
                                 })
@@ -273,11 +273,11 @@ fn create_bt_node(
                         "Async" => {
                             extra_impls = extra_impls.concat_blocks(quote! {
                                 impl ::bt_cpp_rust::nodes::action::SyncStatefulActionNode for #item_ident {
-                                    fn on_start(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                                    fn on_start(&mut self) -> ::bt_cpp_rust::NodeResult {
                                         ::bt_cpp_rust::sync::block_on(::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_start(self))
                                     }
 
-                                    fn on_running(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                                    fn on_running(&mut self) -> ::bt_cpp_rust::NodeResult {
                                         ::bt_cpp_rust::sync::block_on(::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_running(self))
                                     }
 
@@ -290,13 +290,13 @@ fn create_bt_node(
                         "Sync" => {
                             extra_impls = extra_impls.concat_blocks(quote! {
                                 impl ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode for #item_ident {
-                                    fn on_start(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                                    fn on_start(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                                         ::std::boxed::Box::pin(async move {
                                             ::bt_cpp_rust::sync::spawn_blocking(move || ::bt_cpp_rust::nodes::action::SyncStatefulActionNode::on_start(self)).await
                                         })
                                     }
 
-                                    fn on_running(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                                    fn on_running(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                                         ::std::boxed::Box::pin(async move {
                                             ::bt_cpp_rust::sync::spawn_blocking(move || ::bt_cpp_rust::nodes::action::SyncStatefulActionNode::on_running(self)).await
                                         })
@@ -398,7 +398,7 @@ fn create_bt_node(
         "Async" => {
             extra_impls = extra_impls.concat_blocks(quote! {
                 impl ::bt_cpp_rust::nodes::SyncTick for #item_ident {
-                    fn tick(&mut self) -> Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError> {
+                    fn tick(&mut self) -> ::bt_cpp_rust::NodeResult {
                         Err(::bt_cpp_rust::nodes::NodeError::UnreachableTick)
                     }
                 }
@@ -409,7 +409,7 @@ fn create_bt_node(
         "Sync" => {
             extra_impls = extra_impls.concat_blocks(quote! {
                 impl ::bt_cpp_rust::nodes::AsyncTick for #item_ident {
-                    fn tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+                    fn tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                         ::std::boxed::Box::pin(async move {
                             ::bt_cpp_rust::sync::spawn_blocking(|| <#item_ident as ::bt_cpp_rust::nodes::SyncTick>::tick(self)).await
                         })
@@ -473,7 +473,7 @@ fn create_bt_node(
 /// ===
 ///
 /// ```rust
-/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodeError, AsyncHalt, NodePorts}, sync::BoxFuture};
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodeResult, AsyncHalt, NodePorts}, sync::BoxFuture};
 ///
 /// // Here we are specifying a `SyncActionNode` as the node type.
 /// #[bt_node(SyncActionNode)]
@@ -482,7 +482,7 @@ fn create_bt_node(
 ///
 /// // Now I need to `impl TreeNode`
 /// impl AsyncTick for MyActionNode {
-///     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+///     fn tick(&mut self) -> BoxFuture<NodeResult> {
 ///         Box::pin(async move {
 ///             // Do something here
 ///             // ...
@@ -544,7 +544,7 @@ fn create_bt_node(
 /// ## Example
 ///
 /// ```rust
-/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodePorts, NodeError, AsyncHalt}, sync::BoxFuture};
+/// use bt_cpp_rust::{bt_node, basic_types::NodeStatus, nodes::{AsyncTick, NodePorts, NodeResult, AsyncHalt}, sync::BoxFuture};
 ///
 /// #[bt_node(SyncActionNode)]
 /// struct MyActionNode {
@@ -556,7 +556,7 @@ fn create_bt_node(
 ///
 /// // Now I need to `impl TreeNode`
 /// impl AsyncTick for MyActionNode {
-///     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+///     fn tick(&mut self) -> BoxFuture<NodeResult> {
 ///         Box::pin(async move {
 ///             Ok(NodeStatus::Success)
 ///         })
@@ -633,7 +633,7 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
                 Box::new(self.clone())
             }
 
-            fn execute_action_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_action_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
                     match self.tick().await? {
                         ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
@@ -675,7 +675,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 ::std::boxed::Box::pin(async move {
                     match self.children.get(index) {
                         Some(child) => {
-                            if child.lock().await.status() == NodeStatus::Running {
+                            if child.lock().await.status() == ::bt_cpp_rust::nodes::NodeStatus::Running {
                                 ::bt_cpp_rust::nodes::AsyncHalt::halt(&mut (*child.lock().await)).await;
                             }
                             Ok(child.lock().await.reset_status())
@@ -714,7 +714,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
         }
 
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
                     <Self as ::bt_cpp_rust::nodes::AsyncTick>::tick(self).await
                 })
@@ -777,7 +777,7 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
         }
 
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
                     if self.child.is_none() {
                         return Err(::bt_cpp_rust::nodes::NodeError::ChildMissing);
@@ -809,7 +809,7 @@ pub fn derive_sync_action_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
                     match <Self as ::bt_cpp_rust::nodes::ActionNode>::execute_action_tick(self).await? {
                         ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
@@ -832,7 +832,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident where #ident: ::bt_cpp_rust::nodes::AsyncStatefulActionNode {
-            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<Result<::bt_cpp_rust::basic_types::NodeStatus, ::bt_cpp_rust::nodes::NodeError>> {
+            fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
                     let prev_status = <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self);
 
@@ -840,14 +840,14 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
                         ::bt_cpp_rust::basic_types::NodeStatus::Idle => {
                             let new_status = ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_start(self).await?;
                             if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
-                                return Err(NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
+                                return Err(::bt_cpp_rust::nodes::NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
                             }
                             new_status
                         }
                         ::bt_cpp_rust::basic_types::NodeStatus::Running => {
                             let new_status = ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_running(self).await?;
                             if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
-                                return Err(NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
+                                return Err(::bt_cpp_rust::nodes::NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
                             }
                             new_status
                         }

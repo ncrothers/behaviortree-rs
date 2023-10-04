@@ -1,7 +1,7 @@
 use bt_cpp_rust::{
     basic_types::{BTToString, NodeStatus, PortsList},
     macros::{define_ports, input_port},
-    nodes::{AsyncHalt, AsyncStatefulActionNode, AsyncTick, NodeError, NodePorts},
+    nodes::{AsyncHalt, AsyncStatefulActionNode, AsyncTick, NodePorts, NodeResult},
 };
 use bt_derive::bt_node;
 use futures::future::BoxFuture;
@@ -18,7 +18,7 @@ pub fn test_setup() {
 pub struct StatusNode {}
 
 impl AsyncTick for StatusNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let status: NodeStatus = self.config.get_input("status").await?;
 
@@ -44,7 +44,7 @@ pub struct SuccessThenFailure {
 }
 
 impl AsyncTick for SuccessThenFailure {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let max_iters: usize = self.config.get_input("iters").await?;
 
@@ -72,7 +72,7 @@ impl AsyncHalt for SuccessThenFailure {}
 pub struct EchoNode {}
 
 impl AsyncTick for EchoNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let msg: String = self.config.get_input("msg").await?;
 
@@ -107,7 +107,7 @@ impl NodePorts for RunForNode {
 }
 
 impl AsyncStatefulActionNode for RunForNode {
-    fn on_start(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn on_start(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             info!("on_start()");
 
@@ -115,7 +115,7 @@ impl AsyncStatefulActionNode for RunForNode {
         })
     }
 
-    fn on_running(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn on_running(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let limit: usize = self.config.get_input("iters").await?;
 

@@ -5,8 +5,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts,
-        TreeNodeDefaults,
+        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
     },
 };
 
@@ -36,7 +35,7 @@ pub struct RetryNode {
 }
 
 impl AsyncTick for RetryNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             // Load num_cycles from the port value
             self.max_attempts = self.config.get_input("num_attempts").await?;

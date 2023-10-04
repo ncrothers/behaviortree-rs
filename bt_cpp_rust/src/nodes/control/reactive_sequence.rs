@@ -3,9 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, TreeNodePtr,
-    },
+    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
 };
 
 /// The ReactiveSequence is similar to a ParallelNode.
@@ -26,7 +24,7 @@ pub struct ReactiveSequenceNode {
 }
 
 impl AsyncTick for ReactiveSequenceNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let mut all_skipped = true;
 

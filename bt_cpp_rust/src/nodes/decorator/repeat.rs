@@ -5,8 +5,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts,
-        TreeNodeDefaults,
+        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
     },
 };
 
@@ -36,7 +35,7 @@ pub struct RepeatNode {
 }
 
 impl AsyncTick for RepeatNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             // Load num_cycles from the port value
             self.num_cycles = self.config.get_input("num_cycles").await?;

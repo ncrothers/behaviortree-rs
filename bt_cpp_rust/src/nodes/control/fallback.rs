@@ -3,10 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts,
-        TreeNodePtr,
-    },
+    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
 };
 
 /// The FallbackNode is used to try different strategies,
@@ -28,7 +25,7 @@ pub struct FallbackNode {
 }
 
 impl AsyncTick for FallbackNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             if self.status == NodeStatus::Idle {
                 self.all_skipped = true;

@@ -5,8 +5,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts,
-        TreeNodeDefaults,
+        AsyncHalt, AsyncTick, DecoratorNode, NodePorts, NodeResult, TreeNodeDefaults,
     },
 };
 
@@ -28,7 +27,7 @@ pub struct RunOnceNode {
 }
 
 impl AsyncTick for RunOnceNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let skip = self.config.get_input("then_skip").await?;
 

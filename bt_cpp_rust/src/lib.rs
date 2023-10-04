@@ -16,6 +16,7 @@ pub mod derive {
 pub use blackboard::Blackboard;
 pub use derive::bt_node;
 pub use tree::Factory;
+pub use nodes::NodeResult;
 
 extern crate futures as futures_internal;
 extern crate tokio as tokio_internal;

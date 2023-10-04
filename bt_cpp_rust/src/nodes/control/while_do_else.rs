@@ -3,9 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, TreeNodePtr,
-    },
+    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
 };
 
 /// WhileDoElse must have exactly 2 or 3 children.
@@ -23,7 +21,7 @@ use crate::{
 pub struct WhileDoElseNode {}
 
 impl AsyncTick for WhileDoElseNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let children_count = self.children.len();
             // Node should only have 2 or 3 children

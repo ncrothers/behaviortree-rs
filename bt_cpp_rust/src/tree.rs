@@ -1,6 +1,4 @@
-use std::{
-    collections::HashMap, io::Cursor, string::FromUtf8Error,
-};
+use std::{collections::HashMap, io::Cursor, string::FromUtf8Error};
 
 use futures::future::BoxFuture;
 use log::{debug, info};
@@ -19,8 +17,8 @@ use crate::{
     blackboard::{Blackboard, BlackboardString},
     macros::build_node_ptr,
     nodes::{
-        self, ActionNodeBase, ControlNodeBase, DecoratorNodeBase, NodeError, TreeNodeBase,
-        TreeNodePtr,
+        self, ActionNodeBase, ControlNodeBase, DecoratorNodeBase, NodeResult,
+        TreeNodeBase, TreeNodePtr,
     },
 };
 
@@ -81,7 +79,7 @@ impl AsyncTree {
         Self { root }
     }
 
-    async fn tick_root(&mut self, opt: TickOption) -> Result<NodeStatus, NodeError> {
+    async fn tick_root(&mut self, opt: TickOption) -> NodeResult {
         let mut status = NodeStatus::Idle;
 
         while status == NodeStatus::Idle
@@ -99,15 +97,15 @@ impl AsyncTree {
         Ok(status)
     }
 
-    pub async fn tick_exactly_once(&mut self) -> Result<NodeStatus, NodeError> {
+    pub async fn tick_exactly_once(&mut self) -> NodeResult {
         self.tick_root(TickOption::ExactlyOnce).await
     }
 
-    pub async fn tick_once(&mut self) -> Result<NodeStatus, NodeError> {
+    pub async fn tick_once(&mut self) -> NodeResult {
         self.tick_root(TickOption::OnceUnlessWokenUp).await
     }
 
-    pub async fn tick_while_running(&mut self) -> Result<NodeStatus, NodeError> {
+    pub async fn tick_while_running(&mut self) -> NodeResult {
         self.tick_root(TickOption::WhileRunning).await
     }
 
@@ -128,15 +126,15 @@ impl SyncTree {
         }
     }
 
-    pub fn tick_exactly_once(&mut self) -> Result<NodeStatus, NodeError> {
+    pub fn tick_exactly_once(&mut self) -> NodeResult {
         futures::executor::block_on(self.root.tick_exactly_once())
     }
 
-    pub fn tick_once(&mut self) -> Result<NodeStatus, NodeError> {
+    pub fn tick_once(&mut self) -> NodeResult {
         futures::executor::block_on(self.root.tick_once())
     }
 
-    pub fn tick_while_running(&mut self) -> Result<NodeStatus, NodeError> {
+    pub fn tick_while_running(&mut self) -> NodeResult {
         futures::executor::block_on(self.root.tick_while_running())
     }
 
@@ -501,9 +499,11 @@ impl Factory {
                             for (attr, value) in attributes.iter() {
                                 // Set autoremapping to true or false
                                 if attr == "_autoremap" {
-                                    child_blackboard.enable_auto_remapping(
-                                        <bool as FromString>::from_string(value)?,
-                                    ).await;
+                                    child_blackboard
+                                        .enable_auto_remapping(<bool as FromString>::from_string(
+                                            value,
+                                        )?)
+                                        .await;
                                     continue;
                                 } else if !attr.is_allowed_port_name() {
                                     continue;
@@ -511,7 +511,9 @@ impl Factory {
 
                                 if let Some(port_name) = value.strip_bb_pointer() {
                                     // Add remapping if `value` is a Blackboard pointer
-                                    child_blackboard.add_subtree_remapping(attr.clone(), port_name).await;
+                                    child_blackboard
+                                        .add_subtree_remapping(attr.clone(), port_name)
+                                        .await;
                                 } else {
                                     // Set string value into Blackboard
                                     child_blackboard.set(attr, value.clone()).await;

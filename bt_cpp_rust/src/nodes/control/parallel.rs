@@ -7,8 +7,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts,
-        TreeNodeDefaults, TreeNodePtr,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
     },
 };
 
@@ -68,7 +67,7 @@ impl ParallelNode {
 }
 
 impl AsyncTick for ParallelNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             self.success_threshold = self.config().get_input("success_count").await.unwrap();
             self.failure_threshold = self.config().get_input("failure_count").await.unwrap();

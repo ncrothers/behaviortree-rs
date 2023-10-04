@@ -1,8 +1,4 @@
-use std::{
-    any::TypeId,
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{any::TypeId, collections::HashMap, sync::Arc};
 
 use futures::future::BoxFuture;
 use thiserror::Error;
@@ -10,8 +6,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, BTToString, FromString, ParseStr, PortDirection,
-        PortValue, PortsRemapping, TreeNodeManifest,
+        self, get_remapped_key, BTToString, FromString, ParseStr, PortDirection, PortValue,
+        PortsRemapping, TreeNodeManifest,
     },
     blackboard::BlackboardString,
     tree::ParseError,
@@ -53,6 +49,8 @@ pub trait TreeNodeBase:
 /// to for it to compile)
 pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase + Send>>;
 
+pub type NodeResult = Result<NodeStatus, NodeError>;
+
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
 /// the `tick()` is defined as well as the ports, with
@@ -68,7 +66,7 @@ pub trait NodePorts {
 /// the `tick()` is defined as well as the ports, with
 /// `provided_ports()`.
 pub trait SyncTick {
-    fn tick(&mut self) -> Result<NodeStatus, NodeError>;
+    fn tick(&mut self) -> NodeResult;
 }
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
@@ -76,7 +74,7 @@ pub trait SyncTick {
 /// the `tick()` is defined as well as the ports, with
 /// `provided_ports()`.
 pub trait AsyncTick {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
+    fn tick(&mut self) -> BoxFuture<NodeResult>;
 }
 
 /// Trait that defines the `halt()` function, which gets called
@@ -134,7 +132,7 @@ pub trait TreeNodeDefaults {
 /// Automatically implemented for all node types. The implementation
 /// differs based on the `NodeType`.
 pub trait ExecuteTick {
-    fn execute_tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>>;
+    fn execute_tick(&mut self) -> BoxFuture<NodeResult>;
 }
 
 /// TODO

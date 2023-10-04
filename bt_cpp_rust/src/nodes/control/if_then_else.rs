@@ -4,9 +4,7 @@ use log::warn;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, TreeNodePtr,
-    },
+    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
 };
 
 /// IfThenElseNode must have exactly 2 or 3 children. This node is NOT reactive.
@@ -28,7 +26,7 @@ pub struct IfThenElseNode {
 }
 
 impl AsyncTick for IfThenElseNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let children_count = self.children.len();
             // Node should only have 2 or 3 children

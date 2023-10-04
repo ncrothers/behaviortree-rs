@@ -7,8 +7,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts,
-        TreeNodeDefaults, TreeNodePtr,
+        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
     },
 };
 
@@ -44,7 +43,7 @@ impl ParallelAllNode {
 }
 
 impl AsyncTick for ParallelAllNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             self.failure_threshold = self.config().get_input("max_failures").await?;
 

@@ -3,9 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, TreeNodePtr,
-    },
+    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
 };
 
 /// The SequenceNode is used to tick children in an ordered sequence.
@@ -26,7 +24,7 @@ pub struct SequenceNode {
 }
 
 impl AsyncTick for SequenceNode {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             if self.status == NodeStatus::Idle {
                 self.all_skipped = true;
