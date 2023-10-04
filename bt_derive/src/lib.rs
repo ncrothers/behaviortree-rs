@@ -667,7 +667,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 self.children.push(child);
             }
 
-            fn children(&self) -> &Vec<TreeNodePtr> {
+            fn children(&self) -> &Vec<::bt_cpp_rust::nodes::TreeNodePtr> {
                 &self.children
             }
 

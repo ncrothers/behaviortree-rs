@@ -52,7 +52,8 @@ where
     }
 }
 
-/// Struct that stores arbitrary data in a `HashMap<String, Box<dyn Any>>`.
+/// Struct that stores arbitrary data in a `HashMap<String, Box<dyn Any + Send>>`. Note the
+/// stored data type _must_ implement `Send`.
 ///
 /// # Usage
 ///
