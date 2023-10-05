@@ -18,7 +18,7 @@ use crate::{
     macros::build_node_ptr,
     nodes::{
         self, ActionNodeBase, ControlNodeBase, DecoratorNodeBase, NodeResult,
-        TreeNodeBase, TreeNodePtr,
+        TreeNodeBase, TreeNodePtr, AsyncHalt,
     },
 };
 
@@ -112,6 +112,10 @@ impl AsyncTree {
     pub async fn root_blackboard(&self) -> Blackboard {
         self.root.lock().await.config().blackboard.clone()
     }
+
+    pub async fn halt_tree(&mut self) {
+        AsyncHalt::halt(&mut *self.root.lock().await).await;
+    }
 }
 
 #[derive(Debug)]
@@ -140,6 +144,10 @@ impl SyncTree {
 
     pub fn root_blackboard(&self) -> Blackboard {
         futures::executor::block_on(self.root.root_blackboard())
+    }
+
+    pub async fn halt_tree(&mut self) {
+        futures::executor::block_on(self.root.halt_tree());
     }
 }
 
@@ -429,6 +437,7 @@ impl Factory {
                             let new_prefix = path_prefix.to_owned() + &node_name;
 
                             node.config().path = new_prefix;
+                            node.config().blackboard = blackboard.clone();
 
                             let children = self
                                 .build_children(
@@ -455,6 +464,7 @@ impl Factory {
                             let new_prefix = path_prefix.to_owned() + &node_name;
 
                             node.config().path = new_prefix;
+                            node.config().blackboard = blackboard.clone();
 
                             let child = match self
                                 .build_child(

@@ -121,6 +121,7 @@ pub trait RuntimeType {
 /// ```
 pub trait TreeNodeDefaults {
     fn name(&self) -> &String;
+    fn path(&self) -> &String;
     fn status(&self) -> NodeStatus;
     fn reset_status(&mut self);
     fn set_status(&mut self, status: NodeStatus);

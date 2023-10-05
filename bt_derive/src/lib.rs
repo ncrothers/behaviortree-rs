@@ -589,6 +589,10 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
                 &self.name
             }
 
+            fn path(&self) -> &String {
+                &self.config.path
+            }
+
             fn status(&self) -> ::bt_cpp_rust::basic_types::NodeStatus {
                 self.status.clone()
             }
@@ -639,6 +643,7 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
 
             fn execute_action_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
+                    ::log::debug!("[bt_cpp_rust]: {}::tick()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::name(self));
                     match self.tick().await? {
                         ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
                         status => Ok(status)
@@ -720,6 +725,7 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
             fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
+                    ::log::debug!("[bt_cpp_rust]: {}::tick()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::path(self));
                     <Self as ::bt_cpp_rust::nodes::AsyncTick>::tick(self).await
                 })
             }
@@ -787,6 +793,7 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
                         return Err(::bt_cpp_rust::nodes::NodeError::ChildMissing);
                     }
 
+                    ::log::debug!("[bt_cpp_rust]: {}::tick()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::name(self));
                     self.tick().await
                 })
             }
@@ -815,6 +822,7 @@ pub fn derive_sync_action_node(input: TokenStream) -> TokenStream {
         impl ::bt_cpp_rust::nodes::ExecuteTick for #ident {
             fn execute_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
+                    ::log::debug!("[bt_cpp_rust]: {}::tick()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::name(self));
                     match <Self as ::bt_cpp_rust::nodes::ActionNode>::execute_action_tick(self).await? {
                         ::bt_cpp_rust::basic_types::NodeStatus::Running => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
                         status => Ok(status)
@@ -842,6 +850,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
 
                     let new_status = match prev_status {
                         ::bt_cpp_rust::basic_types::NodeStatus::Idle => {
+                            ::log::debug!("[bt_cpp_rust]: {}::on_start()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::path(self));
                             let new_status = ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_start(self).await?;
                             if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
                                 return Err(::bt_cpp_rust::nodes::NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
@@ -849,6 +858,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
                             new_status
                         }
                         ::bt_cpp_rust::basic_types::NodeStatus::Running => {
+                            ::log::debug!("[bt_cpp_rust]: {}::on_running()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::path(self));
                             let new_status = ::bt_cpp_rust::nodes::action::AsyncStatefulActionNode::on_running(self).await?;
                             if matches!(new_status, ::bt_cpp_rust::basic_types::NodeStatus::Idle) {
                                 return Err(::bt_cpp_rust::nodes::NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
