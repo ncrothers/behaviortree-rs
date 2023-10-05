@@ -1,4 +1,4 @@
-use bt_cpp_rust::{blackboard::Blackboard, macros::register_node, tree::Factory};
+use bt_cpp_rust::{blackboard::Blackboard, macros::register_action_node, tree::Factory};
 use log::{error, info};
 
 mod nodes;
@@ -26,7 +26,7 @@ fn fallback() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::create();
 
@@ -59,8 +59,8 @@ fn if_then_else() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
 
     let blackboard = Blackboard::create();
 
@@ -94,8 +94,8 @@ fn parallel_all() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
 
     let blackboard = Blackboard::create();
 
@@ -131,8 +131,8 @@ fn parallel() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
 
     let blackboard = Blackboard::create();
 
@@ -165,8 +165,8 @@ fn reactive_fallback() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
 
     let blackboard = Blackboard::create();
 
@@ -200,9 +200,9 @@ fn reactive_sequence() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
-    register_node!(factory, "RunForNode", RunForNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "RunForNode", RunForNode);
 
     let blackboard = Blackboard::create();
 
@@ -236,9 +236,9 @@ fn sequence_star() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
-    register_node!(factory, "RunForNode", RunForNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "RunForNode", RunForNode);
 
     let blackboard = Blackboard::create();
 
@@ -272,9 +272,9 @@ fn sequence_vanilla() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
-    register_node!(factory, "RunForNode", RunForNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "RunForNode", RunForNode);
 
     let blackboard = Blackboard::create();
 
@@ -307,9 +307,9 @@ fn while_do_else() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "EchoNode", EchoNode);
-    register_node!(factory, "RunForNode", RunForNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
+    register_action_node!(factory, "RunForNode", RunForNode);
 
     let blackboard = Blackboard::create();
 

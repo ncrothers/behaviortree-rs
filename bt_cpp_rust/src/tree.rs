@@ -225,13 +225,14 @@ impl Factory {
             Err(ParseError::NoMainTree)
         } else if self.tree_roots.len() == 1 {
             // Unwrap is safe because we check that tree_roots.len() == 1
-            let main_tree_id = self.tree_roots.iter().next().unwrap().0;
+            let main_tree_id = self.tree_roots.iter().next().unwrap().0.clone();
 
-            self.instantiate_sync_tree(blackboard, main_tree_id)
+            self.instantiate_sync_tree(blackboard, &main_tree_id)
         } else {
             // Unwrap is safe here because there are more than 1 root and
             // self.main_tree_id is Some
-            self.instantiate_sync_tree(blackboard, self.main_tree_id.as_ref().unwrap())
+            let main_tree_id = self.main_tree_id.clone().unwrap();
+            self.instantiate_sync_tree(blackboard, &main_tree_id)
         }
     }
 
@@ -246,19 +247,19 @@ impl Factory {
             Err(ParseError::NoMainTree)
         } else if self.tree_roots.len() == 1 {
             // Unwrap is safe because we check that tree_roots.len() == 1
-            let main_tree_id = self.tree_roots.iter().next().unwrap().0;
+            let main_tree_id = self.tree_roots.iter().next().unwrap().0.clone();
 
-            self.instantiate_async_tree(blackboard, main_tree_id).await
+            self.instantiate_async_tree(blackboard, &main_tree_id).await
         } else {
             // Unwrap is safe here because there are more than 1 root and
             // self.main_tree_id is Some
-            self.instantiate_async_tree(blackboard, self.main_tree_id.as_ref().unwrap())
-                .await
+            let main_tree_id = self.main_tree_id.clone().unwrap();
+            self.instantiate_async_tree(blackboard, &main_tree_id).await
         }
     }
 
     pub fn instantiate_sync_tree(
-        &self,
+        &mut self,
         blackboard: &Blackboard,
         main_tree_id: &str,
     ) -> Result<SyncTree, ParseError> {
@@ -278,7 +279,7 @@ impl Factory {
     }
 
     pub async fn instantiate_async_tree(
-        &self,
+        &mut self,
         blackboard: &Blackboard,
         main_tree_id: &str,
     ) -> Result<AsyncTree, ParseError> {
@@ -299,6 +300,7 @@ impl Factory {
         node_name: &String,
         attributes: Attributes<'a>,
         path_prefix: &String,
+        blackboard: &Blackboard
     ) -> Result<TreeNodePtr, ParseError> {
         // Get clone of node from node_map based on tag name
         let node_ref = self.get_node(node_name)?;
@@ -312,6 +314,8 @@ impl Factory {
         let new_prefix = path_prefix.to_owned() + node_name;
 
         node.config().path = new_prefix;
+        // Set blackboard
+        node.config().blackboard = blackboard.clone();
 
         // Get list of defined ports from node
 
@@ -547,7 +551,7 @@ impl Factory {
                             .await?
                         }
                         _ => {
-                            self.build_leaf_node(&node_name, attributes, path_prefix)
+                            self.build_leaf_node(&node_name, attributes, path_prefix, blackboard)
                                 .await?
                         }
                     };
@@ -579,25 +583,32 @@ impl Factory {
 
         // TODO: Parse for correctness
 
-        // Try to match root tag
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) => {
-                let name = String::from_utf8(e.name().0.into())?;
-                let attributes = e.attributes().to_map()?;
+        loop {
+            // Try to match root tag
+            match reader.read_event_into(&mut buf)? {
+                // Ignore XML declaration tag <?xml ...
+                Event::Decl(_) => buf.clear(),
+                Event::Start(e) => {
+                    let name = String::from_utf8(e.name().0.into())?;
+                    let attributes = e.attributes().to_map()?;
 
-                if name.as_str() != "root" {
-                    return Err(ParseError::ExpectedRoot(name));
-                }
+                    if name.as_str() != "root" {
+                        buf.clear();
+                        continue;
+                    }
+    
+                    if let Some(tree_id) = attributes.get("main_tree_to_execute") {
+                        info!("Found main tree ID: {tree_id}");
+                        self.main_tree_id = Some(tree_id.clone());
+                    }
 
-                if let Some(tree_id) = attributes.get("main_tree_to_execute") {
-                    info!("Found main tree ID: {tree_id}");
-                    self.main_tree_id = Some(tree_id.clone());
+                    buf.clear();
+                    break;
                 }
+                _ => return Err(ParseError::MissingRoot),
             }
-            _ => return Err(ParseError::MissingRoot),
         }
 
-        buf.clear();
 
         // Register each BehaviorTree in the XML
         loop {

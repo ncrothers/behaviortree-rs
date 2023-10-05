@@ -1,5 +1,5 @@
 use bt_cpp_rust::{
-    basic_types::NodeStatus, blackboard::Blackboard, macros::register_node, tree::Factory,
+    basic_types::NodeStatus, blackboard::Blackboard, macros::register_action_node, tree::Factory,
 };
 use log::{error, info};
 
@@ -26,7 +26,7 @@ fn force_failure() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::create();
 
@@ -61,7 +61,7 @@ fn force_success() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::create();
 
@@ -96,7 +96,7 @@ fn inverter() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::create();
 
@@ -134,8 +134,8 @@ fn keep_running_until_failure() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "RunFor", RunForNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "RunFor", RunForNode);
 
     let blackboard = Blackboard::create();
 
@@ -168,9 +168,9 @@ fn repeat() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "RunFor", RunForNode);
-    register_node!(factory, "SuccessThenFailure", SuccessThenFailure);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "RunFor", RunForNode);
+    register_action_node!(factory, "SuccessThenFailure", SuccessThenFailure);
 
     let blackboard = Blackboard::create();
 
@@ -207,9 +207,9 @@ fn retry() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "RunFor", RunForNode);
-    register_node!(factory, "SuccessThenFailure", SuccessThenFailure);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "RunFor", RunForNode);
+    register_action_node!(factory, "SuccessThenFailure", SuccessThenFailure);
 
     let blackboard = Blackboard::create();
 
@@ -244,9 +244,9 @@ fn run_once() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
-    register_node!(factory, "RunFor", RunForNode);
-    register_node!(factory, "SuccessThenFailure", SuccessThenFailure);
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "RunFor", RunForNode);
+    register_action_node!(factory, "SuccessThenFailure", SuccessThenFailure);
 
     let blackboard = Blackboard::create();
 

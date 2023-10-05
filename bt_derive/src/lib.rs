@@ -585,6 +585,10 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::bt_cpp_rust::nodes::TreeNodeDefaults for #ident {
+            fn name(&self) -> &String {
+                &self.name
+            }
+
             fn status(&self) -> ::bt_cpp_rust::basic_types::NodeStatus {
                 self.status.clone()
             }

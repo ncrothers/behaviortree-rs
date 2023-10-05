@@ -1,5 +1,5 @@
 use bt_cpp_rust::{
-    basic_types::NodeStatus, blackboard::Blackboard, macros::register_node, tree::Factory,
+    basic_types::NodeStatus, blackboard::Blackboard, macros::register_action_node, tree::Factory,
 };
 
 use crate::nodes::StatusNode;
@@ -25,7 +25,7 @@ fn main_tree_attr() {
     .to_string();
 
     let mut factory = Factory::new();
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);
@@ -47,7 +47,7 @@ fn main_tree_attr() {
     .to_string();
 
     let mut factory = Factory::new();
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);
@@ -65,7 +65,7 @@ fn main_tree_attr() {
     .to_string();
 
     let mut factory = Factory::new();
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);
@@ -96,7 +96,7 @@ fn subtrees() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);
@@ -154,7 +154,7 @@ fn ignore_treenodesmodel() {
 
     let mut factory = Factory::new();
 
-    register_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "StatusNode", StatusNode);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);

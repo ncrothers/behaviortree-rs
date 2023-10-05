@@ -104,14 +104,15 @@ macro_rules! __output_port {
 #[doc(inline)]
 pub use __output_port as output_port;
 
+#[macro_export]
 #[doc(hidden)]
 macro_rules! __build_node_ptr {
-    ($b:expr, $n:expr, $t:ty) => {
+    ($b:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
 
             let node_config = NodeConfig::new($b.clone());
-            let mut node = <$t>::new($n, node_config);
+            let mut node = <$t>::new($n, node_config, $($x),*);
             let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_type(), $n, node.provided_ports(), "");
             node.config().set_manifest(::std::sync::Arc::new(manifest));
             let node = Box::new(node);
@@ -123,43 +124,17 @@ macro_rules! __build_node_ptr {
     };
 }
 #[doc(inline)]
-pub(crate) use __build_node_ptr as build_node_ptr;
+pub use __build_node_ptr as build_node_ptr;
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __register_node {
-    ($f:ident, $n:expr, $t:ty) => {
+macro_rules! __build_node {
+    ($f:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
-            use $crate::basic_types::{NodeType, TreeNodeManifest};
-            use $crate::tree::NodePtrType;
 
             let blackboard = $f.blackboard();
             let node_config = NodeConfig::new(blackboard.clone());
-            let mut node = <$t>::new($n, node_config);
-            let manifest = TreeNodeManifest {
-                node_type: node.node_type(),
-                registration_id: $n.to_string(),
-                ports: node.provided_ports(),
-                description: String::new(),
-            };
-            node.config().set_manifest(::std::sync::Arc::new(manifest));
-            match node.node_type() {
-                NodeType::Action => {
-                    $f.register_node($n, NodePtrType::Action(Box::new(node)));
-                }
-                _ => panic!("Currently unsupported NodeType")
-            };
-        }
-    };
-    ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
-        {
-            use $crate::nodes::{NodeConfig, GetNodeType, TreeNode, TreeNodeDefaults};
-            use $crate::basic_types::{NodeType, TreeNodeManifest};
-            use $crate::tree::NodePtrType;
-
-            let blackboard = $f.blackboard();
-            let node_config = NodeConfig::new(blackboard);
             let mut node = <$t>::new($n, node_config, $($x),*);
             let manifest = TreeNodeManifest {
                 node_type: node.node_type(),
@@ -167,15 +142,61 @@ macro_rules! __register_node {
                 ports: node.provided_ports(),
                 description: String::new(),
             };
-            node.config().set_manifest(::std::rc::Rc::new(manifest));
-            match node.node_type() {
-                NodeType::Action => {
-                    $f.register_node($n, NodePtrType::Action(Box::new(node)));
-                }
-                _ => panic!("Currently unsupported NodeType")
-            };
+            node.config().set_manifest(::std::sync::Arc::new(manifest));
+            node
         }
     };
 }
 #[doc(inline)]
-pub use __register_node as register_node;
+pub use __build_node as build_node;
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __register_action_node {
+    ($f:ident, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+        {
+            use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
+            use $crate::basic_types::{NodeType, TreeNodeManifest};
+            use $crate::tree::NodePtrType;
+
+            let node = $crate::macros::build_node!($f, $n, $t, $($x),*);
+            $f.register_node($n, NodePtrType::Action(Box::new(node)));
+        }
+    };
+}
+#[doc(inline)]
+pub use __register_action_node as register_action_node;
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __register_control_node {
+    ($f:ident, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+        {
+            use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
+            use $crate::basic_types::{NodeType, TreeNodeManifest};
+            use $crate::tree::NodePtrType;
+
+            let node = $crate::macros::build_node!($f, $n, $t, $($x),*);
+            $f.register_node($n, NodePtrType::Control(Box::new(node)));
+        }
+    };
+}
+#[doc(inline)]
+pub use __register_control_node as register_control_node;
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __register_decorator_node {
+    ($f:ident, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+        {
+            use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
+            use $crate::basic_types::{NodeType, TreeNodeManifest};
+            use $crate::tree::NodePtrType;
+
+            let node = $crate::macros::build_node!($f, $n, $t, $($x),*);
+            $f.register_node($n, NodePtrType::Decorator(Box::new(node)));
+        }
+    };
+}
+#[doc(inline)]
+pub use __register_decorator_node as register_decorator_node;
