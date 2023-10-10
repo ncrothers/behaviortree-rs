@@ -129,7 +129,7 @@ pub use __build_node_ptr as build_node_ptr;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __build_node {
-    ($f:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+    ($f:expr, $n:expr, $t:ty $(,$x:expr)* $(,)?) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
 
@@ -153,7 +153,7 @@ pub use __build_node as build_node;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __register_action_node {
-    ($f:ident, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+    ($f:ident, $n:expr, $t:ty $(,$x:expr)* ) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};
@@ -170,7 +170,7 @@ pub use __register_action_node as register_action_node;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __register_control_node {
-    ($f:ident, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+    ($f:ident, $n:expr, $t:ty $(,$x:tt)* ) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};
@@ -187,7 +187,7 @@ pub use __register_control_node as register_control_node;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __register_decorator_node {
-    ($f:ident, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+    ($f:ident, $n:expr, $t:ty $(,$x:tt)* ) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};

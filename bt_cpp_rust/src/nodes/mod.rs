@@ -160,6 +160,9 @@ pub enum NodeError {
     #[error("Couldn't find port [{0}]")]
     PortError(String),
     #[error("Couldn't parse port [{0}] value into specified type [{1}]")]
+    /// # Arguments
+    /// * Port name
+    /// * Expected type
     PortValueParseError(String, String),
     #[error("Couldn't find entry in blackboard [{0}]")]
     BlackboardError(String),
@@ -288,7 +291,7 @@ impl NodeConfig {
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub async fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
     where
-        T: BTToString + FromString + Clone + Send + 'static,
+        T: FromString + Clone + Send + 'static,
     {
         match self.input_ports.get(port) {
             Some(val) => {
@@ -342,7 +345,7 @@ impl NodeConfig {
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub fn get_input_sync<T>(&mut self, port: &str) -> Result<T, NodeError>
     where
-        T: BTToString + FromString + Clone + Send + 'static,
+        T: FromString + Clone + Send + 'static,
     {
         futures::executor::block_on(self.get_input(port))
     }
@@ -357,7 +360,7 @@ impl NodeConfig {
     /// - `"{foo}"` uses `"foo"` as the blackboard key
     pub async fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
     where
-        T: BTToString + Clone + Send + 'static,
+        T: Clone + Send + 'static,
     {
         match self.output_ports.get(port) {
             Some(port_value) => {
@@ -389,7 +392,7 @@ impl NodeConfig {
     /// - `"{foo}"` uses `"foo"` as the blackboard key
     pub async fn set_output_sync<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
     where
-        T: BTToString + Clone + Send + 'static,
+        T: Clone + Send + 'static,
     {
         futures::executor::block_on(self.set_output(port, value))
     }
