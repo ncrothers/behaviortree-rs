@@ -178,7 +178,9 @@ fn load_adjacent_controls() {
             <BehaviorTree ID="main">
                 <Sequence>
                     <Fallback>
-                        <StatusNode status="Failure" />
+                        <Fallback>
+                            <StatusNode status="Failure" />
+                        </Fallback>
                     </Fallback>
                     <Fallback>
                         <EchoNode msg="hello"/>

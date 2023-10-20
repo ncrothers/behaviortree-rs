@@ -490,15 +490,15 @@ impl Factory {
                             self.add_ports_to_node(&node, &node_name, attributes)
                                 .await?;
 
+                            // Advance pointer one time to skip the end tag
+                            let mut buf = Vec::new();
+                            reader.read_event_into(&mut buf)?;
+
                             node
                         }
                         // TODO: expand more
                         x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
                     };
-
-                    // Advance pointer one time to skip the end tag
-                    let mut buf = Vec::new();
-                    reader.read_event_into(&mut buf)?;
 
                     Some(node)
                 }
