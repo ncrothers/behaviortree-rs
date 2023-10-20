@@ -496,6 +496,10 @@ impl Factory {
                         x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
                     };
 
+                    // Advance pointer one time to skip the end tag
+                    let mut buf = Vec::new();
+                    reader.read_event_into(&mut buf)?;
+
                     Some(node)
                 }
                 // Leaf Node

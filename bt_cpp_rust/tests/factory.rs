@@ -2,7 +2,7 @@ use bt_cpp_rust::{
     basic_types::NodeStatus, blackboard::Blackboard, macros::register_action_node, tree::Factory,
 };
 
-use crate::nodes::StatusNode;
+use crate::nodes::{StatusNode, EchoNode};
 
 mod nodes;
 
@@ -155,6 +155,44 @@ fn ignore_treenodesmodel() {
     let mut factory = Factory::new();
 
     register_action_node!(factory, "StatusNode", StatusNode);
+
+    let blackboard = Blackboard::create();
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+
+    if tree.is_err() {
+        log::error!("{}", tree.as_ref().err().unwrap());
+    }
+
+    assert!(tree.is_ok());
+}
+
+#[test]
+fn load_adjacent_controls() {
+    let _ = pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Debug)
+        .is_test(false)
+        .try_init();
+
+    let xml = r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="main">
+                <Sequence>
+                    <Fallback>
+                        <StatusNode status="Failure" />
+                    </Fallback>
+                    <Fallback>
+                        <EchoNode msg="hello"/>
+                    </Fallback>
+                </Sequence>
+            </BehaviorTree>
+        </root>
+    "#
+    .to_string();
+
+    let mut factory = Factory::new();
+
+    register_action_node!(factory, "StatusNode", StatusNode);
+    register_action_node!(factory, "EchoNode", EchoNode);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);
