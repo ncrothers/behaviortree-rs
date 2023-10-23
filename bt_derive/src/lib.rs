@@ -643,7 +643,6 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
 
             fn execute_action_tick(&mut self) -> ::bt_cpp_rust::sync::BoxFuture<::bt_cpp_rust::NodeResult> {
                 ::std::boxed::Box::pin(async move {
-                    ::log::debug!("[bt_cpp_rust]: {}::tick()", <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::name(self));
                     match self.tick().await? {
                         ::bt_cpp_rust::basic_types::NodeStatus::Idle => Err(::bt_cpp_rust::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
                         status => Ok(status)
