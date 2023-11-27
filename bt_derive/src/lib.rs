@@ -882,6 +882,8 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
                     if matches!(<Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::status(self), ::bt_cpp_rust::basic_types::NodeStatus::Running) {
                         self.on_halted().await;
                     }
+
+                    <Self as ::bt_cpp_rust::nodes::TreeNodeDefaults>::reset_status(self);
                 })
             }
         }
