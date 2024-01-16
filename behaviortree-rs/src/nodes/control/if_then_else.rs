@@ -1,4 +1,4 @@
-use bt_derive::bt_node;
+use behaviortree_rs_derive::bt_node;
 use futures::future::BoxFuture;
 use log::warn;
 

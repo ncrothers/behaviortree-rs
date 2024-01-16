@@ -3,7 +3,7 @@ use behaviortree_rs::{
     macros::{define_ports, input_port},
     nodes::{AsyncHalt, AsyncStatefulActionNode, AsyncTick, NodePorts, NodeResult},
 };
-use bt_derive::bt_node;
+use behaviortree_rs_derive::bt_node;
 use futures::future::BoxFuture;
 use log::info;
 

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use bt_derive::bt_node;
+use behaviortree_rs_derive::bt_node;
 use futures::future::BoxFuture;
 
 use crate::{

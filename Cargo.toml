@@ -1,5 +1,5 @@
 [workspace]
 members = [
     "behaviortree-rs",
-    "bt_derive",
+    "behaviortree-rs-derive",
 ]

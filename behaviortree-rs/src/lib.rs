@@ -232,7 +232,7 @@ pub mod macros;
 pub mod tree;
 
 pub mod derive {
-    pub use bt_derive::*;
+    pub use behaviortree_rs_derive::*;
 }
 
 // Re-exports for convenience
