@@ -1,5 +1,5 @@
 [package]
-name = "bt_cpp_rust"
+name = "behaviortree-rs"
 version = "0.1.0"
 edition = "2021"
 
