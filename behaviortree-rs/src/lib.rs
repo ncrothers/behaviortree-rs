@@ -1,11 +1,11 @@
 /*!
-# bt-cpp-rust
+# behaviortree-rs
 
 Rust implementation of [BehaviorTree.CPP](https://github.com/BehaviorTree/BehaviorTree.CPP). Still a WIP. A table of features can be found below.
 
 ## Usage
 
-To create your own custom nodes in `bt-cpp-rust`, you need to derive certain traits which provide automatically-implemented functionality that you won't need to change. These provide access to the blackboard, config, ports, etc. You will also need to implement a few traits based on the type of node you're creating.
+To create your own custom nodes in `behaviortree-rs`, you need to derive certain traits which provide automatically-implemented functionality that you won't need to change. These provide access to the blackboard, config, ports, etc. You will also need to implement a few traits based on the type of node you're creating.
 
 ### Creating a node
 
@@ -13,8 +13,8 @@ To create your own node, use the `#[bt_node(...)]` macro. The argument to the ma
 
 For example, the following node definition:
 
-```rust
-use bt_cpp_rust::bt_node;
+```ignore
+use behaviortree_rs::bt_node;
 
 #[bt_node(SyncActionNode)]
 struct DummyActionNode {}
@@ -22,7 +22,7 @@ struct DummyActionNode {}
 
 Gets expanded to:
 
-```rust
+```ignore
 #[derive(Clone, Debug, TreeNodeDefaults, ActionNode, SyncActionNode)]
 struct DummyActionNode {
     name: String,
@@ -45,7 +45,7 @@ You are allowed to create this definition yourself, but it is _highly recommende
 
 Of course, you can add your own fields to the struct, which get included in the generated struct. Just add them to the definition, and the generated code will reflect it:
 
-```rust
+```ignore
 #[bt_node(SyncActionNode)]
 struct DummyActionNode {
     foo: String,
@@ -55,7 +55,7 @@ struct DummyActionNode {
 
 Gets expanded to:
 
-```rust
+```ignore
 #[derive(Clone, Debug, TreeNodeDefaults, ActionNode, SyncActionNode)]
 struct DummyActionNode {
     name: String,
@@ -80,7 +80,7 @@ impl DummyActionNode {
 
 As you can see, by default any fields you add to the struct will be added to the parameters of `new()`. If you don't want the ability to set a field manually at initialization time, add the `#[bt(default)]` attribute. Just writing `#[bt(default)]` will call `<type>::default()`, which only works if the specified type implements the `Default` trait. To specify an explicit default value: `#[bt(default = "10")]`. Notice the value is wrapped in quotes, so the text in the quotes will be evaluated as Rust code. The valid options to provide as a default are:
 
-```rust
+```ignore
 // Function calls
 #[bt(default = "String::from(10)")]
 
@@ -96,7 +96,9 @@ As you can see, by default any fields you add to the struct will be added to the
 
 An example in practice:
 
-```rust
+```ignore
+use behaviortree_rs::bt_node;
+
 #[bt_node(SyncActionNode)]
 struct DummyActionNode {
     #[bt(default = "NodeStatus::Success")]
@@ -108,9 +110,10 @@ struct DummyActionNode {
 
 ### Async vs Sync
 
-At this moment, all nodes are implemented as `async` behind the scenes. However, when building your own nodes you have the choice to implement it as either sync or async. By default, `bt_cpp_rust` will expect you to implement the `async` version of the required traits. However, you can specify this explicitly by adding keywords to the `#[bt_node(...)]` macro.
+At this moment, all nodes are implemented as `async` behind the scenes. However, when building your own nodes you have the choice to implement it as either sync or async. By default, `behaviortree_rs` will expect you to implement the `async` version of the required traits. However, you can specify this explicitly by adding keywords to the `#[bt_node(...)]` macro.
 
-```rust
+```ignore
+# use behaviortree_rs::bt_node;
 // Default behavior
 #[bt_node(SyncActionNode, Async)]
 struct DummyActionNode {}
@@ -135,7 +138,13 @@ You also need to implement the `NodePorts` trait regardless of sync vs. async. T
 ### `AsyncTick`
 
 ```rust
-use bt_cpp_rust::{bt_node, nodes::{AsyncTick, AsyncHalt, NodeStatus, NodeError, PortsList}, sync::BoxFuture}
+use behaviortree_rs::{
+    bt_node,
+    nodes::{AsyncTick, AsyncHalt, NodeStatus, NodeError, PortsList, NodePorts},
+    macros::{define_ports, input_port, output_port},
+    sync::BoxFuture,
+};
+
 #[bt_node(SyncActionNode)]
 struct DummyActionStruct {}
 
@@ -171,8 +180,15 @@ impl AsyncHalt for DummyActionStruct {}
 
 ### `SyncTick`
 
-```rust
-use bt_cpp_rust::{bt_node, nodes::{SyncTick, SyncHalt, NodeStatus, NodeError, PortsList}}
+TODO: Currently doesn't compile. Need to address
+
+```ignore
+use behaviortree_rs::{
+    bt_node,
+    nodes::{SyncTick, SyncHalt, NodeStatus, NodeError, PortsList, NodePorts},
+    macros::{define_ports, input_port, output_port},
+};
+
 #[bt_node(SyncActionNode, Sync)]
 struct DummyActionStruct {}
 
@@ -203,59 +219,9 @@ impl NodePorts for DummyActionStruct {
 // If you don't need to do cleanup, leave as-is
 impl SyncHalt for DummyActionStruct {}
 ```
-
-# Feature Progress
-
-✅: Supported
-🔴: Not supported
-
-## General features
-
-| Feature              | Status |
-| -------------------- | ------ |
-| XML parsing          | ✅     |
-| Ports                | ✅     |
-| Port remapping       | ✅     |
-| SubTrees             | ✅     |
-| Blackboard           | ✅     |
-| &nbsp;               |        |
-| XML generation       | 🔴    |
-| Scripting            | 🔴    |
-| Pre-/post-conditions | 🔴    |
-| Loggers/Observers    | 🔴    |
-| Substitution rules   | 🔴    |
-
-## Built-in node implementations
-
-| Feature                 | Status |
-| ----------------------- | ------ |
-| __Control__             |        |
-| Fallback                | ✅     |
-| ReactiveFallback        | ✅     |
-| IfThenElse              | ✅     |
-| Sequence                | ✅     |
-| ReactiveSequence        | ✅     |
-| SequenceStar            | ✅     |
-| WhileDoElse             | ✅     |
-| Parallel                | ✅     |
-| ParallelAll             | ✅     |
-|                         |        |
-| __Decorator__           |        |
-| ForceFailure            | ✅     |
-| ForceSuccess            | ✅     |
-| Inverter                | ✅     |
-| KeepRunningUntilFailure | ✅     |
-| Repeat                  | ✅     |
-| Retry                   | ✅     |
-| RunOnce                 | ✅     |
-|                         |        |
-| __Action Traits__       |        |
-| SyncActionNode          | ✅     |
-| StatefulActionNode      | ✅     |
-
 */
 
-extern crate self as bt_cpp_rust;
+extern crate self as behaviortree_rs;
 
 pub mod basic_types;
 pub mod blackboard;

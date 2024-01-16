@@ -1,4 +1,4 @@
-use bt_cpp_rust::{
+use behaviortree_rs::{
     basic_types::{BTToString, NodeStatus, PortsList},
     macros::{define_ports, input_port},
     nodes::{AsyncHalt, AsyncStatefulActionNode, AsyncTick, NodePorts, NodeResult},

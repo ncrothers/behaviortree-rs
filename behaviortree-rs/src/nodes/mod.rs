@@ -109,9 +109,9 @@ pub trait RuntimeType {
 /// traits and struct fields needed for all node definitions.
 ///
 /// ```ignore
-/// use bt_cpp_rust::basic_types::NodeStatus;
-/// use bt_cpp_rust::nodes::NodeConfig;
-/// use bt_cpp_rust::derive::TreeNodeDefaults;
+/// use behaviortree_rs::basic_types::NodeStatus;
+/// use behaviortree_rs::nodes::NodeConfig;
+/// use behaviortree_rs::derive::TreeNodeDefaults;
 ///
 /// #[derive(Debug, Clone, TreeNodeDefaults)]
 /// struct MyTreeNode {

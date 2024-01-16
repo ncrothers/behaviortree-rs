@@ -1,4 +1,4 @@
-use bt_cpp_rust::{blackboard::Blackboard, macros::register_action_node, tree::Factory};
+use behaviortree_rs::{blackboard::Blackboard, macros::register_action_node, tree::Factory};
 use log::{error, info};
 
 mod nodes;

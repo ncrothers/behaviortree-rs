@@ -1,10 +1,10 @@
-# bt-cpp-rust
+# behaviortree-rs
 
 Rust implementation of [BehaviorTree.CPP](https://github.com/BehaviorTree/BehaviorTree.CPP). Still a WIP. A table of features can be found below.
 
 ## Usage
 
-To create your own custom nodes in `bt-cpp-rust`, you need to derive certain traits which provide automatically-implemented functionality that you won't need to change. These provide access to the blackboard, config, ports, etc. You will also need to implement a few traits based on the type of node you're creating.
+To create your own custom nodes in `behaviortree-rs`, you need to derive certain traits which provide automatically-implemented functionality that you won't need to change. These provide access to the blackboard, config, ports, etc. You will also need to implement a few traits based on the type of node you're creating.
 
 ### Creating a node
 
@@ -13,7 +13,7 @@ To create your own node, use the `#[bt_node(...)]` macro. The argument to the ma
 For example, the following node definition:
 
 ```rust
-use bt_cpp_rust::bt_node;
+use behaviortree_rs::bt_node;
 
 #[bt_node(SyncActionNode)]
 struct DummyActionNode {}
@@ -107,7 +107,7 @@ struct DummyActionNode {
 
 ### Async vs Sync
 
-At this moment, all nodes are implemented as `async` behind the scenes. However, when building your own nodes you have the choice to implement it as either sync or async. By default, `bt_cpp_rust` will expect you to implement the `async` version of the required traits. However, you can specify this explicitly by adding keywords to the `#[bt_node(...)]` macro.
+At this moment, all nodes are implemented as `async` behind the scenes. However, when building your own nodes you have the choice to implement it as either sync or async. By default, `behaviortree_rs` will expect you to implement the `async` version of the required traits. However, you can specify this explicitly by adding keywords to the `#[bt_node(...)]` macro.
 
 ```rust
 // Default behavior
@@ -134,7 +134,7 @@ You also need to implement the `NodePorts` trait regardless of sync vs. async. T
 ### `AsyncTick`
 
 ```rust
-use bt_cpp_rust::{bt_node, nodes::{AsyncTick, AsyncHalt, NodeStatus, NodeError, PortsList}, sync::BoxFuture}
+use behaviortree_rs::{bt_node, nodes::{AsyncTick, AsyncHalt, NodeStatus, NodeError, PortsList}, sync::BoxFuture}
 #[bt_node(SyncActionNode)]
 struct DummyActionStruct {}
 
@@ -171,7 +171,7 @@ impl AsyncHalt for DummyActionStruct {}
 ### `SyncTick`
 
 ```rust
-use bt_cpp_rust::{bt_node, nodes::{SyncTick, SyncHalt, NodeStatus, NodeError, PortsList}}
+use behaviortree_rs::{bt_node, nodes::{SyncTick, SyncHalt, NodeStatus, NodeError, PortsList}}
 #[bt_node(SyncActionNode, Sync)]
 struct DummyActionStruct {}
 

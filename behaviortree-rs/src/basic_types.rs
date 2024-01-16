@@ -136,7 +136,7 @@ impl std::fmt::Display for PortDirection {
 /// `NodeStatus`, `NodeType`, and `PortDirection`, and `Vec`s holding those types.
 ///
 /// To implement `ParseStr<T>` on your own type, you can derive
-/// the `bt_cpp_rust` trait: `FromString` on it. To derive this
+/// the `behaviortree_rs` trait: `FromString` on it. To derive this
 /// trait you will need to implement the Rust built-in trait `FromStr`.
 /// You can also just implement `FromString` yourself, but it's recommended
 /// to implement `FromStr` that also provides the `::parse()` function.
@@ -144,7 +144,7 @@ impl std::fmt::Display for PortDirection {
 /// # Example
 ///
 /// ```
-/// use bt_cpp_rust::derive::FromString;
+/// use behaviortree_rs::derive::FromString;
 ///
 /// #[derive(FromString)]
 /// struct MyType {

@@ -14,7 +14,7 @@ pub trait BlackboardString {
     /// # Examples
     ///
     /// ```
-    /// use bt_cpp_rust::blackboard::BlackboardString;
+    /// use behaviortree_rs::blackboard::BlackboardString;
     ///
     /// assert_eq!("value".strip_bb_pointer(), None);
     ///
@@ -62,7 +62,7 @@ where
 ///
 /// ```
 /// # tokio_test::block_on(async {
-/// use bt_cpp_rust::Blackboard;
+/// use behaviortree_rs::Blackboard;
 ///
 /// // Create a root-level Blackboard
 /// let bb = Blackboard::create();
@@ -299,7 +299,7 @@ impl Blackboard {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// use behaviortree_rs::blackboard::Blackboard;
     ///
     /// let mut blackboard = Blackboard::create();
     ///
@@ -354,7 +354,7 @@ impl Blackboard {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// use behaviortree_rs::blackboard::Blackboard;
     ///
     /// let mut blackboard = Blackboard::create();
     ///
@@ -384,7 +384,7 @@ impl Blackboard {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// use behaviortree_rs::blackboard::Blackboard;
     ///
     /// let mut blackboard = Blackboard::create();
     ///
@@ -417,7 +417,7 @@ impl Blackboard {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// use behaviortree_rs::blackboard::Blackboard;
     ///
     /// let mut blackboard = Blackboard::create();
     ///
@@ -444,7 +444,7 @@ impl Blackboard {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// use behaviortree_rs::blackboard::Blackboard;
     ///
     /// let mut blackboard = Blackboard::create();
     ///
@@ -481,7 +481,7 @@ impl Blackboard {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use bt_cpp_rust::blackboard::Blackboard;
+    /// use behaviortree_rs::blackboard::Blackboard;
     ///
     /// let mut blackboard = Blackboard::create();
     ///

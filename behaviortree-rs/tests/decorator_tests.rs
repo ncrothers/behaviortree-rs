@@ -1,4 +1,4 @@
-use bt_cpp_rust::{
+use behaviortree_rs::{
     basic_types::NodeStatus, blackboard::Blackboard, macros::register_action_node, tree::Factory,
 };
 use log::{error, info};
