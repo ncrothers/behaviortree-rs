@@ -11,7 +11,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0.75"
-behaviortree-rs-derive = { path = "../behaviortree-rs-derive" }
+behaviortree-rs-derive = "0.1.0"
 futures = { version = "0.3.28" }
 log = "0.4.20"
 pretty_env_logger = "0.5.0"
