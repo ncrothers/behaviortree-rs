@@ -129,16 +129,15 @@ pub use __build_node_ptr as build_node_ptr;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __build_node {
-    ($f:expr, $n:expr, $t:ty $(,$x:expr)* $(,)?) => {
+    ($bb:expr, $n:expr, $t:ty $(,$x:expr)* $(,)?) => {
         {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
 
-            let blackboard = $f.blackboard();
-            let node_config = NodeConfig::new(blackboard.clone());
+            let node_config = NodeConfig::new($bb);
             let mut node = <$t>::new($n, node_config, $($x),*);
             let manifest = TreeNodeManifest {
                 node_type: node.node_type(),
-                registration_id: $n.to_string(),
+                registration_id: $n.into(),
                 ports: node.provided_ports(),
                 description: String::new(),
             };
@@ -158,9 +157,12 @@ macro_rules! __register_action_node {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};
             use $crate::tree::NodePtrType;
+            let blackboard = $f.blackboard().clone();
+            let node_fn = move || {
+                NodePtrType::Action(Box::new($crate::macros::build_node!(blackboard.clone(), $n, $t, $($x),*)))
+            };
 
-            let node = $crate::macros::build_node!($f, $n, $t, $($x),*);
-            $f.register_node($n, NodePtrType::Action(Box::new(node)));
+            $f.register_node($n, node_fn);
         }
     };
 }
@@ -175,9 +177,12 @@ macro_rules! __register_control_node {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};
             use $crate::tree::NodePtrType;
+            let blackboard = $f.blackboard().clone();
+            let node_fn = move || {
+                NodePtrType::Control(Box::new($crate::macros::build_node!(blackboard.clone(), $n, $t, $($x),*)))
+            };
 
-            let node = $crate::macros::build_node!($f, $n, $t, $($x),*);
-            $f.register_node($n, NodePtrType::Control(Box::new(node)));
+            $f.register_node($n, node_fn);
         }
     };
 }
@@ -192,9 +197,12 @@ macro_rules! __register_decorator_node {
             use $crate::nodes::{NodeConfig, GetNodeType, NodePorts, TreeNodeDefaults};
             use $crate::basic_types::{NodeType, TreeNodeManifest};
             use $crate::tree::NodePtrType;
+            let blackboard = $f.blackboard().clone();
+            let node_fn = move || {
+                NodePtrType::Decorator(Box::new($crate::macros::build_node!(blackboard.clone(), $n, $t, $($x),*)))
+            };
 
-            let node = $crate::macros::build_node!($f, $n, $t, $($x),*);
-            $f.register_node($n, NodePtrType::Decorator(Box::new(node)));
+            $f.register_node($n, node_fn);
         }
     };
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Cursor, string::FromUtf8Error};
+use std::{collections::HashMap, io::Cursor, string::FromUtf8Error, sync::Arc};
 
 use futures::future::BoxFuture;
 use log::{debug, info};
@@ -152,7 +152,7 @@ impl SyncTree {
 }
 
 pub struct Factory {
-    node_map: HashMap<String, NodePtrType>,
+    node_map: HashMap<String, Arc<dyn Fn() -> NodePtrType + Send + Sync>>,
     blackboard: Blackboard,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
     main_tree_id: Option<String>,
@@ -181,13 +181,16 @@ impl Factory {
         self.blackboard = blackboard;
     }
 
-    pub fn register_node(&mut self, name: impl AsRef<str>, node: NodePtrType) {
-        self.node_map.insert(name.as_ref().to_string(), node);
+    pub fn register_node<F>(&mut self, name: impl AsRef<str>, node_fn: F)
+    where
+        F: Fn() -> NodePtrType + Send + Sync + 'static,
+    {
+        self.node_map.insert(name.as_ref().into(), Arc::new(node_fn));
     }
 
-    fn get_node(&self, name: &String) -> Result<&NodePtrType, ParseError> {
+    fn create_node(&self, name: &String) -> Result<NodePtrType, ParseError> {
         match self.node_map.get(name) {
-            Some(node) => Ok(node),
+            Some(node_fn) => Ok(node_fn()),
             None => Err(ParseError::UnknownNode(name.clone())),
         }
     }
@@ -311,10 +314,8 @@ impl Factory {
         blackboard: &Blackboard
     ) -> Result<TreeNodePtr, ParseError> {
         // Get clone of node from node_map based on tag name
-        let node_ref = self.get_node(node_name)?;
-
-        let mut node = match node_ref {
-            NodePtrType::Action(node) => node.clone(),
+        let mut node = match self.create_node(node_name)? {
+            NodePtrType::Action(node) => node,
             // TODO: expand more
             x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
         };
@@ -429,11 +430,8 @@ impl Factory {
 
                     debug!("build_child Start: {node_name}");
 
-                    let node_ref = self.get_node(&node_name)?;
-
-                    let node = match node_ref {
-                        NodePtrType::Control(node) => {
-                            let mut node = node.clone();
+                    let node = match self.create_node(&node_name)? {
+                        NodePtrType::Control(mut node) => {
                             let new_prefix = path_prefix.to_owned() + &node_name;
 
                             node.config().path = new_prefix;
@@ -459,8 +457,7 @@ impl Factory {
 
                             node
                         }
-                        NodePtrType::Decorator(node) => {
-                            let mut node = node.clone();
+                        NodePtrType::Decorator(mut node) => {
                             let new_prefix = path_prefix.to_owned() + &node_name;
 
                             node.config().path = new_prefix;
@@ -687,107 +684,137 @@ impl Default for Factory {
     }
 }
 
-fn builtin_nodes(blackboard: &Blackboard) -> HashMap<String, NodePtrType> {
+fn builtin_nodes(blackboard: &Blackboard) -> HashMap<String, Arc<dyn Fn() -> NodePtrType + Send + Sync>> {
     let mut node_map = HashMap::new();
 
     // Control nodes
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "Sequence",
         nodes::control::SequenceNode
-    ));
+    ))) as Arc<dyn Fn() -> NodePtrType + Send + Sync>;
     node_map.insert(String::from("Sequence"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "ReactiveSequence",
         nodes::control::ReactiveSequenceNode
-    ));
+    )));
     node_map.insert(String::from("ReactiveSequence"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "SequenceStar",
         nodes::control::SequenceWithMemoryNode
-    ));
+    )));
     node_map.insert(String::from("SequenceStar"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "Parallel",
         nodes::control::ParallelNode
-    ));
+    )));
     node_map.insert(String::from("Parallel"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "ParallelAll",
         nodes::control::ParallelAllNode
-    ));
+    )));
     node_map.insert(String::from("ParallelAll"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "Fallback",
         nodes::control::FallbackNode
-    ));
+    )));
     node_map.insert(String::from("Fallback"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "ReactiveFallback",
         nodes::control::ReactiveFallbackNode
-    ));
+    )));
     node_map.insert(String::from("ReactiveFallback"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "IfThenElse",
         nodes::control::IfThenElseNode
-    ));
+    )));
     node_map.insert(String::from("IfThenElse"), node);
-    let node = NodePtrType::Control(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Control(build_node_ptr!(
+        blackboard_copy,
         "WhileDoElse",
         nodes::control::WhileDoElseNode
-    ));
+    )));
     node_map.insert(String::from("WhileDoElse"), node);
 
     // Decorator nodes
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "ForceFailure",
         nodes::decorator::ForceFailureNode
-    ));
+    )));
     node_map.insert(String::from("ForceFailure"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "ForceSuccess",
         nodes::decorator::ForceSuccessNode
-    ));
+    )));
     node_map.insert(String::from("ForceSuccess"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "Inverter",
         nodes::decorator::InverterNode
-    ));
+    )));
     node_map.insert(String::from("Inverter"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "KeepRunningUntilFailure",
         nodes::decorator::KeepRunningUntilFailureNode
-    ));
+    )));
     node_map.insert(String::from("KeepRunningUntilFailure"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "Repeat",
         nodes::decorator::RepeatNode
-    ));
+    )));
     node_map.insert(String::from("Repeat"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "Retry",
         nodes::decorator::RetryNode
-    ));
+    )));
     node_map.insert(String::from("Retry"), node);
-    let node = NodePtrType::Decorator(build_node_ptr!(
-        blackboard,
+
+    let blackboard_copy = blackboard.clone();
+    let node = Arc::new(move || NodePtrType::Decorator(build_node_ptr!(
+        blackboard_copy,
         "RunOnce",
         nodes::decorator::RunOnceNode
-    ));
+    )));
     node_map.insert(String::from("RunOnce"), node);
 
     node_map
