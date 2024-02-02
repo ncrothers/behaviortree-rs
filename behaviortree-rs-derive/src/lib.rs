@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
+use proc_macro2::{Ident, Span};
+use quote::ToTokens;
 use syn::{
-    parse::Parser, punctuated::Punctuated, token::Comma, AttrStyle, DeriveInput, ItemStruct,
+    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::Comma, AttrStyle, DeriveInput, ItemStruct, Lit, LitStr
 };
 
 #[macro_use]
@@ -909,4 +911,174 @@ pub fn derive_from_string(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+struct NodeRegistration {
+    factory: syn::Ident,
+    name: proc_macro2::TokenStream,
+    node_type: syn::Type,
+    params: Punctuated<syn::Expr, Comma>,
+}
+
+impl Parse for NodeRegistration {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let factory = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let node_name = input
+            .peek(syn::LitStr)
+            .then_some(input.parse::<LitStr>()?.to_token_stream())
+            .or_else(|| input.peek(syn::Ident).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()));
+        if node_name.is_none() {
+            return Err(input.error("Node name must either be a string literal or an ident"));
+        }
+        let node_name = node_name.unwrap();
+        
+        input.parse::<Token![,]>()?;
+        let node_type = input.parse()?;
+        // If there are extra parameters, try to parse a comma. Otherwise skip
+        if !input.is_empty() {
+            input.parse::<Token![,]>()?;
+        }
+    
+        let params = input.parse_terminated(syn::Expr::parse, Token![,])?;
+
+        Ok(Self {
+            factory,
+            name: node_name,
+            node_type,
+            params,
+        })
+    }
+}
+
+fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
+    let NodeRegistration {
+        factory: _,
+        name,
+        node_type,
+        params
+    } = node;
+
+    let cloned_names = (0..params.len())
+        .fold(quote!{}, |acc, i| {
+            let arg_name = Ident::new(&format!("arg{i}"), Span::call_site());
+            quote!{ #acc, #arg_name.clone() }
+        });
+
+    quote! {
+        {
+            let node_config = ::behaviortree_rs::nodes::NodeConfig::new(blackboard.clone());
+            let mut node = #node_type::new(#name, node_config #cloned_names);
+            let manifest = ::behaviortree_rs::basic_types::TreeNodeManifest {
+                node_type: <#node_type as ::behaviortree_rs::nodes::GetNodeType>::node_type(&node),
+                registration_id: #name.into(),
+                ports: <#node_type as ::behaviortree_rs::nodes::NodePorts>::provided_ports(&node),
+                description: ::std::string::String::new(),
+            };
+            <#node_type as ::behaviortree_rs::nodes::TreeNodeDefaults>::config(&mut node).set_manifest(::std::sync::Arc::new(manifest));
+            node
+        }
+    }
+}
+
+fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream) -> TokenStream {
+    let node_registration = parse_macro_input!(input as NodeRegistration);
+
+    let factory = &node_registration.factory;
+    let name = &node_registration.name;
+    let params = &node_registration.params;
+
+    // Create expression that clones all parameters
+    let param_clone_expr = params
+        .iter()
+        .enumerate()
+        .fold(quote!{}, |acc, (i, item)| {
+            let arg_name = Ident::new(&format!("arg{i}"), Span::call_site());
+            quote! {
+                #acc
+                let #arg_name = #item.clone();
+            }
+        });
+
+    let node = build_node(&node_registration);
+
+    let expanded = quote! {
+        {
+            let blackboard = #factory.blackboard().clone();
+
+            #param_clone_expr
+
+            let node_fn = move || {
+                let node = #node;
+                #node_type_token(::std::boxed::Box::new(node))
+            };
+
+            #factory.register_node(#name, node_fn);
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Registers an Action type node with the factory.
+/// 
+/// **NOTE:** During tree creation, a new node is created using the parameters
+/// given after the node type field. You specified these fields in your node struct
+/// definition. Each time a node is created, the parameters are cloned using `Clone::clone`.
+/// Thus, your parameters must implement `Clone`.
+/// 
+/// # Usage
+/// 
+/// ```ignore
+/// let mut factory = Factory::new();
+/// let arg1 = String::from("hello world");
+/// let arg2 = 10u32;
+/// 
+/// register_action_node!(factory, "TestNode", TestNode, arg1, arg2);
+/// ```
+#[proc_macro]
+pub fn register_action_node(input: TokenStream) -> TokenStream {
+    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Action })
+}
+
+/// Registers an Control type node with the factory.
+/// 
+/// **NOTE:** During tree creation, a new node is created using the parameters
+/// given after the node type field. You specified these fields in your node struct
+/// definition. Each time a node is created, the parameters are cloned using `Clone::clone`.
+/// Thus, your parameters must implement `Clone`.
+/// 
+/// # Usage
+/// 
+/// ```ignore
+/// let mut factory = Factory::new();
+/// let arg1 = String::from("hello world");
+/// let arg2 = 10u32;
+/// 
+/// register_control_node!(factory, "TestNode", TestNode, arg1, arg2);
+/// ```
+#[proc_macro]
+pub fn register_control_node(input: TokenStream) -> TokenStream {
+    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Control })
+}
+
+/// Registers an Decorator type node with the factory.
+/// 
+/// **NOTE:** During tree creation, a new node is created using the parameters
+/// given after the node type field. You specified these fields in your node struct
+/// definition. Each time a node is created, the parameters are cloned using `Clone::clone`.
+/// Thus, your parameters must implement `Clone`.
+/// 
+/// # Usage
+/// 
+/// ```ignore
+/// let mut factory = Factory::new();
+/// let arg1 = String::from("hello world");
+/// let arg2 = 10u32;
+/// 
+/// register_decorator_node!(factory, "TestNode", TestNode, arg1, arg2);
+/// ```
+#[proc_macro]
+pub fn register_decorator_node(input: TokenStream) -> TokenStream {
+    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Decorator })
 }
