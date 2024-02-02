@@ -129,3 +129,18 @@ impl AsyncStatefulActionNode for RunForNode {
         })
     }
 }
+
+#[bt_node(SyncActionNode)]
+pub struct DataNode {
+    inner_name: String,
+}
+
+impl NodePorts for DataNode {}
+
+impl AsyncTick for DataNode {
+    fn tick(&mut self) -> BoxFuture<NodeResult> {
+        Box::pin(async move { Ok(NodeStatus::Success) })
+    }
+}
+
+impl AsyncHalt for DataNode {}

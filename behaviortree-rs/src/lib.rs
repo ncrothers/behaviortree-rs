@@ -168,7 +168,7 @@ impl NodePorts for DummyActionStruct {
         define_ports!(
             // No default value
             input_port!("foo"),
-            // With default value 
+            // With default value
             input_port!("bar", 16)
         )
     }
@@ -210,7 +210,7 @@ impl NodePorts for DummyActionStruct {
         define_ports!(
             // No default value
             input_port!("foo"),
-            // With default value 
+            // With default value
             input_port!("bar", 16)
         )
     }
@@ -238,8 +238,8 @@ pub mod derive {
 // Re-exports for convenience
 pub use blackboard::Blackboard;
 pub use derive::bt_node;
-pub use tree::Factory;
 pub use nodes::NodeResult;
+pub use tree::Factory;
 
 extern crate futures as futures_internal;
 extern crate tokio as tokio_internal;

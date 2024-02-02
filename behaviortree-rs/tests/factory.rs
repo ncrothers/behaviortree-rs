@@ -2,9 +2,81 @@ use behaviortree_rs::{
     basic_types::NodeStatus, blackboard::Blackboard, macros::register_action_node, tree::Factory,
 };
 
-use crate::nodes::{StatusNode, EchoNode};
+use crate::nodes::{DataNode, EchoNode, StatusNode};
 
 mod nodes;
+
+#[test]
+fn registering() {
+    nodes::test_setup();
+
+    // Check case where there is more than one tree, and the ID is specified (Ok)
+    let xml = r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="main">
+                <SubTree ID="secondary" />
+            </BehaviorTree>
+
+            <BehaviorTree ID="secondary">
+                <DataNode />
+            </BehaviorTree>
+        </root>
+    "#
+    .to_string();
+
+    let field = "hello".to_string();
+
+    let mut factory = Factory::new();
+    // register_action_node!(factory, "DataNode", DataNode, String::new());
+    register_action_node!(factory, "DataNode", DataNode, String::new());
+    register_action_node!(factory, "DataNode2", DataNode, field);
+    register_action_node!(factory, "DataNode3", DataNode, field);
+    let blackboard = Blackboard::create();
+
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+
+    assert!(tree.is_ok());
+
+    // Check case where there is more than one tree, but ID is not specified (Err)
+    let xml = r#"
+        <root>
+            <BehaviorTree ID="main">
+                <SubTree ID="secondary" />
+            </BehaviorTree>
+
+            <BehaviorTree ID="secondary">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+        </root>
+    "#
+    .to_string();
+
+    let mut factory = Factory::new();
+    register_action_node!(factory, "StatusNode", StatusNode);
+    let blackboard = Blackboard::create();
+
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+
+    assert!(tree.is_err());
+
+    // Check case where there is only one tree, but ID is not specified (Ok)
+    let xml = r#"
+        <root>
+            <BehaviorTree ID="main">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+        </root>
+    "#
+    .to_string();
+
+    let mut factory = Factory::new();
+    register_action_node!(factory, "StatusNode", StatusNode);
+    let blackboard = Blackboard::create();
+
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+
+    assert!(tree.is_ok());
+}
 
 #[test]
 fn main_tree_attr() {
