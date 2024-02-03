@@ -49,14 +49,7 @@ impl AsyncTick for RepeatNode {
             self.set_status(NodeStatus::Running);
 
             while do_loop {
-                let child_status = self
-                    .child
-                    .as_ref()
-                    .unwrap()
-                    .lock()
-                    .await
-                    .execute_tick()
-                    .await?;
+                let child_status = self.child.as_mut().unwrap().execute_tick().await?;
 
                 self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
 

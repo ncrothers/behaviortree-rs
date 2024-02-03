@@ -39,14 +39,7 @@ impl AsyncTick for RunOnceNode {
 
             self.set_status(NodeStatus::Running);
 
-            let status = self
-                .child
-                .as_ref()
-                .unwrap()
-                .lock()
-                .await
-                .execute_tick()
-                .await?;
+            let status = self.child.as_mut().unwrap().execute_tick().await?;
 
             if status.is_completed() {
                 self.already_ticked = true;

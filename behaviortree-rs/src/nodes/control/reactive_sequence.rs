@@ -30,7 +30,8 @@ impl AsyncTick for ReactiveSequenceNode {
 
             self.status = NodeStatus::Running;
 
-            for (counter, child) in self.children.iter().enumerate() {
+            for counter in 0..self.children.len() {
+                let child = &mut self.children[counter];
                 let child_status = child.execute_tick().await?;
 
                 all_skipped &= child_status == NodeStatus::Skipped;

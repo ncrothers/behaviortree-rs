@@ -61,9 +61,7 @@ impl AsyncTick for IfThenElseNode {
             }
 
             if self.child_idx > 0 {
-                let status = self.children[self.child_idx]
-                    .execute_tick()
-                    .await?;
+                let status = self.children[self.child_idx].execute_tick().await?;
                 match status {
                     NodeStatus::Running => return Ok(NodeStatus::Running),
                     status => {
