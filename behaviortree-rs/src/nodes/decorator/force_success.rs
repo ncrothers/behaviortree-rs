@@ -33,7 +33,7 @@ impl NodePorts for ForceSuccessNode {}
 impl AsyncHalt for ForceSuccessNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
-            self.reset_child();
+            self.reset_child().await;
         })
     }
 }

@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, collections::HashMap, io::Cursor, string::FromUtf8Error, sync::Arc};
+use std::{collections::HashMap, io::Cursor, string::FromUtf8Error, sync::Arc};
 
 use futures::future::BoxFuture;
 use log::{debug, info};
@@ -17,7 +17,7 @@ use crate::{
     blackboard::{Blackboard, BlackboardString},
     macros::build_node_ptr,
     nodes::{
-        self, ActionNodeBase, AsyncHalt, ControlNodeBase, DecoratorNodeBase, NodeConfig,
+        self, AsyncHalt, NodeConfig,
         NodeResult, TreeNodeBase, TreeNodePtr,
     },
 };
@@ -179,7 +179,7 @@ impl Factory {
         let blackboard = Blackboard::create();
 
         Self {
-            node_map: builtin_nodes(&blackboard),
+            node_map: builtin_nodes(),
             blackboard,
             tree_roots: HashMap::new(),
             main_tree_id: None,
@@ -685,7 +685,7 @@ impl Default for Factory {
     }
 }
 
-fn builtin_nodes(blackboard: &Blackboard) -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
+fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
     let mut node_map = HashMap::new();
 
     // Control nodes

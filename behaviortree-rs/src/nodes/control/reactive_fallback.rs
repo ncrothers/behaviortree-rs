@@ -43,7 +43,7 @@ impl AsyncTick for ReactiveFallbackNode {
                     }
                     NodeStatus::Failure => {}
                     NodeStatus::Success => {
-                        self.reset_children();
+                        self.reset_children().await;
                         return Ok(NodeStatus::Success);
                     }
                     NodeStatus::Skipped => {
@@ -58,7 +58,7 @@ impl AsyncTick for ReactiveFallbackNode {
                 };
             }
 
-            self.reset_children();
+            self.reset_children().await;
 
             match all_skipped {
                 true => Ok(NodeStatus::Skipped),

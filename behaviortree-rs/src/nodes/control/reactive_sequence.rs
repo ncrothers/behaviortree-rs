@@ -53,7 +53,7 @@ impl AsyncTick for ReactiveSequenceNode {
                         return Ok(NodeStatus::Running);
                     }
                     NodeStatus::Failure => {
-                        self.reset_children();
+                        self.reset_children().await;
                         return Ok(NodeStatus::Failure);
                     }
                     // Do nothing on Success
@@ -71,7 +71,7 @@ impl AsyncTick for ReactiveSequenceNode {
                 }
             }
 
-            self.reset_children();
+            self.reset_children().await;
 
             match all_skipped {
                 true => Ok(NodeStatus::Skipped),

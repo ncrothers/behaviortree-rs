@@ -65,7 +65,7 @@ impl AsyncTick for WhileDoElseNode {
             match status {
                 NodeStatus::Running => Ok(NodeStatus::Running),
                 status => {
-                    self.reset_children();
+                    self.reset_children().await;
                     Ok(status)
                 }
             }

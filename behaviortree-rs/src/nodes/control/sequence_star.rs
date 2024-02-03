@@ -63,7 +63,7 @@ impl AsyncTick for SequenceWithMemoryNode {
 
             // All children returned Success
             if self.child_idx == self.children.len() {
-                self.reset_children();
+                self.reset_children().await;
                 self.child_idx = 0;
             }
 

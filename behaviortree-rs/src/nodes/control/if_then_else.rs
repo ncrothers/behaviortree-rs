@@ -65,7 +65,7 @@ impl AsyncTick for IfThenElseNode {
                 match status {
                     NodeStatus::Running => return Ok(NodeStatus::Running),
                     status => {
-                        self.reset_children();
+                        self.reset_children().await;
                         self.child_idx = 0;
                         return Ok(status);
                     }
@@ -85,7 +85,7 @@ impl AsyncHalt for IfThenElseNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;
-            self.reset_children();
+            self.reset_children().await;
         })
     }
 }

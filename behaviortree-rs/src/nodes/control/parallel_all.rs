@@ -90,7 +90,7 @@ impl AsyncTick for ParallelAllNode {
 
             if skipped_count + self.completed_list.len() >= children_count {
                 // Done!
-                self.reset_children();
+                self.reset_children().await;
                 self.completed_list.clear();
 
                 let status = if self.failure_count >= self.failure_threshold() {

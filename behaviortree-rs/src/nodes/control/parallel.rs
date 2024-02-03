@@ -115,7 +115,7 @@ impl AsyncTick for ParallelNode {
                         && (self.success_count + skipped_count) >= required_success_count)
                 {
                     self.clear();
-                    self.reset_children();
+                    self.reset_children().await;
                     return Ok(NodeStatus::Success);
                 }
 
@@ -123,7 +123,7 @@ impl AsyncTick for ParallelNode {
                     || self.failure_count == self.failure_threshold()
                 {
                     self.clear();
-                    self.reset_children();
+                    self.reset_children().await;
                     return Ok(NodeStatus::Failure);
                 }
             }
@@ -150,7 +150,7 @@ impl NodePorts for ParallelNode {
 impl AsyncHalt for ParallelNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
-            self.reset_children();
+            self.reset_children().await;
         })
     }
 }

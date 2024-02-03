@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::Comma, AttrStyle, DeriveInput, ItemStruct, Lit, LitStr
+    parse::{Parse, Parser}, punctuated::Punctuated, token::Comma, AttrStyle, DeriveInput, ItemStruct, LitStr
 };
 
 #[macro_use]

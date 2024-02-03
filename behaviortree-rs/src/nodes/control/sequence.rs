@@ -42,7 +42,7 @@ impl AsyncTick for SequenceNode {
 
                 match &child_status {
                     NodeStatus::Failure => {
-                        self.reset_children();
+                        self.reset_children().await;
                         self.child_idx = 0;
                         return Ok(NodeStatus::Failure);
                     }
@@ -60,7 +60,7 @@ impl AsyncTick for SequenceNode {
             }
 
             if self.child_idx == self.children.len() {
-                self.reset_children();
+                self.reset_children().await;
                 self.child_idx = 0;
             }
 
