@@ -41,8 +41,8 @@ pub trait ControlNode: TreeNodeBase {
     fn clone_boxed(&self) -> Box<dyn ControlNodeBase + Send + Sync>;
 }
 
-impl Clone for Box<dyn ControlNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn ControlNodeBase + Send + Sync> {
-        self.clone_boxed()
-    }
-}
+// impl Clone for Box<dyn ControlNodeBase + Send + Sync> {
+//     fn clone(&self) -> Box<dyn ControlNodeBase + Send + Sync> {
+//         self.clone_boxed()
+//     }
+// }

@@ -607,7 +607,11 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
                 self.status = status;
             }
 
-            fn config(&mut self) -> &mut ::behaviortree_rs::nodes::NodeConfig {
+            fn config(&self) -> &::behaviortree_rs::nodes::NodeConfig {
+                &self.config
+            }
+
+            fn config_mut(&mut self) -> &mut ::behaviortree_rs::nodes::NodeConfig {
                 &mut self.config
             }
 
@@ -685,10 +689,10 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 ::std::boxed::Box::pin(async move {
                     match self.children.get(index) {
                         Some(child) => {
-                            if child.lock().await.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
-                                ::behaviortree_rs::nodes::AsyncHalt::halt(&mut (*child.lock().await)).await;
+                            if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
+                                ::behaviortree_rs::nodes::AsyncHalt::halt(&mut (*child)).await;
                             }
-                            Ok(child.lock().await.reset_status())
+                            Ok(child.reset_status())
                         }
                         None => Err(::behaviortree_rs::nodes::NodeError::IndexError),
                     }
@@ -772,7 +776,7 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
             fn reset_child(&self) -> BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
                     if let Some(child) = self.child.as_ref() {
-                        let mut child = child.lock().await;
+                        let mut child = child;
                         if matches!(child.status(), ::behaviortree_rs::basic_types::NodeStatus::Running) {
                             ::behaviortree_rs::nodes::AsyncHalt::halt(&mut (*child)).await;
                         }
@@ -967,7 +971,6 @@ fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
 
     quote! {
         {
-            let node_config = ::behaviortree_rs::nodes::NodeConfig::new(blackboard.clone());
             let mut node = #node_type::new(#name, node_config #cloned_names);
             let manifest = ::behaviortree_rs::basic_types::TreeNodeManifest {
                 node_type: <#node_type as ::behaviortree_rs::nodes::GetNodeType>::node_type(&node),
@@ -1008,9 +1011,18 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream) 
 
             #param_clone_expr
 
-            let node_fn = move || {
-                let node = #node;
-                #node_type_token(::std::boxed::Box::new(node))
+            let node_fn = move |config: ::behaviortree_rs::nodes::NodeConfig, children: ::alloc::vec::Vec<::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>>| {
+                let mut node = #node;
+                match #node_type_token {
+                    ::behaviortree_rs::basic_types::NodeType::Control => node.child = Some(children[0]),
+                    ::behaviortree_rs::basic_types::NodeType::Control => {
+                        for child in children {
+                            node.push(child);
+                        }
+                    },
+                    _ => ()
+                }
+                ::std::boxed::Box::new(node)
             };
 
             #factory.register_node(#name, node_fn);
@@ -1038,7 +1050,7 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream) 
 /// ```
 #[proc_macro]
 pub fn register_action_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Action })
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Action })
 }
 
 /// Registers an Control type node with the factory.
@@ -1059,7 +1071,7 @@ pub fn register_action_node(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn register_control_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Control })
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Control })
 }
 
 /// Registers an Decorator type node with the factory.
@@ -1080,5 +1092,5 @@ pub fn register_control_node(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn register_decorator_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Decorator })
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Decorator })
 }

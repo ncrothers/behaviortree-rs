@@ -35,14 +35,14 @@ pub trait DecoratorNode: TreeNodeBase {
     fn clone_boxed(&self) -> Box<dyn DecoratorNodeBase + Send + Sync>;
 }
 
-impl Clone for Box<dyn DecoratorNodeBase> {
-    fn clone(&self) -> Box<dyn DecoratorNodeBase> {
-        self.clone_boxed()
-    }
-}
+// impl Clone for Box<dyn DecoratorNodeBase> {
+//     fn clone(&self) -> Box<dyn DecoratorNodeBase> {
+//         self.clone_boxed()
+//     }
+// }
 
-impl Clone for Box<dyn DecoratorNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn DecoratorNodeBase + Send + Sync> {
-        self.clone_boxed()
-    }
-}
+// impl Clone for Box<dyn DecoratorNodeBase + Send + Sync> {
+//     fn clone(&self) -> Box<dyn DecoratorNodeBase + Send + Sync> {
+//         self.clone_boxed()
+//     }
+// }

@@ -90,7 +90,7 @@ impl AsyncTick for ParallelNode {
 
             for i in 0..children_count {
                 if !self.completed_list.contains(&i) {
-                    let mut child = self.children[i].lock().await;
+                    let mut child = self.children[i];
                     match child.execute_tick().await? {
                         NodeStatus::Skipped => skipped_count += 1,
                         NodeStatus::Success => {

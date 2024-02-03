@@ -63,7 +63,7 @@ impl AsyncTick for ParallelAllNode {
                     continue;
                 }
 
-                let status = self.children[i].lock().await.execute_tick().await?;
+                let status = self.children[i].execute_tick().await?;
                 match status {
                     NodeStatus::Success => {
                         self.completed_list.insert(i);

@@ -47,7 +47,7 @@ pub trait TreeNodeBase:
 /// Pointer to the most general trait, which encapsulates all
 /// node types that implement `TreeNodeBase` (all nodes need
 /// to for it to compile)
-pub type TreeNodePtr = Box<dyn TreeNodeBase + Send>;
+pub type TreeNodePtr = Box<dyn TreeNodeBase + Send + Sync>;
 
 pub type NodeResult = Result<NodeStatus, NodeError>;
 
@@ -125,7 +125,8 @@ pub trait TreeNodeDefaults {
     fn status(&self) -> NodeStatus;
     fn reset_status(&mut self);
     fn set_status(&mut self, status: NodeStatus);
-    fn config(&mut self) -> &mut NodeConfig;
+    fn config(&self) -> &NodeConfig;
+    fn config_mut(&mut self) -> &mut NodeConfig;
     fn into_boxed(self) -> Box<dyn TreeNodeBase>;
     fn to_tree_node_ptr(&self) -> TreeNodePtr;
     fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase + Send + Sync>;
@@ -404,14 +405,14 @@ impl Clone for Box<dyn PortValue> {
     }
 }
 
-impl Clone for Box<dyn TreeNodeBase> {
-    fn clone(&self) -> Box<dyn TreeNodeBase> {
-        self.clone_node_boxed()
-    }
-}
+// impl Clone for Box<dyn TreeNodeBase> {
+//     fn clone(&self) -> Box<dyn TreeNodeBase> {
+//         self.clone_node_boxed()
+//     }
+// }
 
-impl Clone for Box<dyn TreeNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn TreeNodeBase + Send + Sync> {
-        self.clone_node_boxed()
-    }
-}
+// impl Clone for Box<dyn TreeNodeBase + Send + Sync> {
+//     fn clone(&self) -> Box<dyn TreeNodeBase + Send + Sync> {
+//         self.clone_node_boxed()
+//     }
+// }

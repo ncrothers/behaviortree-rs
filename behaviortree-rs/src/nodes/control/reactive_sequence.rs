@@ -31,7 +31,7 @@ impl AsyncTick for ReactiveSequenceNode {
             self.status = NodeStatus::Running;
 
             for (counter, child) in self.children.iter().enumerate() {
-                let child_status = child.lock().await.execute_tick().await?;
+                let child_status = child.execute_tick().await?;
 
                 all_skipped &= child_status == NodeStatus::Skipped;
 
@@ -63,7 +63,7 @@ impl AsyncTick for ReactiveSequenceNode {
                     }
                     NodeStatus::Idle => {
                         return Err(NodeError::StatusError(
-                            child.lock().await.config().path.clone(),
+                            child.config().path.clone(),
                             "Idle".to_string(),
                         ));
                     }

@@ -12,11 +12,11 @@ pub trait ActionNode {
     fn execute_action_tick(&mut self) -> BoxFuture<NodeResult>;
 }
 
-impl Clone for Box<dyn ActionNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn ActionNodeBase + Send + Sync> {
-        self.clone_boxed()
-    }
-}
+// impl Clone for Box<dyn ActionNodeBase + Send + Sync> {
+//     fn clone(&self) -> Box<dyn ActionNodeBase + Send + Sync> {
+//         self.clone_boxed()
+//     }
+// }
 
 pub trait SyncActionNode {}
 
