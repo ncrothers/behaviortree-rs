@@ -616,7 +616,7 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
             }
 
             fn to_tree_node_ptr(&self) -> ::behaviortree_rs::nodes::TreeNodePtr {
-                ::std::sync::Arc::new(::behaviortree_rs::sync::Mutex::new(self.clone()))
+                ::std::boxed::Box::new(self.clone())
             }
 
             fn clone_node_boxed(&self) -> Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + ::std::marker::Send + ::std::marker::Sync> {

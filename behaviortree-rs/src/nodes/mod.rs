@@ -47,7 +47,7 @@ pub trait TreeNodeBase:
 /// Pointer to the most general trait, which encapsulates all
 /// node types that implement `TreeNodeBase` (all nodes need
 /// to for it to compile)
-pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase + Send>>;
+pub type TreeNodePtr = Box<dyn TreeNodeBase + Send>;
 
 pub type NodeResult = Result<NodeStatus, NodeError>;
 
