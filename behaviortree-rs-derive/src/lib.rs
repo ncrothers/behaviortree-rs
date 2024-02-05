@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::Comma, AttrStyle, DeriveInput, ItemStruct, Lit, LitStr
+    parse::{Parse, Parser}, punctuated::Punctuated, token::Comma, AttrStyle, DeriveInput, ItemStruct, LitStr
 };
 
 #[macro_use]
@@ -143,7 +143,7 @@ fn create_bt_node(
     let mut args_parsed_iter = args_parsed.iter();
 
     let mut derives =
-        vec![quote! { Clone, ::std::fmt::Debug, ::behaviortree_rs::derive::TreeNodeDefaults }];
+        vec![quote! { ::std::fmt::Debug, ::behaviortree_rs::derive::TreeNodeDefaults }];
 
     let arg = args_parsed_iter.next().unwrap();
 
@@ -607,20 +607,16 @@ pub fn derive_tree_node(input: TokenStream) -> TokenStream {
                 self.status = status;
             }
 
-            fn config(&mut self) -> &mut ::behaviortree_rs::nodes::NodeConfig {
+            fn config(&self) -> &::behaviortree_rs::nodes::NodeConfig {
+                &self.config
+            }
+
+            fn config_mut(&mut self) -> &mut ::behaviortree_rs::nodes::NodeConfig {
                 &mut self.config
             }
 
             fn into_boxed(self) -> Box<dyn ::behaviortree_rs::nodes::TreeNodeBase> {
                 Box::new(self)
-            }
-
-            fn to_tree_node_ptr(&self) -> ::behaviortree_rs::nodes::TreeNodePtr {
-                ::std::sync::Arc::new(::behaviortree_rs::sync::Mutex::new(self.clone()))
-            }
-
-            fn clone_node_boxed(&self) -> Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + ::std::marker::Send + ::std::marker::Sync> {
-                Box::new(self.clone())
             }
         }
 
@@ -639,10 +635,6 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::behaviortree_rs::nodes::ActionNode for #ident {
-            fn clone_boxed(&self) -> Box<dyn ::behaviortree_rs::nodes::ActionNodeBase + ::std::marker::Send + ::std::marker::Sync> {
-                Box::new(self.clone())
-            }
-
             fn execute_action_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
                 ::std::boxed::Box::pin(async move {
                     match self.tick().await? {
@@ -681,21 +673,24 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 &self.children
             }
 
-            fn halt_child(&self, index: usize) -> ::behaviortree_rs::sync::BoxFuture<Result<(), ::behaviortree_rs::nodes::NodeError>> {
+            fn halt_child(&mut self, index: usize) -> ::behaviortree_rs::sync::BoxFuture<Result<(), ::behaviortree_rs::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
-                    match self.children.get(index) {
+                    match self.children.get_mut(index) {
                         Some(child) => {
-                            if child.lock().await.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
-                                ::behaviortree_rs::nodes::AsyncHalt::halt(&mut (*child.lock().await)).await;
+                            if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
+                                let child_ptr: *mut _ = &mut **child;
+                                unsafe {
+                                    ::behaviortree_rs::nodes::AsyncHalt::halt(&mut *child_ptr).await;
+                                }
                             }
-                            Ok(child.lock().await.reset_status())
+                            Ok(child.reset_status())
                         }
                         None => Err(::behaviortree_rs::nodes::NodeError::IndexError),
                     }
                 })
             }
 
-            fn halt_children(&self, start: usize) -> ::behaviortree_rs::sync::BoxFuture<Result<(), ::behaviortree_rs::nodes::NodeError>> {
+            fn halt_children(&mut self, start: usize) -> ::behaviortree_rs::sync::BoxFuture<Result<(), ::behaviortree_rs::nodes::NodeError>> {
                 ::std::boxed::Box::pin(async move {
 
                     if start >= self.children.len() {
@@ -712,14 +707,10 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
                 })
             }
 
-            fn reset_children(&self) -> ::behaviortree_rs::sync::BoxFuture<()> {
+            fn reset_children(&mut self) -> ::behaviortree_rs::sync::BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
                     self.halt_children(0).await.unwrap();
                 })
-            }
-
-            fn clone_boxed(&self) -> Box<dyn ::behaviortree_rs::nodes::ControlNodeBase + ::std::marker::Send + ::std::marker::Sync> {
-                Box::new(self.clone())
             }
         }
 
@@ -763,27 +754,26 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
                 }
             }
 
-            fn halt_child(&self) -> BoxFuture<()> {
+            fn halt_child(&mut self) -> BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
                     self.reset_child().await;
                 })
             }
 
-            fn reset_child(&self) -> BoxFuture<()> {
+            fn reset_child(&mut self) -> BoxFuture<()> {
                 ::std::boxed::Box::pin(async move {
-                    if let Some(child) = self.child.as_ref() {
-                        let mut child = child.lock().await;
+                    if let Some(child) = self.child.as_mut() {
+                        let mut child = child;
                         if matches!(child.status(), ::behaviortree_rs::basic_types::NodeStatus::Running) {
-                            ::behaviortree_rs::nodes::AsyncHalt::halt(&mut (*child)).await;
+                            let child_ptr: *mut _ = &mut **child;
+                            unsafe {
+                                ::behaviortree_rs::nodes::AsyncHalt::halt(&mut *child_ptr).await;
+                            }
                         }
 
                         child.reset_status();
                     }
                 })
-            }
-
-            fn clone_boxed(&self) -> Box<dyn ::behaviortree_rs::nodes::DecoratorNodeBase + ::std::marker::Send + ::std::marker::Sync> {
-                Box::new(self.clone())
             }
         }
 
@@ -924,14 +914,8 @@ impl Parse for NodeRegistration {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let factory = input.parse()?;
         input.parse::<Token![,]>()?;
-        let node_name = input
-            .peek(syn::LitStr)
-            .then_some(input.parse::<LitStr>()?.to_token_stream())
-            .or_else(|| input.peek(syn::Ident).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()));
-        if node_name.is_none() {
-            return Err(input.error("Node name must either be a string literal or an ident"));
-        }
-        let node_name = node_name.unwrap();
+        
+        let node_name = input.parse::<syn::Expr>()?.to_token_stream();
         
         input.parse::<Token![,]>()?;
         let node_type = input.parse()?;
@@ -967,21 +951,20 @@ fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
 
     quote! {
         {
-            let node_config = ::behaviortree_rs::nodes::NodeConfig::new(blackboard.clone());
-            let mut node = #node_type::new(#name, node_config #cloned_names);
+            let mut node = #node_type::new(#name, config #cloned_names);
             let manifest = ::behaviortree_rs::basic_types::TreeNodeManifest {
                 node_type: <#node_type as ::behaviortree_rs::nodes::GetNodeType>::node_type(&node),
                 registration_id: #name.into(),
                 ports: <#node_type as ::behaviortree_rs::nodes::NodePorts>::provided_ports(&node),
                 description: ::std::string::String::new(),
             };
-            <#node_type as ::behaviortree_rs::nodes::TreeNodeDefaults>::config(&mut node).set_manifest(::std::sync::Arc::new(manifest));
+            <#node_type as ::behaviortree_rs::nodes::TreeNodeDefaults>::config_mut(&mut node).set_manifest(::std::sync::Arc::new(manifest));
             node
         }
     }
 }
 
-fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream) -> TokenStream {
+fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, node_type: NodeTypeInternal) -> TokenStream {
     let node_registration = parse_macro_input!(input as NodeRegistration);
 
     let factory = &node_registration.factory;
@@ -1002,22 +985,45 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream) 
 
     let node = build_node(&node_registration);
 
+    let extra_steps = match node_type {
+        NodeTypeInternal::Control => quote! { 
+            for child in children {
+                node.children.push(child);
+            }
+        },
+        NodeTypeInternal::Decorator => quote! { node.child = Some(children.remove(0)); },
+        _ => quote!{ }
+    };
+
     let expanded = quote! {
         {
             let blackboard = #factory.blackboard().clone();
 
             #param_clone_expr
 
-            let node_fn = move || {
-                let node = #node;
-                #node_type_token(::std::boxed::Box::new(node))
+            let node_fn = move |
+                config: ::behaviortree_rs::nodes::NodeConfig,
+                mut children: ::std::vec::Vec<::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>>
+            | -> ::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>
+            {
+                let mut node = #node;
+                
+                #extra_steps
+
+                ::std::boxed::Box::new(node)
             };
 
-            #factory.register_node(#name, node_fn);
+            #factory.register_node(#name, node_fn, #node_type_token);
         }
     };
 
     TokenStream::from(expanded)
+}
+
+enum NodeTypeInternal {
+    Action,
+    Control,
+    Decorator,
 }
 
 /// Registers an Action type node with the factory.
@@ -1038,7 +1044,7 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream) 
 /// ```
 #[proc_macro]
 pub fn register_action_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Action })
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Action }, NodeTypeInternal::Action)
 }
 
 /// Registers an Control type node with the factory.
@@ -1059,7 +1065,7 @@ pub fn register_action_node(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn register_control_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Control })
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Control }, NodeTypeInternal::Control)
 }
 
 /// Registers an Decorator type node with the factory.
@@ -1080,5 +1086,5 @@ pub fn register_control_node(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn register_decorator_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::tree::NodePtrType::Decorator })
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Decorator }, NodeTypeInternal::Decorator)
 }

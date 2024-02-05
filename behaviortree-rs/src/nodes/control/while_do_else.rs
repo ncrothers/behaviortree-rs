@@ -33,7 +33,7 @@ impl AsyncTick for WhileDoElseNode {
 
             self.status = NodeStatus::Running;
 
-            let condition_status = self.children[0].lock().await.execute_tick().await?;
+            let condition_status = self.children[0].execute_tick().await?;
 
             if matches!(condition_status, NodeStatus::Running) {
                 return Ok(NodeStatus::Running);
@@ -47,12 +47,12 @@ impl AsyncTick for WhileDoElseNode {
                         self.halt_child(2).await?;
                     }
 
-                    status = self.children[1].lock().await.execute_tick().await?;
+                    status = self.children[1].execute_tick().await?;
                 }
                 NodeStatus::Failure => match children_count {
                     3 => {
                         self.halt_child(1).await?;
-                        status = self.children[2].lock().await.execute_tick().await?;
+                        status = self.children[2].execute_tick().await?;
                     }
                     2 => {
                         status = NodeStatus::Failure;
@@ -65,7 +65,7 @@ impl AsyncTick for WhileDoElseNode {
             match status {
                 NodeStatus::Running => Ok(NodeStatus::Running),
                 status => {
-                    self.reset_children();
+                    self.reset_children().await;
                     Ok(status)
                 }
             }

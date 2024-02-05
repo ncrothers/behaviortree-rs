@@ -29,7 +29,7 @@ impl AsyncTick for ReactiveFallbackNode {
             for index in 0..self.children.len() {
                 let cur_child = &mut self.children[index];
 
-                let child_status = cur_child.lock().await.execute_tick().await?;
+                let child_status = cur_child.execute_tick().await?;
 
                 all_skipped &= child_status == NodeStatus::Skipped;
 
@@ -43,7 +43,7 @@ impl AsyncTick for ReactiveFallbackNode {
                     }
                     NodeStatus::Failure => {}
                     NodeStatus::Success => {
-                        self.reset_children();
+                        self.reset_children().await;
                         return Ok(NodeStatus::Success);
                     }
                     NodeStatus::Skipped => {
@@ -58,7 +58,7 @@ impl AsyncTick for ReactiveFallbackNode {
                 };
             }
 
-            self.reset_children();
+            self.reset_children().await;
 
             match all_skipped {
                 true => Ok(NodeStatus::Skipped),

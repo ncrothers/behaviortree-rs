@@ -69,8 +69,8 @@ impl ParallelNode {
 impl AsyncTick for ParallelNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            self.success_threshold = self.config().get_input("success_count").await.unwrap();
-            self.failure_threshold = self.config().get_input("failure_count").await.unwrap();
+            self.success_threshold = self.config_mut().get_input("success_count").await.unwrap();
+            self.failure_threshold = self.config_mut().get_input("failure_count").await.unwrap();
 
             let children_count = self.children.len();
 
@@ -90,7 +90,7 @@ impl AsyncTick for ParallelNode {
 
             for i in 0..children_count {
                 if !self.completed_list.contains(&i) {
-                    let mut child = self.children[i].lock().await;
+                    let child = &mut self.children[i];
                     match child.execute_tick().await? {
                         NodeStatus::Skipped => skipped_count += 1,
                         NodeStatus::Success => {
@@ -115,7 +115,7 @@ impl AsyncTick for ParallelNode {
                         && (self.success_count + skipped_count) >= required_success_count)
                 {
                     self.clear();
-                    self.reset_children();
+                    self.reset_children().await;
                     return Ok(NodeStatus::Success);
                 }
 
@@ -123,7 +123,7 @@ impl AsyncTick for ParallelNode {
                     || self.failure_count == self.failure_threshold()
                 {
                     self.clear();
-                    self.reset_children();
+                    self.reset_children().await;
                     return Ok(NodeStatus::Failure);
                 }
             }
@@ -150,7 +150,7 @@ impl NodePorts for ParallelNode {
 impl AsyncHalt for ParallelNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
-            self.reset_children();
+            self.reset_children().await;
         })
     }
 }

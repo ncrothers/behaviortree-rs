@@ -277,3 +277,60 @@ fn load_adjacent_controls() {
 
     assert!(tree.is_ok());
 }
+
+#[test]
+fn async_test() {
+    let _ = pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Debug)
+        .is_test(false)
+        .try_init();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        let task = tokio::spawn(async move {
+            let xml = r#"
+                <root main_tree_to_execute="main">
+                    <BehaviorTree ID="main">
+                        <Sequence>
+                            <Fallback>
+                                <Fallback>
+                                    <StatusNode status="Failure" />
+                                </Fallback>
+                            </Fallback>
+                            <Fallback>
+                                <EchoNode msg="hello"/>
+                            </Fallback>
+                        </Sequence>
+                    </BehaviorTree>
+                </root>
+            "#
+            .to_string();
+
+            let mut factory = Factory::new();
+
+            register_action_node!(factory, "StatusNode", StatusNode);
+            register_action_node!(factory, "EchoNode", EchoNode);
+
+            let blackboard = Blackboard::create();
+            let tree = factory.create_async_tree_from_text(xml, &blackboard).await;
+
+            if tree.is_err() {
+                log::error!("{}", tree.as_ref().err().unwrap());
+            }
+
+            assert!(tree.is_ok());
+
+            let mut tree = tree.unwrap();
+
+            let res = tree.tick_once().await;
+            assert!(res.is_ok());
+        });
+
+        let res = task.await;
+
+        assert!(res.is_ok());
+    });
+}

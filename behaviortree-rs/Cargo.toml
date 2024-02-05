@@ -1,7 +1,7 @@
 [package]
 name = "behaviortree-rs"
 description = "Rust implementation of BehaviorTree.CPP, a robust behavior tree library in C++"
-version = "0.1.2"
+version = "0.2.1"
 edition = "2021"
 authors = ["Nicholas Crothers <ncrothers523@gmail.com>"]
 license = "MIT"
@@ -11,7 +11,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0.75"
-behaviortree-rs-derive = "0.2.0"
+behaviortree-rs-derive = "0.2.1"
 futures = { version = "0.3.28" }
 log = "0.4.20"
 pretty_env_logger = "0.5.0"

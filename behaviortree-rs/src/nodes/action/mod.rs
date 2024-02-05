@@ -7,15 +7,7 @@ use crate::nodes::{NodeResult, TreeNodeBase};
 pub trait ActionNodeBase: TreeNodeBase + ActionNode {}
 
 pub trait ActionNode {
-    /// Creates a cloned version of itself as a `ActionNode` trait object
-    fn clone_boxed(&self) -> Box<dyn ActionNodeBase + Send + Sync>;
     fn execute_action_tick(&mut self) -> BoxFuture<NodeResult>;
-}
-
-impl Clone for Box<dyn ActionNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn ActionNodeBase + Send + Sync> {
-        self.clone_boxed()
-    }
 }
 
 pub trait SyncActionNode {}

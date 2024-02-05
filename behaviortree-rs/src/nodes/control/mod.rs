@@ -32,17 +32,9 @@ pub trait ControlNode: TreeNodeBase {
     /// Return reference to `Vec` of children nodes
     fn children(&self) -> &Vec<TreeNodePtr>;
     /// Call `halt()` on child at index
-    fn halt_child(&self, index: usize) -> BoxFuture<Result<(), NodeError>>;
+    fn halt_child(&mut self, index: usize) -> BoxFuture<Result<(), NodeError>>;
     /// Halt all children at and after index
-    fn halt_children(&self, start: usize) -> BoxFuture<Result<(), NodeError>>;
+    fn halt_children(&mut self, start: usize) -> BoxFuture<Result<(), NodeError>>;
     /// Reset status of all child nodes
-    fn reset_children(&self) -> BoxFuture<()>;
-    /// Creates a cloned version of itself as a `ControlNode` trait object
-    fn clone_boxed(&self) -> Box<dyn ControlNodeBase + Send + Sync>;
-}
-
-impl Clone for Box<dyn ControlNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn ControlNodeBase + Send + Sync> {
-        self.clone_boxed()
-    }
+    fn reset_children(&mut self) -> BoxFuture<()>;
 }

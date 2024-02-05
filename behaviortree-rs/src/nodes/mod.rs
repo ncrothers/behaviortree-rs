@@ -2,11 +2,10 @@ use std::{any::TypeId, collections::HashMap, sync::Arc};
 
 use futures::future::BoxFuture;
 use thiserror::Error;
-use tokio::sync::Mutex;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, BTToString, FromString, ParseStr, PortDirection, PortValue,
+        self, get_remapped_key, FromString, ParseStr, PortDirection, PortValue,
         PortsRemapping, TreeNodeManifest,
     },
     blackboard::BlackboardString,
@@ -47,7 +46,7 @@ pub trait TreeNodeBase:
 /// Pointer to the most general trait, which encapsulates all
 /// node types that implement `TreeNodeBase` (all nodes need
 /// to for it to compile)
-pub type TreeNodePtr = Arc<Mutex<dyn TreeNodeBase + Send>>;
+pub type TreeNodePtr = Box<dyn TreeNodeBase + Send + Sync>;
 
 pub type NodeResult = Result<NodeStatus, NodeError>;
 
@@ -125,10 +124,9 @@ pub trait TreeNodeDefaults {
     fn status(&self) -> NodeStatus;
     fn reset_status(&mut self);
     fn set_status(&mut self, status: NodeStatus);
-    fn config(&mut self) -> &mut NodeConfig;
+    fn config(&self) -> &NodeConfig;
+    fn config_mut(&mut self) -> &mut NodeConfig;
     fn into_boxed(self) -> Box<dyn TreeNodeBase>;
-    fn to_tree_node_ptr(&self) -> TreeNodePtr;
-    fn clone_node_boxed(&self) -> Box<dyn TreeNodeBase + Send + Sync>;
 }
 
 /// Automatically implemented for all node types. The implementation
@@ -401,17 +399,5 @@ impl NodeConfig {
 impl Clone for Box<dyn PortValue> {
     fn clone(&self) -> Box<dyn PortValue> {
         self.clone_port()
-    }
-}
-
-impl Clone for Box<dyn TreeNodeBase> {
-    fn clone(&self) -> Box<dyn TreeNodeBase> {
-        self.clone_node_boxed()
-    }
-}
-
-impl Clone for Box<dyn TreeNodeBase + Send + Sync> {
-    fn clone(&self) -> Box<dyn TreeNodeBase + Send + Sync> {
-        self.clone_node_boxed()
     }
 }
