@@ -914,14 +914,16 @@ impl Parse for NodeRegistration {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let factory = input.parse()?;
         input.parse::<Token![,]>()?;
-        let node_name = input
-            .peek(syn::LitStr)
-            .then_some(input.parse::<LitStr>()?.to_token_stream())
-            .or_else(|| input.peek(syn::Ident).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()));
-        if node_name.is_none() {
-            return Err(input.error("Node name must either be a string literal or an ident"));
-        }
-        let node_name = node_name.unwrap();
+        // let node_name = input
+        //     .peek(syn::LitStr)
+        //     .then_some(input.parse::<LitStr>()?.to_token_stream())
+        //     .or_else(|| input.peek(syn::Ident).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()))
+        //     .or_else(|| input.peek(syn::Path).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()));
+        let node_name = input.parse::<syn::Expr>()?.to_token_stream();
+        // if node_name.is_none() {
+        //     return Err(input.error("Node name must either be a string literal or an ident"));
+        // }
+        // let node_name = node_name.unwrap();
         
         input.parse::<Token![,]>()?;
         let node_type = input.parse()?;
@@ -994,10 +996,10 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
     let extra_steps = match node_type {
         NodeTypeInternal::Control => quote! { 
             for child in children {
-                node.push(child);
+                node.children.push(child);
             }
         },
-        NodeTypeInternal::Decorator => quote! { node.child = Some(children.remove(0)) },
+        NodeTypeInternal::Decorator => quote! { node.child = Some(children.remove(0)); },
         _ => quote!{ }
     };
 
@@ -1009,7 +1011,7 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
 
             let node_fn = move |
                 config: ::behaviortree_rs::nodes::NodeConfig,
-                children: ::std::vec::Vec<::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>>
+                mut children: ::std::vec::Vec<::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>>
             | -> ::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>
             {
                 let mut node = #node;
