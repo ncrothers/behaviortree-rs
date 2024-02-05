@@ -914,16 +914,8 @@ impl Parse for NodeRegistration {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let factory = input.parse()?;
         input.parse::<Token![,]>()?;
-        // let node_name = input
-        //     .peek(syn::LitStr)
-        //     .then_some(input.parse::<LitStr>()?.to_token_stream())
-        //     .or_else(|| input.peek(syn::Ident).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()))
-        //     .or_else(|| input.peek(syn::Path).then_some(input.parse::<syn::Ident>().unwrap().to_token_stream()));
+        
         let node_name = input.parse::<syn::Expr>()?.to_token_stream();
-        // if node_name.is_none() {
-        //     return Err(input.error("Node name must either be a string literal or an ident"));
-        // }
-        // let node_name = node_name.unwrap();
         
         input.parse::<Token![,]>()?;
         let node_type = input.parse()?;
