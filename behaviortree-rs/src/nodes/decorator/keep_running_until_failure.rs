@@ -3,7 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{AsyncHalt, AsyncTick, DecoratorNode, NodePorts, NodeResult, TreeNodeDefaults},
+    nodes::{DecoratorNode, NodeResult, TreeNodeDefaults},
 };
 
 /// The KeepRunningUntilFailureNode returns always Failure or Running
@@ -34,7 +34,7 @@ impl KeepRunningUntilFailureNode {
             }
         })
     }
-    
+
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_child().await;

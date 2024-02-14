@@ -7,7 +7,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
+        ControlNode, NodeError, NodeResult, TreeNodeDefaults,
     },
 };
 

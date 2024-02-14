@@ -3,7 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{AsyncHalt, AsyncTick, DecoratorNode, NodePorts, NodeResult, TreeNodeDefaults},
+    nodes::{DecoratorNode, NodeResult, TreeNodeDefaults},
 };
 
 /// The ForceSuccessNode returns always Success or Running
@@ -30,7 +30,7 @@ impl ForceSuccessNode {
             Ok(child_status)
         })
     }
-    
+
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_child().await;

@@ -5,7 +5,7 @@ use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
     nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
+        DecoratorNode, NodeError, NodeResult, TreeNodeDefaults,
     },
 };
 
@@ -100,7 +100,7 @@ impl RetryNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_attempts"))
     }
-    
+
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.try_count = 0;
