@@ -16,7 +16,10 @@ use crate::{
 ///
 /// - If a child returns SUCCESS, stop the loop and return SUCCESS.
 // #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-#[bt_node(ControlNode)]
+#[bt_node(
+    node_type = ControlNode,
+    tick = tick,
+)]
 pub struct FallbackNode {
     #[bt(default = "0")]
     child_idx: usize,
