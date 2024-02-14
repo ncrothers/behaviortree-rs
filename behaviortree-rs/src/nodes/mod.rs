@@ -287,7 +287,7 @@ impl NodeConfig {
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
     /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub async fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
+    pub fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
     where
         T: FromString + Clone + Send + 'static,
     {
@@ -311,7 +311,7 @@ impl NodeConfig {
                 } else {
                     match get_remapped_key(port, val) {
                         // Value is a Blackboard pointer
-                        Some(key) => match self.blackboard.get::<T>(&key).await {
+                        Some(key) => match self.blackboard.get::<T>(&key) {
                             Some(val) => Ok(val),
                             None => Err(NodeError::BlackboardError(key)),
                         },
@@ -329,23 +329,6 @@ impl NodeConfig {
             // Port not found
             None => Err(NodeError::PortError(String::from(port))),
         }
-    }
-
-    /// Sync version of `get_input<T>`
-    ///
-    /// Returns the value of the input port at the `port` key as a `Result<T, NodeError>`.
-    /// The value is `Err` in the following situations:
-    /// - The port wasn't found at that key
-    /// - `T` doesn't match the type of the stored value
-    /// - If a default value is needed (value is empty), couldn't parse default value
-    /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
-    /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
-    /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub fn get_input_sync<T>(&mut self, port: &str) -> Result<T, NodeError>
-    where
-        T: FromString + Clone + Send + 'static,
-    {
-        futures::executor::block_on(self.get_input(port))
     }
 
     /// Sets `value` into the blackboard. The key is based on the value provided
@@ -370,7 +353,7 @@ impl NodeConfig {
                     },
                 };
 
-                self.blackboard.set(blackboard_key, value).await;
+                self.blackboard.set(blackboard_key, value);
 
                 Ok(())
             }

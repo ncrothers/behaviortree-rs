@@ -410,7 +410,6 @@ impl PortInfo {
     }
 
     pub fn set_default(&mut self, default: impl BTToString) {
-        // let test = <Box<dyn Any>>::downcast::<u32>(self.default_value().unwrap().bt_to_string()).unwrap();
         self.default_value = Some(default.bt_to_string())
     }
 

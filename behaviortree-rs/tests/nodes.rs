@@ -20,7 +20,7 @@ pub struct StatusNode {}
 impl AsyncTick for StatusNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            let status: NodeStatus = self.config.get_input("status").await?;
+            let status: NodeStatus = self.config.get_input("status")?;
 
             info!("I am a node that returns {}!", status.bt_to_string());
 
@@ -46,7 +46,7 @@ pub struct SuccessThenFailure {
 impl AsyncTick for SuccessThenFailure {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            let max_iters: usize = self.config.get_input("iters").await?;
+            let max_iters: usize = self.config.get_input("iters")?;
 
             info!("SuccessThenFailure!");
 
@@ -74,7 +74,7 @@ pub struct EchoNode {}
 impl AsyncTick for EchoNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            let msg: String = self.config.get_input("msg").await?;
+            let msg: String = self.config.get_input("msg")?;
 
             info!("{msg}");
 
@@ -117,14 +117,14 @@ impl AsyncStatefulActionNode for RunForNode {
 
     fn on_running(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            let limit: usize = self.config.get_input("iters").await?;
+            let limit: usize = self.config.get_input("iters")?;
 
             if self.counter < limit {
                 info!("RunFor {}", self.counter);
                 self.counter += 1;
                 Ok(NodeStatus::Running)
             } else {
-                Ok(self.config.get_input("status").await?)
+                Ok(self.config.get_input("status")?)
             }
         })
     }

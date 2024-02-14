@@ -18,7 +18,7 @@ use crate::{
     macros::build_node_ptr,
     nodes::{
         self, AsyncHalt, NodeConfig,
-        NodeResult, TreeNodeBase, TreeNodePtr,
+        NodeResult, TreeNodePtr,
     },
 };
 
@@ -493,7 +493,7 @@ impl Factory {
                     let node = match node_name.as_str() {
                         "SubTree" => {
                             let attributes = attributes.to_map()?;
-                            let mut child_blackboard = Blackboard::with_parent(blackboard).await;
+                            let mut child_blackboard = Blackboard::with_parent(blackboard);
 
                             // Process attributes (Ports, special fields, etc)
                             for (attr, value) in attributes.iter() {
@@ -502,8 +502,7 @@ impl Factory {
                                     child_blackboard
                                         .enable_auto_remapping(<bool as FromString>::from_string(
                                             value,
-                                        )?)
-                                        .await;
+                                        )?);
                                     continue;
                                 } else if !attr.is_allowed_port_name() {
                                     continue;
@@ -512,11 +511,10 @@ impl Factory {
                                 if let Some(port_name) = value.strip_bb_pointer() {
                                     // Add remapping if `value` is a Blackboard pointer
                                     child_blackboard
-                                        .add_subtree_remapping(attr.clone(), port_name)
-                                        .await;
+                                        .add_subtree_remapping(attr.clone(), port_name);
                                 } else {
                                     // Set string value into Blackboard
-                                    child_blackboard.set(attr, value.clone()).await;
+                                    child_blackboard.set(attr, value.clone());
                                 }
                             }
 
