@@ -396,8 +396,7 @@ mod tests {
 
     // TODO: add other tests
 
-    #[tokio::test]
-    async fn create_entry() {
+    fn create_entry() {
         // With no remapping
 
         let mut root_bb = Blackboard::create();
@@ -498,8 +497,7 @@ mod tests {
         assert_eq!(child3_bb.get::<u32>("foo"), None);
     }
 
-    #[tokio::test]
-    async fn type_matching() {
+    fn type_matching() {
         let mut bb = Blackboard::create();
 
         bb.set("foo", 123u32);
@@ -509,8 +507,7 @@ mod tests {
         assert!(bb.get::<f32>("foo").is_none());
     }
 
-    #[tokio::test]
-    async fn custom_type() {
+    fn custom_type() {
         #[derive(Clone, Debug, PartialEq)]
         struct CustomEntry {
             pub foo: u32,
