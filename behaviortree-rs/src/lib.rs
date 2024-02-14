@@ -242,11 +242,7 @@ pub use nodes::NodeResult;
 pub use tree::Factory;
 
 extern crate futures as futures_internal;
-extern crate tokio as tokio_internal;
 
 pub mod sync {
     pub use futures::{executor::block_on, future::BoxFuture};
-
-    pub use tokio::sync::Mutex;
-    pub use tokio::task::spawn_blocking;
 }

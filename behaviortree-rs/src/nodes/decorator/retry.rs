@@ -38,7 +38,7 @@ impl AsyncTick for RetryNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             // Load num_cycles from the port value
-            self.max_attempts = self.config.get_input("num_attempts").await?;
+            self.max_attempts = self.config.get_input("num_attempts")?;
 
             let mut do_loop =
                 (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;

@@ -38,7 +38,7 @@ impl AsyncTick for RepeatNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             // Load num_cycles from the port value
-            self.num_cycles = self.config.get_input("num_cycles").await?;
+            self.num_cycles = self.config.get_input("num_cycles")?;
 
             let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 

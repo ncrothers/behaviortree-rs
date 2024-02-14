@@ -69,8 +69,8 @@ impl ParallelNode {
 impl AsyncTick for ParallelNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            self.success_threshold = self.config_mut().get_input("success_count").await.unwrap();
-            self.failure_threshold = self.config_mut().get_input("failure_count").await.unwrap();
+            self.success_threshold = self.config_mut().get_input("success_count").unwrap();
+            self.failure_threshold = self.config_mut().get_input("failure_count").unwrap();
 
             let children_count = self.children.len();
 

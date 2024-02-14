@@ -27,7 +27,7 @@ pub struct RunOnceNode {
 impl AsyncTick for RunOnceNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
-            let skip = self.config.get_input("then_skip").await?;
+            let skip = self.config.get_input("then_skip")?;
 
             if self.already_ticked {
                 return if skip {
