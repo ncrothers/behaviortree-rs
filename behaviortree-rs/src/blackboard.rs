@@ -396,6 +396,7 @@ mod tests {
 
     // TODO: add other tests
 
+    #[test]
     fn create_entry() {
         // With no remapping
 
@@ -445,6 +446,7 @@ mod tests {
         assert_eq!(root_bb.get::<u32>("bar"), Some(123));
     }
 
+    #[test]
     fn remapping() {
         // No remapping
 
@@ -497,6 +499,7 @@ mod tests {
         assert_eq!(child3_bb.get::<u32>("foo"), None);
     }
 
+    #[test]
     fn type_matching() {
         let mut bb = Blackboard::create();
 
@@ -507,6 +510,7 @@ mod tests {
         assert!(bb.get::<f32>("foo").is_none());
     }
 
+    #[test]
     fn custom_type() {
         #[derive(Clone, Debug, PartialEq)]
         struct CustomEntry {
