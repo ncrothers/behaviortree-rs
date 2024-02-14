@@ -3,9 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        DecoratorNode, NodeError, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{DecoratorNode, NodeError, NodeResult, TreeNodeDefaults},
 };
 
 /// The InverterNode returns Failure on Success, and Success on Failure

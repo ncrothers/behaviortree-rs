@@ -5,8 +5,8 @@ use thiserror::Error;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, FromString, ParseStr, PortDirection, PortValue,
-        PortsRemapping, TreeNodeManifest,
+        self, get_remapped_key, FromString, ParseStr, PortDirection, PortValue, PortsRemapping,
+        TreeNodeManifest,
     },
     blackboard::BlackboardString,
     tree::ParseError,

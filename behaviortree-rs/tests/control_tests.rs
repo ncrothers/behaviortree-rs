@@ -32,7 +32,10 @@ async fn fallback() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("{status:?}"),
@@ -66,7 +69,10 @@ async fn if_then_else() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -101,7 +107,10 @@ async fn parallel_all() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -138,7 +147,10 @@ async fn parallel() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -172,7 +184,10 @@ async fn reactive_fallback() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -208,7 +223,10 @@ async fn reactive_sequence() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -244,7 +262,10 @@ async fn sequence_star() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -280,7 +301,10 @@ async fn sequence_vanilla() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),
@@ -315,7 +339,10 @@ async fn while_do_else() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_async_tree(&blackboard, "main").await.unwrap();
+    let mut tree = factory
+        .instantiate_async_tree(&blackboard, "main")
+        .await
+        .unwrap();
 
     match tree.tick_while_running().await {
         Ok(status) => info!("Final status: {status:?}"),

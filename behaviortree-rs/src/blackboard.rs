@@ -1,4 +1,8 @@
-use std::{any::Any, collections::HashMap, sync::{Arc, Mutex, RwLock}};
+use std::{
+    any::Any,
+    collections::HashMap,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::basic_types::{FromString, ParseStr};
 
@@ -432,12 +436,8 @@ mod tests {
         let mut left_bb = Blackboard::with_parent(&root_bb);
         let mut right_bb = Blackboard::with_parent(&root_bb);
 
-        right_bb
-            .add_subtree_remapping(String::from("foo"), String::from("bar"))
-            ;
-        left_bb
-            .add_subtree_remapping(String::from("foo"), String::from("bar"))
-            ;
+        right_bb.add_subtree_remapping(String::from("foo"), String::from("bar"));
+        left_bb.add_subtree_remapping(String::from("foo"), String::from("bar"));
 
         left_bb.set("foo", 123u32);
 
@@ -481,15 +481,9 @@ mod tests {
         let mut child2_bb = Blackboard::with_parent(&child1_bb);
         let mut child3_bb = Blackboard::with_parent(&child2_bb);
 
-        child1_bb
-            .add_subtree_remapping(String::from("child1"), String::from("root"))
-            ;
-        child2_bb
-            .add_subtree_remapping(String::from("child2"), String::from("child1"))
-            ;
-        child3_bb
-            .add_subtree_remapping(String::from("child3"), String::from("child2"))
-            ;
+        child1_bb.add_subtree_remapping(String::from("child1"), String::from("root"));
+        child2_bb.add_subtree_remapping(String::from("child2"), String::from("child1"));
+        child3_bb.add_subtree_remapping(String::from("child3"), String::from("child2"));
 
         root_bb.set("root", 123u32);
 
@@ -545,8 +539,7 @@ mod tests {
 
         bb.set("custom", custom_value.clone());
         bb.set("custom_str", String::from("123,bar"));
-        bb.set("custom_str_malformed", String::from("not an int,bar"))
-            ;
+        bb.set("custom_str_malformed", String::from("not an int,bar"));
 
         assert_eq!(
             bb.get_exact::<CustomEntry>("custom").as_ref(),
@@ -558,9 +551,6 @@ mod tests {
             Some(&custom_value)
         );
         // Check it returns None if it cannot be parsed
-        assert_eq!(
-            bb.get::<CustomEntry>("custom_str_malformed").as_ref(),
-            None
-        );
+        assert_eq!(bb.get::<CustomEntry>("custom_str_malformed").as_ref(), None);
     }
 }

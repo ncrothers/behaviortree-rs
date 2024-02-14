@@ -6,9 +6,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{
-        ControlNode, NodeError, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{ControlNode, NodeError, NodeResult, TreeNodeDefaults},
 };
 
 /// The ParallelAllNode execute all its children
@@ -115,7 +113,7 @@ impl ParallelAllNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("max_failures", 1))
     }
-    
+
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_children().await;

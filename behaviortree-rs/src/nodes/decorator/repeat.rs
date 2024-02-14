@@ -4,9 +4,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{
-        DecoratorNode, NodeError, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{DecoratorNode, NodeError, NodeResult, TreeNodeDefaults},
 };
 
 /// /// The RetryNode is used to execute a child several times, as long

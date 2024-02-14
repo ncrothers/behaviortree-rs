@@ -6,9 +6,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{
-        ControlNode, NodeError, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{ControlNode, NodeError, NodeResult, TreeNodeDefaults},
 };
 
 /// The ParallelNode execute all its children

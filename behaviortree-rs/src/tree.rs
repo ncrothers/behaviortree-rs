@@ -16,10 +16,7 @@ use crate::{
     },
     blackboard::{Blackboard, BlackboardString},
     macros::build_node_ptr,
-    nodes::{
-        self, AsyncHalt, NodeConfig,
-        NodeResult, TreeNodePtr,
-    },
+    nodes::{self, AsyncHalt, NodeConfig, NodeResult, TreeNodePtr},
 };
 
 #[derive(Debug, Error)]
@@ -499,10 +496,9 @@ impl Factory {
                             for (attr, value) in attributes.iter() {
                                 // Set autoremapping to true or false
                                 if attr == "_autoremap" {
-                                    child_blackboard
-                                        .enable_auto_remapping(<bool as FromString>::from_string(
-                                            value,
-                                        )?);
+                                    child_blackboard.enable_auto_remapping(
+                                        <bool as FromString>::from_string(value)?,
+                                    );
                                     continue;
                                 } else if !attr.is_allowed_port_name() {
                                     continue;
@@ -510,8 +506,7 @@ impl Factory {
 
                                 if let Some(port_name) = value.strip_bb_pointer() {
                                     // Add remapping if `value` is a Blackboard pointer
-                                    child_blackboard
-                                        .add_subtree_remapping(attr.clone(), port_name);
+                                    child_blackboard.add_subtree_remapping(attr.clone(), port_name);
                                 } else {
                                     // Set string value into Blackboard
                                     child_blackboard.set(attr, value.clone());
