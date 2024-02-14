@@ -24,7 +24,12 @@ use crate::{
 ///   <ClapYourHandsOnce/>
 /// </Repeat>
 /// ```
-#[bt_node(DecoratorNode)]
+#[bt_node(
+    node_type = DecoratorNode,
+    ports = provided_ports,
+    tick = tick,
+    halt = halt,
+)]
 pub struct RepeatNode {
     #[bt(default = "-1")]
     num_cycles: i32,
@@ -34,7 +39,7 @@ pub struct RepeatNode {
     all_skipped: bool,
 }
 
-impl AsyncTick for RepeatNode {
+impl RepeatNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             // Load num_cycles from the port value
@@ -90,15 +95,11 @@ impl AsyncTick for RepeatNode {
             }
         })
     }
-}
 
-impl NodePorts for RepeatNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_cycles"))
     }
-}
-
-impl AsyncHalt for RepeatNode {
+    
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.repeat_count = 0;

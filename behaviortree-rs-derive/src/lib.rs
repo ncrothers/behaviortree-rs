@@ -170,12 +170,12 @@ impl Parse for NodeAttributeConfig {
         let node_type_str = node_type.require_ident()?.to_string();
 
         let (tick_fn, tick_running) = if node_type_str == "StatefulActionNode" {
-            let tick_running = attributes
+            let tick_fn = attributes
                 .remove("on_start")
                 .map(|val| val.value)
                 .ok_or_else(|| input.error("missing `on_start` field for `StatefulActionNode`"))?;
             
-            let tick_fn = attributes
+            let tick_running = attributes
                 .remove("on_running")
                 .map(|val| val.value)
                 .ok_or_else(|| input.error("missing `on_running` field for `StatefulActionNode`"))?;
@@ -315,7 +315,7 @@ fn create_bt_node(
             if type_ident_str != "StatefulActionNode" {
                 let tick_token = &args.tick_fn;
                 let halt_token = if let Some(halt_token) = args.halt.as_ref() {
-                    quote! { self.#halt_token().await }
+                    quote! { #item_ident::#halt_token(self).await }
                 } else {
                     quote! {}
                 };
@@ -324,7 +324,7 @@ fn create_bt_node(
                     impl ::behaviortree_rs::nodes::AsyncTick for #item_ident {
                         fn tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
                             ::std::boxed::Box::pin(async move {
-                                self.#tick_token().await
+                                #item_ident::#tick_token(self).await
                             })
                         }
                     } 
@@ -341,7 +341,7 @@ fn create_bt_node(
 
             // Add `NodePorts` implementation
             let ports_token = if let Some(ports_token) = args.ports.as_ref() {
-                quote! { self.#ports_token() }
+                quote! { #item_ident::#ports_token(self) }
             } else {
                 quote! { ::std::collections::HashMap::new() }
             };
@@ -365,7 +365,7 @@ fn create_bt_node(
                     // Unwrapping is safe because we're guaranteed to have this field in the case of a StatefulActionNode
                     let tick_running_token = args.tick_running.unwrap();
                     let halt_token = if let Some(halt_token) = args.halt {
-                        quote! { self.#halt_token().await }
+                        quote! { #item_ident::#halt_token(self).await }
                     } else {
                         quote! {}
                     };
@@ -389,16 +389,16 @@ fn create_bt_node(
                             }
                         }
 
-                        impl ::behaviortree_rs::nodes::SyncStatefulActionNode for #item_ident {
+                        impl ::behaviortree_rs::nodes::AsyncStatefulActionNode for #item_ident {
                             fn on_start(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
                                 ::std::boxed::Box::pin(async move {
-                                    self.#tick_token().await
+                                    #item_ident::#tick_token(self).await
                                 })
                             }
 
                             fn on_running(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
                                 ::std::boxed::Box::pin(async move {
-                                    self.#tick_running_token().await
+                                    #item_ident::#tick_running_token(self).await
                                 })
                             }
 
@@ -574,7 +574,7 @@ fn create_bt_node(
         .concat_list(manual_fields);
 
     let init_token = if let Some(init_token) = args.init {
-        quote! { self.#init_token(); }
+        quote! { #item_ident::#init_token(self); }
     } else {
         quote! {}
     };
@@ -785,7 +785,7 @@ pub fn derive_action_node(input: TokenStream) -> TokenStream {
         impl ::behaviortree_rs::nodes::ActionNode for #ident {
             fn execute_action_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
                 ::std::boxed::Box::pin(async move {
-                    match self.tick().await? {
+                    match <Self as ::behaviortree_rs::nodes::AsyncTick>::tick(self).await? {
                         ::behaviortree_rs::basic_types::NodeStatus::Idle => Err(::behaviortree_rs::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
                         status => Ok(status)
                     }
@@ -933,7 +933,7 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
                     }
 
                     ::log::debug!("[behaviortree_rs]: {}::tick()", <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::name(self));
-                    self.tick().await
+                    <Self as ::behaviortree_rs::nodes::AsyncTick>::tick(self).await
                 })
             }
         }
@@ -1020,7 +1020,7 @@ pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
                     self.halt_requested = true;
 
                     if matches!(<Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::status(self), ::behaviortree_rs::basic_types::NodeStatus::Running) {
-                        self.on_halted().await;
+                        <Self as ::behaviortree_rs::nodes::AsyncStatefulActionNode>::on_halted(self).await;
                     }
 
                     <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::reset_status(self);

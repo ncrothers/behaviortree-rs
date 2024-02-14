@@ -145,10 +145,14 @@ use behaviortree_rs::{
     sync::BoxFuture,
 };
 
-#[bt_node(SyncActionNode)]
+#[bt_node(
+    node_type = SyncActionNode,
+    ports = provided_ports,
+    tick = tick,
+)]
 struct DummyActionStruct {}
 
-impl AsyncTick for DummyActionStruct {
+impl DummyActionStruct {
     fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
         Box::pin(async move {
             // Some implementation
@@ -159,11 +163,7 @@ impl AsyncTick for DummyActionStruct {
             Ok(NodeStatus::Success)
         })
     }
-}
 
-// If you don't use any ports, this can be left empty
-// impl NodePorts for DummyActionStruct {}
-impl NodePorts for DummyActionStruct {
     fn provided_ports(&self) -> PortsList {
         define_ports!(
             // No default value
@@ -173,9 +173,6 @@ impl NodePorts for DummyActionStruct {
         )
     }
 }
-
-// If you don't need to do cleanup, leave as-is
-impl AsyncHalt for DummyActionStruct {}
 ```
 
 ### `SyncTick`

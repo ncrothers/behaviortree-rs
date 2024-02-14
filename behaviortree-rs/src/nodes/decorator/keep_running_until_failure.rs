@@ -7,10 +7,14 @@ use crate::{
 };
 
 /// The KeepRunningUntilFailureNode returns always Failure or Running
-#[bt_node(DecoratorNode)]
+#[bt_node(
+    node_type = DecoratorNode,
+    tick = tick,
+    halt = halt,
+)]
 pub struct KeepRunningUntilFailureNode {}
 
-impl AsyncTick for KeepRunningUntilFailureNode {
+impl KeepRunningUntilFailureNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             self.set_status(NodeStatus::Running);
@@ -30,11 +34,7 @@ impl AsyncTick for KeepRunningUntilFailureNode {
             }
         })
     }
-}
-
-impl NodePorts for KeepRunningUntilFailureNode {}
-
-impl AsyncHalt for KeepRunningUntilFailureNode {
+    
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_child().await;

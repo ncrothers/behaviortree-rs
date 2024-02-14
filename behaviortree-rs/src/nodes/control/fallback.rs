@@ -19,6 +19,7 @@ use crate::{
 #[bt_node(
     node_type = ControlNode,
     tick = tick,
+    halt = halt,
 )]
 pub struct FallbackNode {
     #[bt(default = "0")]
@@ -27,7 +28,7 @@ pub struct FallbackNode {
     all_skipped: bool,
 }
 
-impl AsyncTick for FallbackNode {
+impl FallbackNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             if self.status == NodeStatus::Idle {
@@ -79,11 +80,7 @@ impl AsyncTick for FallbackNode {
             }
         })
     }
-}
 
-impl NodePorts for FallbackNode {}
-
-impl AsyncHalt for FallbackNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;

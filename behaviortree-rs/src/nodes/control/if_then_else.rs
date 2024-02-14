@@ -19,13 +19,17 @@ use crate::{
 /// statement returns FAILURE.
 ///
 /// This is equivalent to add AlwaysFailure as 3rd child.
-#[bt_node(ControlNode)]
+#[bt_node(
+    node_type = ControlNode,
+    tick = tick,
+    halt = halt,
+)]
 pub struct IfThenElseNode {
     #[bt(default = "0")]
     child_idx: usize,
 }
 
-impl AsyncTick for IfThenElseNode {
+impl IfThenElseNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let children_count = self.children.len();
@@ -77,11 +81,7 @@ impl AsyncTick for IfThenElseNode {
             ))
         })
     }
-}
 
-impl NodePorts for IfThenElseNode {}
-
-impl AsyncHalt for IfThenElseNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;

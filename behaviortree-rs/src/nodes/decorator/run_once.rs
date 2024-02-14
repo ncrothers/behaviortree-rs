@@ -16,7 +16,12 @@ use crate::{
 ///
 /// - if TRUE (default), the node will be skipped in the future.
 /// - if FALSE, return synchronously the same status returned by the child, forever.
-#[bt_node(DecoratorNode)]
+#[bt_node(
+    node_type = DecoratorNode,
+    ports = provided_ports,
+    tick = tick,
+    halt = halt,
+)]
 pub struct RunOnceNode {
     #[bt(default = "false")]
     already_ticked: bool,
@@ -24,7 +29,7 @@ pub struct RunOnceNode {
     returned_status: NodeStatus,
 }
 
-impl AsyncTick for RunOnceNode {
+impl RunOnceNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             let skip = self.config.get_input("then_skip")?;
@@ -50,15 +55,11 @@ impl AsyncTick for RunOnceNode {
             Ok(status)
         })
     }
-}
 
-impl NodePorts for RunOnceNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("then_skip", true))
     }
-}
-
-impl AsyncHalt for RunOnceNode {
+    
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_child().await;

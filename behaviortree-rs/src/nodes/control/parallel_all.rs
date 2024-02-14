@@ -22,7 +22,12 @@ use crate::{
 /// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
 ///
 /// Therefore -1 is equivalent to the number of children.
-#[bt_node(ControlNode)]
+#[bt_node(
+    node_type = ControlNode,
+    ports = provided_ports,
+    tick = tick,
+    halt = halt,
+)]
 pub struct ParallelAllNode {
     #[bt(default = "-1")]
     failure_threshold: i32,
@@ -40,9 +45,7 @@ impl ParallelAllNode {
             self.failure_threshold as usize
         }
     }
-}
 
-impl AsyncTick for ParallelAllNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             self.failure_threshold = self.config_mut().get_input("max_failures")?;
@@ -108,15 +111,11 @@ impl AsyncTick for ParallelAllNode {
             Ok(NodeStatus::Running)
         })
     }
-}
 
-impl NodePorts for ParallelAllNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("max_failures", 1))
     }
-}
-
-impl AsyncHalt for ParallelAllNode {
+    
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_children().await;
