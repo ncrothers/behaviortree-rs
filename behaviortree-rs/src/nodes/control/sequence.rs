@@ -3,7 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
+    nodes::{ControlNode, NodeError, NodeResult},
 };
 
 /// The SequenceNode is used to tick children in an ordered sequence.
@@ -15,7 +15,11 @@ use crate::{
 ///   Loop is NOT restarted, the same running child will be ticked again.
 ///
 /// - If a child returns FAILURE, stop the loop and return FAILURE.
-#[bt_node(ControlNode)]
+#[bt_node(
+    node_type = ControlNode,
+    tick = tick,
+    halt = halt,
+)]
 pub struct SequenceNode {
     #[bt(default = "0")]
     child_idx: usize,
@@ -23,7 +27,7 @@ pub struct SequenceNode {
     all_skipped: bool,
 }
 
-impl AsyncTick for SequenceNode {
+impl SequenceNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             if self.status == NodeStatus::Idle {
@@ -67,11 +71,7 @@ impl AsyncTick for SequenceNode {
             Ok(NodeStatus::Success)
         })
     }
-}
 
-impl NodePorts for SequenceNode {}
-
-impl AsyncHalt for SequenceNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;

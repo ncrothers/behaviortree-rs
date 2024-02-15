@@ -3,14 +3,18 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{AsyncHalt, AsyncTick, DecoratorNode, NodePorts, NodeResult, TreeNodeDefaults},
+    nodes::{DecoratorNode, NodeResult, TreeNodeDefaults},
 };
 
 /// The ForceFailureNode returns always Failure or Running
-#[bt_node(DecoratorNode)]
+#[bt_node(
+    node_type = DecoratorNode,
+    tick = tick,
+    halt = halt,
+)]
 pub struct ForceFailureNode {}
 
-impl AsyncTick for ForceFailureNode {
+impl ForceFailureNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             self.set_status(NodeStatus::Running);
@@ -26,11 +30,7 @@ impl AsyncTick for ForceFailureNode {
             Ok(child_status)
         })
     }
-}
 
-impl NodePorts for ForceFailureNode {}
-
-impl AsyncHalt for ForceFailureNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_child().await;

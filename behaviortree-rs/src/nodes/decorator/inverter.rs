@@ -3,16 +3,18 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{DecoratorNode, NodeError, NodeResult, TreeNodeDefaults},
 };
 
 /// The InverterNode returns Failure on Success, and Success on Failure
-#[bt_node(DecoratorNode)]
+#[bt_node(
+    node_type = DecoratorNode,
+    tick = tick,
+    halt = halt,
+)]
 pub struct InverterNode {}
 
-impl AsyncTick for InverterNode {
+impl InverterNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             self.set_status(NodeStatus::Running);
@@ -36,11 +38,7 @@ impl AsyncTick for InverterNode {
             }
         })
     }
-}
 
-impl NodePorts for InverterNode {}
-
-impl AsyncHalt for InverterNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.reset_child().await;

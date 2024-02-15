@@ -4,9 +4,7 @@ use futures::future::BoxFuture;
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{DecoratorNode, NodeError, NodeResult, TreeNodeDefaults},
 };
 
 /// The RetryNode is used to execute a child several times if it fails.
@@ -24,7 +22,12 @@ use crate::{
 ///     <OpenDoor/>
 /// </RetryUntilSuccessful>
 /// ```
-#[bt_node(DecoratorNode)]
+#[bt_node(
+    node_type = DecoratorNode,
+    ports = provided_ports,
+    tick = tick,
+    halt = halt,
+)]
 pub struct RetryNode {
     #[bt(default = "-1")]
     max_attempts: i32,
@@ -34,7 +37,7 @@ pub struct RetryNode {
     all_skipped: bool,
 }
 
-impl AsyncTick for RetryNode {
+impl RetryNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             // Load num_cycles from the port value
@@ -91,15 +94,11 @@ impl AsyncTick for RetryNode {
             }
         })
     }
-}
 
-impl NodePorts for RetryNode {
     fn provided_ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_attempts"))
     }
-}
 
-impl AsyncHalt for RetryNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.try_count = 0;

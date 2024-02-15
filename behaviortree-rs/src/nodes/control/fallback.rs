@@ -3,7 +3,7 @@ use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{AsyncHalt, AsyncTick, ControlNode, NodeError, NodePorts, NodeResult},
+    nodes::{ControlNode, NodeError, NodeResult},
 };
 
 /// The FallbackNode is used to try different strategies,
@@ -16,7 +16,11 @@ use crate::{
 ///
 /// - If a child returns SUCCESS, stop the loop and return SUCCESS.
 // #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-#[bt_node(ControlNode)]
+#[bt_node(
+    node_type = ControlNode,
+    tick = tick,
+    halt = halt,
+)]
 pub struct FallbackNode {
     #[bt(default = "0")]
     child_idx: usize,
@@ -24,7 +28,7 @@ pub struct FallbackNode {
     all_skipped: bool,
 }
 
-impl AsyncTick for FallbackNode {
+impl FallbackNode {
     fn tick(&mut self) -> BoxFuture<NodeResult> {
         Box::pin(async move {
             if self.status == NodeStatus::Idle {
@@ -76,11 +80,7 @@ impl AsyncTick for FallbackNode {
             }
         })
     }
-}
 
-impl NodePorts for FallbackNode {}
-
-impl AsyncHalt for FallbackNode {
     fn halt(&mut self) -> BoxFuture<()> {
         Box::pin(async move {
             self.child_idx = 0;
