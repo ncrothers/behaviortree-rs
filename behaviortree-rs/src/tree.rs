@@ -16,7 +16,7 @@ use crate::{
     },
     blackboard::{Blackboard, BlackboardString},
     macros::build_node_ptr,
-    nodes::{self, AsyncHalt, NodeConfig, NodeResult, TreeNodePtr},
+    nodes::{self, AsyncHalt, NodeConfig, NodeResult, TreeNode, TreeNode},
 };
 
 #[derive(Debug, Error)]
@@ -52,7 +52,7 @@ pub enum ParseError {
     ParseStringError(#[from] ParseBoolError),
 }
 
-type NodeCreateFnDyn = dyn Fn(NodeConfig, Vec<TreeNodePtr>) -> TreeNodePtr + Send + Sync;
+type NodeCreateFnDyn = dyn Fn(NodeConfig, Vec<TreeNode>) -> TreeNode + Send + Sync;
 
 enum TickOption {
     WhileRunning,
@@ -62,11 +62,11 @@ enum TickOption {
 
 #[derive(Debug)]
 pub struct AsyncTree {
-    root: TreeNodePtr,
+    root: TreeNode,
 }
 
 impl AsyncTree {
-    pub fn new(root: TreeNodePtr) -> AsyncTree {
+    pub fn new(root: TreeNode) -> AsyncTree {
         Self { root }
     }
 
@@ -115,7 +115,7 @@ pub struct SyncTree {
 }
 
 impl SyncTree {
-    pub fn new(root: TreeNodePtr) -> SyncTree {
+    pub fn new(root: TreeNode) -> SyncTree {
         Self {
             root: AsyncTree::new(root),
         }
@@ -174,7 +174,7 @@ impl Factory {
 
     pub fn register_node<F>(&mut self, name: impl AsRef<str>, node_fn: F, node_type: NodeType)
     where
-        F: Fn(NodeConfig, Vec<TreeNodePtr>) -> TreeNodePtr + Send + Sync + 'static,
+        F: Fn(NodeConfig, Vec<TreeNode>) -> TreeNode + Send + Sync + 'static,
     {
         self.node_map
             .insert(name.as_ref().into(), (node_type, Arc::new(node_fn)));
@@ -184,8 +184,8 @@ impl Factory {
         &self,
         node_fn: &Arc<NodeCreateFnDyn>,
         config: NodeConfig,
-        children: Vec<TreeNodePtr>,
-    ) -> TreeNodePtr {
+        children: Vec<TreeNode>,
+    ) -> TreeNode {
         node_fn(config, children)
     }
 
@@ -202,7 +202,7 @@ impl Factory {
         tree_name: &String,
         path_prefix: &String,
         blackboard: Blackboard,
-    ) -> Result<TreeNodePtr, ParseError> {
+    ) -> Result<TreeNode, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
             None => {
@@ -305,7 +305,7 @@ impl Factory {
         node_name: &String,
         attributes: Attributes<'a>,
         config: NodeConfig,
-    ) -> Result<TreeNodePtr, ParseError> {
+    ) -> Result<TreeNode, ParseError> {
         // Get clone of node from node_map based on tag name
         let (node_type, node_fn) = self
             .node_map
@@ -329,7 +329,7 @@ impl Factory {
         blackboard: &Blackboard,
         tree_name: &String,
         path_prefix: &String,
-    ) -> Result<Vec<TreeNodePtr>, ParseError> {
+    ) -> Result<Vec<TreeNode>, ParseError> {
         let mut nodes = Vec::new();
 
         while let Some(node) = self
@@ -344,7 +344,7 @@ impl Factory {
 
     async fn add_ports_to_node<'a>(
         &self,
-        node_ptr: &mut TreeNodePtr,
+        node_ptr: &mut TreeNode,
         node_name: &str,
         attributes: Attributes<'a>,
     ) -> Result<(), ParseError> {
@@ -400,7 +400,7 @@ impl Factory {
         blackboard: &'a Blackboard,
         tree_name: &'a String,
         path_prefix: &'a String,
-    ) -> BoxFuture<Result<Option<TreeNodePtr>, ParseError>> {
+    ) -> BoxFuture<Result<Option<TreeNode>, ParseError>> {
         Box::pin(async move {
             let mut buf = Vec::new();
 
@@ -663,102 +663,99 @@ fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
 
     // Control nodes
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "Sequence", nodes::control::SequenceNode);
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::SequenceNode::create_node("Sequence", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     ) as Arc<NodeCreateFnDyn>;
     node_map.insert(String::from("Sequence"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(
-                config,
-                "ReactiveSequence",
-                nodes::control::ReactiveSequenceNode
-            );
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::ReactiveSequenceNode::create_node("ReactiveSequence", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("ReactiveSequence"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(
-                config,
-                "SequenceStar",
-                nodes::control::SequenceWithMemoryNode
-            );
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::SequenceWithMemoryNode::create_node("SequenceStar", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("SequenceStar"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "Parallel", nodes::control::ParallelNode);
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::ParallelNode::create_node("Parallel", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("Parallel"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "ParallelAll", nodes::control::ParallelAllNode);
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::ParallelAllNode::create_node("ParallelAll", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("ParallelAll"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "Fallback", nodes::control::FallbackNode);
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::FallbackNode::create_node("Fallback", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("Fallback"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(
-                config,
-                "ReactiveFallback",
-                nodes::control::ReactiveFallbackNode
-            );
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::ReactiveFallbackNode::create_node("ReactiveFallback", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("ReactiveFallback"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "IfThenElse", nodes::control::IfThenElseNode);
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::IfThenElseNode::create_node("IfThenElse", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
     node_map.insert(String::from("IfThenElse"), (NodeType::Control, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "WhileDoElse", nodes::control::WhileDoElseNode);
-
-            node.children = children;
+        move |config: NodeConfig, children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::control::WhileDoElseNode::create_node("WhileDoElse", config);
+            if let TreeNode::Control(node) = &mut node {
+                node.children = children;
+            }
             node
         },
     );
@@ -766,46 +763,44 @@ fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
 
     // Decorator nodes
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node =
-                build_node_ptr!(config, "ForceFailure", nodes::decorator::ForceFailureNode);
-
-            node.child = Some(children.remove(0));
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::decorator::ForceFailureNode::create_node("ForceFailure", config);
+            if let TreeNode::Decorator(node) = &mut node {
+                node.child = Some(Box::new(children.remove(0)));
+            }
             node
         },
     );
     node_map.insert(String::from("ForceFailure"), (NodeType::Decorator, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node =
-                build_node_ptr!(config, "ForceSuccess", nodes::decorator::ForceSuccessNode);
-
-            node.child = Some(children.remove(0));
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::decorator::ForceSuccessNode::create_node("ForceSuccess", config);
+            if let TreeNode::Decorator(node) = &mut node {
+                node.child = Some(Box::new(children.remove(0)));
+            }
             node
         },
     );
     node_map.insert(String::from("ForceSuccess"), (NodeType::Decorator, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "Inverter", nodes::decorator::InverterNode);
-
-            node.child = Some(children.remove(0));
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::decorator::InverterNode::create_node("Inverter", config);
+            if let TreeNode::Decorator(node) = &mut node {
+                node.child = Some(Box::new(children.remove(0)));
+            }
             node
         },
     );
     node_map.insert(String::from("Inverter"), (NodeType::Decorator, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(
-                config,
-                "KeepRunningUntilFailure",
-                nodes::decorator::KeepRunningUntilFailureNode
-            );
-
-            node.child = Some(children.remove(0));
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::decorator::KeepRunningUntilFailureNode::create_node("KeepRunningUntilFailure", config);
+            if let TreeNode::Decorator(node) = &mut node {
+                node.child = Some(Box::new(children.remove(0)));
+            }
             node
         },
     );
@@ -815,27 +810,29 @@ fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
     );
 
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "Repeat", nodes::decorator::RepeatNode);
-
-            node.child = Some(children.remove(0));
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::decorator::RepeatNode::create_node("Repeat", config);
+            if let TreeNode::Decorator(node) = &mut node {
+                node.child = Some(Box::new(children.remove(0)));
+            }
             node
         },
     );
     node_map.insert(String::from("Repeat"), (NodeType::Decorator, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
-            let mut node = build_node_ptr!(config, "Retry", nodes::decorator::RetryNode);
-
-            node.child = Some(children.remove(0));
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
+            let mut node = nodes::decorator::RetryNode::create_node("Retry", config);
+            if let TreeNode::Decorator(node) = &mut node {
+                node.child = Some(Box::new(children.remove(0)));
+            }
             node
         },
     );
     node_map.insert(String::from("Retry"), (NodeType::Decorator, node));
 
     let node = Arc::new(
-        move |config: NodeConfig, mut children: Vec<TreeNodePtr>| -> TreeNodePtr {
+        move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
             let mut node = build_node_ptr!(config, "RunOnce", nodes::decorator::RunOnceNode);
 
             node.child = Some(children.remove(0));

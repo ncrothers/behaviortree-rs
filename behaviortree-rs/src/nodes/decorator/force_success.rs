@@ -9,31 +9,30 @@ use crate::{
 /// The ForceSuccessNode returns always Success or Running
 #[bt_node(
     node_type = DecoratorNode,
-    tick = tick,
-    halt = halt,
 )]
 pub struct ForceSuccessNode {}
 
+#[bt_node(
+    node_type = DecoratorNode,
+    tick = tick,
+    halt = halt,
+)]
 impl ForceSuccessNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            self.set_status(NodeStatus::Running);
+    async fn tick(&mut self) -> NodeResult {
+        node_.set_status(NodeStatus::Running);
 
-            let child_status = self.child.as_mut().unwrap().execute_tick().await?;
+        let child_status = node_.child.as_mut().unwrap().execute_tick().await?;
 
-            if child_status.is_completed() {
-                self.reset_child().await;
+        if child_status.is_completed() {
+            node_.reset_child().await;
 
-                return Ok(NodeStatus::Success);
-            }
+            return Ok(NodeStatus::Success);
+        }
 
-            Ok(child_status)
-        })
+        Ok(child_status)
     }
 
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.reset_child().await;
-        })
+    async fn halt(&mut self) {
+        node_.reset_child().await;
     }
 }

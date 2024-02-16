@@ -18,9 +18,6 @@ use crate::{
 /// - if FALSE, return synchronously the same status returned by the child, forever.
 #[bt_node(
     node_type = DecoratorNode,
-    ports = provided_ports,
-    tick = tick,
-    halt = halt,
 )]
 pub struct RunOnceNode {
     #[bt(default = "false")]
@@ -29,40 +26,42 @@ pub struct RunOnceNode {
     returned_status: NodeStatus,
 }
 
+#[bt_node(
+    node_type = DecoratorNode,
+    ports = provided_ports,
+    tick = tick,
+    halt = halt,
+)]
 impl RunOnceNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            let skip = self.config.get_input("then_skip")?;
+    async fn tick(&mut self) -> NodeResult {
+        let skip = node_.config.get_input("then_skip")?;
 
-            if self.already_ticked {
-                return if skip {
-                    Ok(NodeStatus::Skipped)
-                } else {
-                    Ok(self.returned_status.clone())
-                };
-            }
+        if self.already_ticked {
+            return if skip {
+                Ok(NodeStatus::Skipped)
+            } else {
+                Ok(self.returned_status.clone())
+            };
+        }
 
-            self.set_status(NodeStatus::Running);
+        node_.set_status(NodeStatus::Running);
 
-            let status = self.child.as_mut().unwrap().execute_tick().await?;
+        let status = node_.child.as_mut().unwrap().execute_tick().await?;
 
-            if status.is_completed() {
-                self.already_ticked = true;
-                self.returned_status = status.clone();
-                self.reset_child().await;
-            }
+        if status.is_completed() {
+            self.already_ticked = true;
+            self.returned_status = status.clone();
+            node_.reset_child().await;
+        }
 
-            Ok(status)
-        })
+        Ok(status)
     }
 
-    fn provided_ports(&self) -> crate::basic_types::PortsList {
+    fn provided_ports() -> crate::basic_types::PortsList {
         define_ports!(input_port!("then_skip", true))
     }
 
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.reset_child().await;
-        })
+    async fn halt(&mut self) {
+        node_.reset_child().await;
     }
 }

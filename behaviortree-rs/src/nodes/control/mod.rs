@@ -1,6 +1,6 @@
 use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 
-use crate::{nodes::{NodeError, TreeNodeBase, TreeNodePtr}, NodeResult};
+use crate::{nodes::{NodeError, TreeNodeBase, TreeNode}, NodeResult};
 
 mod if_then_else;
 use futures::future::BoxFuture;
@@ -22,7 +22,7 @@ pub use reactive_sequence::*;
 mod while_do_else;
 pub use while_do_else::*;
 
-use super::{HaltFn, NodeConfig, NodeStatus, PortsFn, TickFn, TreeNode};
+use super::{HaltFn, NodeConfig, NodeStatus, PortsFn, PortsList, TickFn};
 
 // pub trait ControlNodeBase: TreeNodeBase + ControlNode {}
 
@@ -30,9 +30,9 @@ use super::{HaltFn, NodeConfig, NodeStatus, PortsFn, TickFn, TreeNode};
 
 // pub trait ControlNode: TreeNodeBase {
 //     /// Add child to `ControlNode`
-//     fn add_child(&mut self, child: TreeNodePtr);
+//     fn add_child(&mut self, child: TreeNode);
 //     /// Return reference to `Vec` of children nodes
-//     fn children(&self) -> &Vec<TreeNodePtr>;
+//     fn children(&self) -> &Vec<TreeNode>;
 //     /// Call `halt()` on child at index
 //     fn halt_child(&mut self, index: usize) -> BoxFuture<Result<(), NodeError>>;
 //     /// Halt all children at and after index
@@ -109,10 +109,12 @@ impl ControlNode {
         &mut self.config
     }
 
-    // fn execute_tick(&mut self) -> BoxFuture<NodeResult> {
-    //     Box::pin(async move {
-    //         (self.tick_fn)(self).await
-    //     })
-    // }
+    pub fn provided_ports(&self) -> PortsList {
+        (self.ports_fn)()
+    }
+
+    pub fn set_status(&mut self, status: NodeStatus) {
+        self.status = status;
+    }
 }
 

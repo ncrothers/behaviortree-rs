@@ -17,8 +17,6 @@ use crate::{
 ///   Loop is NOT restarted, the same running child will be ticked again.
 #[bt_node(
     node_type = ControlNode,
-    tick = tick,
-    halt = halt,
 )]
 pub struct SequenceWithMemoryNode {
     #[bt(default = "0")]
@@ -27,61 +25,62 @@ pub struct SequenceWithMemoryNode {
     all_skipped: bool,
 }
 
+#[bt_node(
+    node_type = ControlNode,
+    tick = tick,
+    halt = halt,
+)]
 impl SequenceWithMemoryNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            if self.status == NodeStatus::Idle {
-                self.all_skipped = true;
-            }
+    async fn tick(&mut self) -> NodeResult {
+        if node_.status == NodeStatus::Idle {
+            self.all_skipped = true;
+        }
 
-            self.status = NodeStatus::Running;
+        node_.status = NodeStatus::Running;
 
-            while self.child_idx < self.children.len() {
-                let cur_child = &mut self.children[self.child_idx];
+        while self.child_idx < node_.children.len() {
+            let cur_child = &mut node_.children[self.child_idx];
 
-                let _prev_status = cur_child.status();
-                let child_status = cur_child.execute_tick().await?;
+            let _prev_status = cur_child.status();
+            let child_status = cur_child.execute_tick().await?;
 
-                self.all_skipped &= child_status == NodeStatus::Skipped;
+            self.all_skipped &= child_status == NodeStatus::Skipped;
 
-                match &child_status {
-                    NodeStatus::Running => return Ok(NodeStatus::Running),
-                    NodeStatus::Failure => {
-                        // Do NOT reset child_idx on failure
-                        // Halt children at and after this index
-                        self.halt_children(self.child_idx).await?;
+            match &child_status {
+                NodeStatus::Running => return Ok(NodeStatus::Running),
+                NodeStatus::Failure => {
+                    // Do NOT reset child_idx on failure
+                    // Halt children at and after this index
+                    node_.halt_children(self.child_idx).await?;
 
-                        return Ok(NodeStatus::Failure);
-                    }
-                    NodeStatus::Success | NodeStatus::Skipped => {
-                        self.child_idx += 1;
-                    }
-                    NodeStatus::Idle => {
-                        return Err(NodeError::StatusError(
-                            "SequenceStarNode".to_string(),
-                            "Idle".to_string(),
-                        ))
-                    }
-                };
-            }
+                    return Ok(NodeStatus::Failure);
+                }
+                NodeStatus::Success | NodeStatus::Skipped => {
+                    self.child_idx += 1;
+                }
+                NodeStatus::Idle => {
+                    return Err(NodeError::StatusError(
+                        "SequenceStarNode".to_string(),
+                        "Idle".to_string(),
+                    ))
+                }
+            };
+        }
 
-            // All children returned Success
-            if self.child_idx == self.children.len() {
-                self.reset_children().await;
-                self.child_idx = 0;
-            }
+        // All children returned Success
+        if self.child_idx == node_.children.len() {
+            node_.reset_children().await;
+            self.child_idx = 0;
+        }
 
-            match self.all_skipped {
-                true => Ok(NodeStatus::Skipped),
-                false => Ok(NodeStatus::Failure),
-            }
-        })
+        match self.all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Failure),
+        }
     }
 
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.child_idx = 0;
-            self.reset_children().await;
-        })
+    async fn halt(&mut self) {
+        self.child_idx = 0;
+        node_.reset_children().await;
     }
 }

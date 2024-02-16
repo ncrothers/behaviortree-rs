@@ -19,61 +19,60 @@ use crate::{
 ///            a single asynchronous child.
 #[bt_node(
     node_type = ControlNode,
-    tick = tick,
-    halt = halt,
 )]
 pub struct ReactiveFallbackNode {}
 
+#[bt_node(
+    node_type = ControlNode,
+    tick = tick,
+    halt = halt,
+)]
 impl ReactiveFallbackNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            let mut all_skipped = true;
-            self.status = NodeStatus::Running;
+    async fn tick(&mut self) -> NodeResult {
+        let mut all_skipped = true;
+        node_.status = NodeStatus::Running;
 
-            for index in 0..self.children.len() {
-                let cur_child = &mut self.children[index];
+        for index in 0..node_.children.len() {
+            let cur_child = &mut node_.children[index];
 
-                let child_status = cur_child.execute_tick().await?;
+            let child_status = cur_child.execute_tick().await?;
 
-                all_skipped &= child_status == NodeStatus::Skipped;
+            all_skipped &= child_status == NodeStatus::Skipped;
 
-                match &child_status {
-                    NodeStatus::Running => {
-                        for i in 0..index {
-                            self.halt_child(i).await?;
-                        }
-
-                        return Ok(NodeStatus::Running);
+            match &child_status {
+                NodeStatus::Running => {
+                    for i in 0..index {
+                        node_.halt_child(i).await?;
                     }
-                    NodeStatus::Failure => {}
-                    NodeStatus::Success => {
-                        self.reset_children().await;
-                        return Ok(NodeStatus::Success);
-                    }
-                    NodeStatus::Skipped => {
-                        self.halt_child(index).await?;
-                    }
-                    NodeStatus::Idle => {
-                        return Err(NodeError::StatusError(
-                            "Name here".to_string(),
-                            "Idle".to_string(),
-                        ));
-                    }
-                };
-            }
 
-            self.reset_children().await;
+                    return Ok(NodeStatus::Running);
+                }
+                NodeStatus::Failure => {}
+                NodeStatus::Success => {
+                    node_.reset_children().await;
+                    return Ok(NodeStatus::Success);
+                }
+                NodeStatus::Skipped => {
+                    node_.halt_child(index).await?;
+                }
+                NodeStatus::Idle => {
+                    return Err(NodeError::StatusError(
+                        "Name here".to_string(),
+                        "Idle".to_string(),
+                    ));
+                }
+            };
+        }
 
-            match all_skipped {
-                true => Ok(NodeStatus::Skipped),
-                false => Ok(NodeStatus::Failure),
-            }
-        })
+        node_.reset_children().await;
+
+        match all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Failure),
+        }
     }
 
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.reset_children().await;
-        })
+    async fn halt(&mut self) {
+        node_.reset_children().await;
     }
 }

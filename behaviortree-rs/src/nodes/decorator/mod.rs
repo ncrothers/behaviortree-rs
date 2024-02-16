@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use crate::nodes::{HaltFn, NodeConfig, NodeStatus, PortsFn, TickFn, TreeNode};
+use crate::{nodes::{HaltFn, NodeConfig, NodeStatus, PortsFn, TickFn, TreeNode}, NodeResult};
 
 mod force_failure;
 pub use force_failure::*;
@@ -17,15 +17,17 @@ pub use retry::*;
 mod run_once;
 pub use run_once::*;
 
+use super::{NodeError, PortsList};
+
 // pub trait DecoratorNodeBase: TreeNodeBase + DecoratorNode {}
 
 // pub type DecoratorNodePtr = Rc<RefCell<dyn DecoratorNodeBase>>;
 
 // pub trait DecoratorNode: TreeNodeBase {
 //     /// Set child node for `Decorator`
-//     fn set_child(&mut self, child: TreeNodePtr);
+//     fn set_child(&mut self, child: TreeNode);
 //     /// Return reference to child
-//     fn child(&self) -> Result<&TreeNodePtr, NodeError>;
+//     fn child(&self) -> Result<&TreeNode, NodeError>;
 //     /// Call `halt()` on child, same as `reset_child()`
 //     fn halt_child(&mut self) -> BoxFuture<()>;
 //     /// Reset status of child and call `halt()`
@@ -34,16 +36,52 @@ pub use run_once::*;
 
 #[derive(Debug)]
 pub struct DecoratorNode {
-    name: String,
-    type_str: String,
-    config: NodeConfig,
-    status: NodeStatus,
+    pub name: String,
+    pub type_str: String,
+    pub config: NodeConfig,
+    pub status: NodeStatus,
     /// Child node
-    child: Option<Box<TreeNode>>,
+    pub child: Option<Box<TreeNode>>,
     /// Function pointer to tick
-    tick_fn: TickFn<DecoratorNode>,
+    pub tick_fn: TickFn<DecoratorNode>,
     /// Function pointer to halt
-    halt_fn: HaltFn<DecoratorNode>,
-    ports_fn: PortsFn,
-    context: Box<dyn Any + Send>,
+    pub halt_fn: HaltFn<DecoratorNode>,
+    pub ports_fn: PortsFn,
+    pub context: Box<dyn Any + Send>,
+}
+
+impl DecoratorNode {
+    pub async fn execute_tick(&mut self) -> NodeResult {
+        (self.tick_fn)(self).await
+    }
+
+    pub async fn halt(&mut self) {
+        (self.halt_fn)(self).await
+    }
+
+    async fn halt_child(&mut self) {
+        self.reset_child().await
+    }
+
+    async fn reset_child(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            if matches!(child.status(), NodeStatus::Running) {
+                child.halt().await;
+            }
+
+            child.reset_status();
+        }
+    }
+
+    pub fn config_mut(&mut self) -> &mut NodeConfig {
+        &mut self.config
+    }
+
+    pub fn provided_ports(&self) -> PortsList {
+        (self.ports_fn)()
+    }
+
+    pub fn set_status(&mut self, status: NodeStatus) {
+        self.status = status;
+    }
 }

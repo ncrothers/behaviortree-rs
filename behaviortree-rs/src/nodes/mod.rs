@@ -5,8 +5,7 @@ use thiserror::Error;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, FromString, ParseStr, PortDirection, PortValue, PortsRemapping,
-        TreeNodeManifest,
+        self, get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortValue, PortsRemapping, TreeNodeManifest
     },
     blackboard::BlackboardString,
     tree::ParseError,
@@ -46,7 +45,7 @@ pub trait TreeNodeBase:
 /// Pointer to the most general trait, which encapsulates all
 /// node types that implement `TreeNodeBase` (all nodes need
 /// to for it to compile)
-pub type TreeNodePtr = Box<dyn TreeNodeBase + Send + Sync>;
+// pub type TreeNode = Box<dyn TreeNodeBase + Send + Sync>;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 
@@ -189,6 +188,35 @@ impl TreeNode {
         match self {
             Self::Control(node) => &mut node.config,
             _ => todo!(),
+        }
+    }
+
+    pub fn config(&self) -> &NodeConfig {
+        match self {
+            Self::Control(node) => &node.config,
+            _ => todo!(),
+        }
+    }
+
+    pub fn node_type(&self) -> NodeType {
+        match self {
+            TreeNode::Action(_) => NodeType::Action,
+            TreeNode::Control(_) => NodeType::Control,
+            TreeNode::Decorator(_) => NodeType::Decorator,
+        }
+    }
+    
+    pub fn provided_ports(&self) -> PortsList {
+        match self {
+            TreeNode::Action(node) => {
+                node.provided_ports()
+            }
+            TreeNode::Control(node) => {
+                node.provided_ports()
+            }
+            TreeNode::Decorator(node) => {
+                node.provided_ports()
+            }
         }
     }
 

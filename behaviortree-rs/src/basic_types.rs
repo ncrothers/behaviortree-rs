@@ -43,7 +43,7 @@ impl std::fmt::Display for NodeType {
 
 /// Specifies the status of a node's execution. Returned from
 /// functions `execute_tick()` and `tick()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeStatus {
     Idle,
     Running,

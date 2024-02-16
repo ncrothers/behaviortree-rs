@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, Expr, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
+    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::{Comma, SelfValue}, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, Expr, ExprPath, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
 };
 
 #[macro_use]
@@ -252,8 +252,16 @@ impl VisitMut for CustomFnVisitor<'_> {
     fn visit_expr_method_call_mut(&mut self, i: &mut syn::ExprMethodCall) {
         let new_arg: Expr = syn::parse2(quote! { node_ }).unwrap();
         // If this method call is not a built-in call (e.g. tick()), add node_
+        let self_receiver = Ident::new("self", i.span());
         if ident_matches_custom_fn(&i.method, self.custom_fn_names) {
-            i.args.push(new_arg.clone());
+            match i.receiver.as_ref() {
+                Expr::Path(path) => {
+                    if path.path.is_ident(&self_receiver) {
+                        i.args.push(new_arg.clone());
+                    }
+                }
+                _ => ()
+            }
         }
 
         visit_mut::visit_expr_method_call_mut(self, i)
@@ -298,7 +306,6 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: 
     }
 
     let old_block = &mut fn_item.block;
-    
     // Rename occurrences of self
     SelfVisitor.visit_block_mut(old_block);
 
@@ -383,7 +390,7 @@ fn bt_impl(
 
     let custom_fn_idents = get_custom_fn_idents(&args, &item);
 
-    println!("Ports value in args: {}", args.ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
+    println!("Ports value in args: {}", args.ports.as_ref().map(|v| format!("Some({v})")).unwrap_or(String::from("None")));
 
     let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
         syn::parse2::<Ident>(quote! { ActionNode })?
@@ -396,42 +403,41 @@ fn bt_impl(
             println!("Processing function: {}", fn_item.sig.ident);
             let mut should_rewrite_def = false;
             // Rename methods
-            let new_ident = if fn_item.sig.ident == args.tick_fn {
-                let new_ident = if args.node_type == "StatefulActionNode" {
-                    syn::parse2(quote! { _on_running })?
+            let mut new_ident = None;
+            // Check if it's a tick
+            if fn_item.sig.ident == args.tick_fn {
+                new_ident = if args.node_type == "StatefulActionNode" {
+                    Some(syn::parse2(quote! { _on_running })?)
                 } else {
-                    syn::parse2(quote! { _tick })?
+                    Some(syn::parse2(quote! { _tick })?)
                 };
 
                 should_rewrite_def = true;
-                Some(new_ident)
-            } else if let Some(on_start) = args.on_start_fn.as_ref() {
+            }
+            // Check if it's an on_start
+            if let Some(on_start) = args.on_start_fn.as_ref() {
                 if &fn_item.sig.ident == on_start {
-                    let new_ident = syn::parse2(quote! { _on_start })?;
+                    new_ident = Some(syn::parse2(quote! { _on_start })?);
                     should_rewrite_def = true;
-                    Some(new_ident)
-                } else {
-                    None
                 }
-            } else if let Some(halt) = args.halt.as_ref() {
+            }
+            // Check if it's a halt
+            if let Some(halt) = args.halt.as_ref() {
                 if &fn_item.sig.ident == halt {
-                    let new_ident = syn::parse2(quote! { _halt })?;
+                    new_ident = Some(syn::parse2(quote! { _halt })?);
                     should_rewrite_def = true;
-                    Some(new_ident)
-                } else {
-                    None
                 }
-            } else if let Some(ports) = args.ports.as_ref() {
-                println!("Checking ports: {ports}, {}", fn_item.sig.ident);
+            }
+            // Check if it's a ports
+            if let Some(ports) = args.ports.as_ref() {
                 if &fn_item.sig.ident == ports {
-                    let new_ident = syn::parse2(quote! { _ports })?;
-                    Some(new_ident)
-                } else {
-                    None
+                    new_ident = Some(syn::parse2(quote! { _ports })?);
                 }
-            } else {
-                None
-            };
+            }
+
+            let old_block = &mut fn_item.block;
+            // Add node_ to all occurrences of non-node methods
+            CustomFnVisitor { custom_fn_names: &custom_fn_idents }.visit_block_mut(old_block);
 
             if let Some(new_ident) = new_ident {
                 if should_rewrite_def {
@@ -443,16 +449,6 @@ fn bt_impl(
                 alter_custom_fn(fn_item, struct_type, &type_ident)?;
             }
 
-            let old_block = &mut fn_item.block;
-
-            println!("Custom fn idents:");
-            for fn_ident in custom_fn_idents.iter() {
-                println!("{fn_ident}");
-            }
-            println!("========");
-
-            // Add node_ to all occurrences of non-node methods
-            CustomFnVisitor { custom_fn_names: &custom_fn_idents }.visit_block_mut(old_block);
         }
     }
 
@@ -913,11 +909,11 @@ pub fn derive_control_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::behaviortree_rs::nodes::ControlNode for #ident {
-            fn add_child(&mut self, child: ::behaviortree_rs::nodes::TreeNodePtr) {
+            fn add_child(&mut self, child: ::behaviortree_rs::nodes::TreeNode) {
                 self.children.push(child);
             }
 
-            fn children(&self) -> &Vec<::behaviortree_rs::nodes::TreeNodePtr> {
+            fn children(&self) -> &Vec<::behaviortree_rs::nodes::TreeNode> {
                 &self.children
             }
 
@@ -991,11 +987,11 @@ pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::behaviortree_rs::nodes::DecoratorNode for #ident {
-            fn set_child(&mut self, child: ::behaviortree_rs::nodes::TreeNodePtr) {
+            fn set_child(&mut self, child: ::behaviortree_rs::nodes::TreeNode) {
                 self.child = Some(child);
             }
 
-            fn child(&self) -> Result<&::behaviortree_rs::nodes::TreeNodePtr, ::behaviortree_rs::nodes::NodeError> {
+            fn child(&self) -> Result<&::behaviortree_rs::nodes::TreeNode, ::behaviortree_rs::nodes::NodeError> {
                 match &self.child {
                     Some(child) => Ok(child),
                     None => Err(::behaviortree_rs::nodes::NodeError::ChildMissing)

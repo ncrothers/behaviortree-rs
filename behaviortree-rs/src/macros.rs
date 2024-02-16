@@ -113,9 +113,7 @@ pub use __output_port as output_port;
 macro_rules! __build_node_ptr {
     ($conf:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
         {
-            use $crate::nodes::{GetNodeType, NodePorts, TreeNodeDefaults};
-
-            let mut node = <$t>::new($n, $conf, $($x),*);
+            let mut node = <$t>::create_node($n, $conf, $($x),*);
             let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_type(), $n, node.provided_ports(), "");
             node.config_mut().set_manifest(::std::sync::Arc::new(manifest));
             let node = Box::new(node);
