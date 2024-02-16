@@ -1,6 +1,6 @@
-use std::{any::TypeId, collections::HashMap, sync::Arc};
+use std::{any::{Any, TypeId}, collections::HashMap, sync::Arc};
 
-use futures::future::BoxFuture;
+use futures::{future::BoxFuture, Future};
 use thiserror::Error;
 
 use crate::{
@@ -16,10 +16,10 @@ use crate::{
 pub use crate::basic_types::{NodeStatus, PortsList};
 
 pub mod control;
-pub use control::{ControlNode, ControlNodeBase, ControlNodePtr};
+pub use control::{ControlNodeBase, ControlNodePtr};
 
 pub mod decorator;
-pub use decorator::{DecoratorNode, DecoratorNodeBase, DecoratorNodePtr};
+pub use decorator::{DecoratorNodeBase, DecoratorNodePtr};
 
 pub mod action;
 pub use action::*;
@@ -141,6 +141,72 @@ pub trait ConditionNode {}
 /// Automatically implemented for all node types.
 pub trait GetNodeType {
     fn node_type(&self) -> basic_types::NodeType;
+}
+
+type TickFn<T> = fn(&mut T) -> BoxFuture<NodeResult>;
+type HaltFn<T> = fn(&mut T) -> BoxFuture<()>;
+type PortsFn = fn() -> PortsList;
+
+#[derive(Debug)]
+pub enum TreeNode {
+    Action(ActionNode),
+    Control(ControlNode),
+    Decorator(DecoratorNode),
+}
+
+#[derive(Debug)]
+pub enum ActionSubType {
+    Sync,
+    Stateful,
+}
+
+#[derive(Debug)]
+pub struct ActionNode {
+    name: String,
+    type_str: String,
+    subtype: ActionSubType,
+    config: NodeConfig,
+    status: NodeStatus,
+    /// Function pointer to tick (on_running for stateful nodes)
+    tick_fn: TickFn<ActionNode>,
+    /// Function pointer to on_start function, if it exists
+    start_fn: TickFn<ActionNode>,
+    /// Function pointer to halt
+    halt_fn: HaltFn<ActionNode>,
+    ports_fn: PortsFn,
+    context: Box<dyn Any>,
+}
+
+#[derive(Debug)]
+pub struct ControlNode {
+    name: String,
+    type_str: String,
+    config: NodeConfig,
+    status: NodeStatus,
+    /// Vector of child nodes
+    children: Vec<TreeNode>,
+    /// Function pointer to tick
+    tick_fn: TickFn<ControlNode>,
+    /// Function pointer to halt
+    halt_fn: HaltFn<ControlNode>,
+    ports_fn: PortsFn,
+    context: Box<dyn Any>,
+}
+
+#[derive(Debug)]
+pub struct DecoratorNode {
+    name: String,
+    type_str: String,
+    config: NodeConfig,
+    status: NodeStatus,
+    /// Child node
+    child: Option<Box<TreeNode>>,
+    /// Function pointer to tick
+    tick_fn: TickFn<DecoratorNode>,
+    /// Function pointer to halt
+    halt_fn: HaltFn<DecoratorNode>,
+    ports_fn: PortsFn,
+    context: Box<dyn Any>,
 }
 
 // =============================
