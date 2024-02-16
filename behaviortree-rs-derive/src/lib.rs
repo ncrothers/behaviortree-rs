@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
+    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, Expr, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
 };
 
 #[macro_use]
@@ -160,6 +160,11 @@ impl Parse for NodeImplConfig {
             .map(|val| (val.name.to_string(), val))
             .collect();
 
+        println!("Found impl attrs:");
+        for (attr, val) in attributes.iter() {
+            println!("{attr}: {}", val.value);
+        }
+
         let node_type = attributes
             .remove("node_type")
             .map(|val| val.value)
@@ -189,6 +194,7 @@ impl Parse for NodeImplConfig {
         };
 
         let ports = attributes.remove("ports").map(|val| val.value);
+        println!("Ports value: {}", ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
         let halt = attributes.remove("halt").map(|val| val.value);
 
         if let Some((_, invalid_field)) = attributes.into_iter().next() {
@@ -227,6 +233,33 @@ impl Parse for NodeStructConfig {
     }
 }
 
+fn ident_matches_custom_fn(input: &Ident, custom_fns: &Vec<Ident>) -> bool {
+    for fn_name in custom_fns.iter() {
+        // If this method call is not a built-in call, add node_
+        if input == fn_name {
+            return true;
+        }
+    }
+
+    false
+}
+
+struct CustomFnVisitor<'a> {
+    custom_fn_names: &'a Vec<Ident>,
+}
+
+impl VisitMut for CustomFnVisitor<'_> {
+    fn visit_expr_method_call_mut(&mut self, i: &mut syn::ExprMethodCall) {
+        let new_arg: Expr = syn::parse2(quote! { node_ }).unwrap();
+        // If this method call is not a built-in call (e.g. tick()), add node_
+        if ident_matches_custom_fn(&i.method, self.custom_fn_names) {
+            i.args.push(new_arg.clone());
+        }
+
+        visit_mut::visit_expr_method_call_mut(self, i)
+    }
+}
+
 struct SelfVisitor;
 
 impl VisitMut for SelfVisitor {
@@ -242,18 +275,31 @@ impl VisitMut for SelfVisitor {
     }
 }
 
-fn alter_custom_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>) -> syn::Result<()> {
+fn alter_custom_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: &Ident) -> syn::Result<()> {
+    // Append node_ to parameter list
+    let new_arg = syn::parse2(quote! { node_: &mut #type_ident })?;
+    fn_item.sig.inputs.push(new_arg);
+
+    Ok(())
+}
+
+fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: &Ident, is_async: bool) -> syn::Result<()> {
+    // Remove async
+    if is_async {
+        fn_item.sig.asyncness = None;
+    }
     // Rename parameters
     for arg in fn_item.sig.inputs.iter_mut() {
         if let FnArg::Receiver(_) = arg {
-            let new_arg = quote! { node_: &mut ControlNode };
+            let new_arg = quote! { node_: &mut #type_ident };
             let new_arg = syn::parse2(new_arg)?;
             *arg = new_arg;
         }
     }
 
-    // Rename self
     let old_block = &mut fn_item.block;
+    
+    // Rename occurrences of self
     SelfVisitor.visit_block_mut(old_block);
 
     let new_block = if is_async {
@@ -297,63 +343,34 @@ fn alter_custom_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>) -> syn::Re
     Ok(())
 }
 
-fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, is_async: bool) -> syn::Result<()> {
-    // Remove async
-    if is_async {
-        fn_item.sig.asyncness = None;
-    }
-    // Rename parameters
-    for arg in fn_item.sig.inputs.iter_mut() {
-        if let FnArg::Receiver(_) = arg {
-            let new_arg = quote! { node_: &mut ControlNode };
-            let new_arg = syn::parse2(new_arg)?;
-            *arg = new_arg;
+fn get_custom_fn_idents(args: &NodeImplConfig, fn_item: &ItemImpl) -> Vec<Ident> {
+    fn_item.items.iter().filter_map(|item| {
+        match item {
+            ImplItem::Fn(fn_item) => {
+                let ident = &fn_item.sig.ident;
+
+                println!("Checking ident: {ident}");
+
+                // If it's not the tick() function
+                if *ident != args.tick_fn &&
+                    // Nor halt()
+                    (args.halt.is_none() || args.halt.as_ref().is_some_and(|v| *v != *ident)) &&
+                    // Nor on_start()
+                    (args.on_start_fn.is_none() || args.on_start_fn.as_ref().is_some_and(|v| *v != *ident)) &&
+                    // Nor ports()
+                    (args.ports.is_none() || args.ports.as_ref().is_some_and(|v| *v != *ident))
+
+                {
+                    println!("**Selected ident: {ident}");
+                    Some(fn_item.sig.ident.clone())
+                } else {
+                    None
+                }
+            },
+            _ => None,
         }
-    }
-
-    // Rename self
-    let old_block = &mut fn_item.block;
-    SelfVisitor.visit_block_mut(old_block);
-
-    let new_block = if is_async {
-        // Get old return without the -> token
-        let old_return = match &fn_item.sig.output {
-            ReturnType::Default => quote! { () },
-            ReturnType::Type(_, ret) => quote! { #ret }
-        };
-
-        // Wrap return type in BoxFuture
-        let new_return = quote! {
-            -> ::futures::future::BoxFuture<#old_return>
-        };
-
-        let new_return = syn::parse2(new_return)?;
-        fn_item.sig.output = new_return;
-    
-        // Wrap function block in Box::pin and create ctx
-        quote! {
-            {
-                ::std::boxed::Box::pin(async move {
-                    let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
-                    #old_block
-                })
-            }
-        }
-    } else {
-        // Wrap function block in Box::pin and create ctx
-        quote! {
-            {
-                let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
-                #old_block
-            }
-        }
-    };
-
-    let new_block = syn::parse2(new_block)?;
-
-    fn_item.block = new_block;
-
-    Ok(())
+    })
+    .collect()
 }
 
 fn bt_impl(
@@ -364,6 +381,10 @@ fn bt_impl(
     let type_ident = &args.node_type;
     let struct_type = &item.self_ty;
 
+    let custom_fn_idents = get_custom_fn_idents(&args, &item);
+
+    println!("Ports value in args: {}", args.ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
+
     let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
         syn::parse2::<Ident>(quote! { ActionNode })?
     } else {
@@ -372,6 +393,7 @@ fn bt_impl(
     
     for sub_item in item.items.iter_mut() {
         if let ImplItem::Fn(fn_item) = sub_item {
+            println!("Processing function: {}", fn_item.sig.ident);
             let mut should_rewrite_def = false;
             // Rename methods
             let new_ident = if fn_item.sig.ident == args.tick_fn {
@@ -400,6 +422,7 @@ fn bt_impl(
                     None
                 }
             } else if let Some(ports) = args.ports.as_ref() {
+                println!("Checking ports: {ports}, {}", fn_item.sig.ident);
                 if &fn_item.sig.ident == ports {
                     let new_ident = syn::parse2(quote! { _ports })?;
                     Some(new_ident)
@@ -412,13 +435,24 @@ fn bt_impl(
 
             if let Some(new_ident) = new_ident {
                 if should_rewrite_def {
-                    alter_node_fn(fn_item, struct_type, true)?;
+                    alter_node_fn(fn_item, struct_type, &type_ident, true)?;
                 }
                 
                 fn_item.sig.ident = new_ident;
-            } else {
-                alter_node_fn(fn_item, struct_type, false)?;
+            } else if ident_matches_custom_fn(&fn_item.sig.ident, &custom_fn_idents) {
+                alter_custom_fn(fn_item, struct_type, &type_ident)?;
             }
+
+            let old_block = &mut fn_item.block;
+
+            println!("Custom fn idents:");
+            for fn_ident in custom_fn_idents.iter() {
+                println!("{fn_ident}");
+            }
+            println!("========");
+
+            // Add node_ to all occurrences of non-node methods
+            CustomFnVisitor { custom_fn_names: &custom_fn_idents }.visit_block_mut(old_block);
         }
     }
 
