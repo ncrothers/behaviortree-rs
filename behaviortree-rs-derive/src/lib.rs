@@ -232,7 +232,7 @@ struct SelfVisitor;
 impl VisitMut for SelfVisitor {
     fn visit_ident_mut(&mut self, i: &mut proc_macro2::Ident) {
         if i == "self" {
-            let ctx = quote! { state };
+            let ctx = quote! { self_ };
             let ctx = syn::parse2(ctx).unwrap();
             
             *i = ctx;
@@ -242,9 +242,7 @@ impl VisitMut for SelfVisitor {
     }
 }
 
-fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>) -> syn::Result<()> {
-    // Remove async
-    fn_item.sig.asyncness = None;
+fn alter_custom_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>) -> syn::Result<()> {
     // Rename parameters
     for arg in fn_item.sig.inputs.iter_mut() {
         if let FnArg::Receiver(_) = arg {
@@ -258,32 +256,102 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>) -> syn::Resu
     let old_block = &mut fn_item.block;
     SelfVisitor.visit_block_mut(old_block);
 
-    // Get old return without the -> token
-    let old_return = match &fn_item.sig.output {
-        ReturnType::Default => quote! { () },
-        ReturnType::Type(_, ret) => quote! { #ret }
-    };
+    let new_block = if is_async {
+        // Get old return without the -> token
+        let old_return = match &fn_item.sig.output {
+            ReturnType::Default => quote! { () },
+            ReturnType::Type(_, ret) => quote! { #ret }
+        };
 
-    // Wrap function block in Box::pin and create ctx
-    let new_block = quote! {
-        {
-            ::std::boxed::Box::pin(async move {
-                let state = node_.context.downcast_mut::<#struct_type>().unwrap();
-                #old_block
-            })
+        // Wrap return type in BoxFuture
+        let new_return = quote! {
+            -> ::futures::future::BoxFuture<#old_return>
+        };
+
+        let new_return = syn::parse2(new_return)?;
+        fn_item.sig.output = new_return;
+    
+        // Wrap function block in Box::pin and create ctx
+        quote! {
+            {
+                ::std::boxed::Box::pin(async move {
+                    let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                    #old_block
+                })
+            }
         }
-    };
-    // Wrap return type in BoxFuture
-    let new_return = quote! {
-        -> ::futures::future::BoxFuture<#old_return>
+    } else {
+        // Wrap function block in Box::pin and create ctx
+        quote! {
+            {
+                let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                #old_block
+            }
+        }
     };
 
     let new_block = syn::parse2(new_block)?;
-    
-    let new_return = syn::parse2(new_return)?;
 
     fn_item.block = new_block;
-    fn_item.sig.output = new_return;
+
+    Ok(())
+}
+
+fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, is_async: bool) -> syn::Result<()> {
+    // Remove async
+    if is_async {
+        fn_item.sig.asyncness = None;
+    }
+    // Rename parameters
+    for arg in fn_item.sig.inputs.iter_mut() {
+        if let FnArg::Receiver(_) = arg {
+            let new_arg = quote! { node_: &mut ControlNode };
+            let new_arg = syn::parse2(new_arg)?;
+            *arg = new_arg;
+        }
+    }
+
+    // Rename self
+    let old_block = &mut fn_item.block;
+    SelfVisitor.visit_block_mut(old_block);
+
+    let new_block = if is_async {
+        // Get old return without the -> token
+        let old_return = match &fn_item.sig.output {
+            ReturnType::Default => quote! { () },
+            ReturnType::Type(_, ret) => quote! { #ret }
+        };
+
+        // Wrap return type in BoxFuture
+        let new_return = quote! {
+            -> ::futures::future::BoxFuture<#old_return>
+        };
+
+        let new_return = syn::parse2(new_return)?;
+        fn_item.sig.output = new_return;
+    
+        // Wrap function block in Box::pin and create ctx
+        quote! {
+            {
+                ::std::boxed::Box::pin(async move {
+                    let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                    #old_block
+                })
+            }
+        }
+    } else {
+        // Wrap function block in Box::pin and create ctx
+        quote! {
+            {
+                let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                #old_block
+            }
+        }
+    };
+
+    let new_block = syn::parse2(new_block)?;
+
+    fn_item.block = new_block;
 
     Ok(())
 }
@@ -344,10 +412,12 @@ fn bt_impl(
 
             if let Some(new_ident) = new_ident {
                 if should_rewrite_def {
-                    alter_node_fn(fn_item, struct_type)?;
+                    alter_node_fn(fn_item, struct_type, true)?;
                 }
                 
                 fn_item.sig.ident = new_ident;
+            } else {
+                alter_node_fn(fn_item, struct_type, false)?;
             }
         }
     }
@@ -360,7 +430,7 @@ fn bt_impl(
         })?)
     }
 
-    if args.halt.is_none() {
+    if args.ports.is_none() {
         extra_impls.push(syn::parse2(quote! {
             fn _ports() -> ::behaviortree_rs::basic_types::PortsList { ::behaviortree_rs::basic_types::PortsList::new() }
         })?)

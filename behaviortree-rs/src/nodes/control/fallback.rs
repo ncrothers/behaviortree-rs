@@ -26,17 +26,17 @@ pub struct FallbackNode {
     all_skipped: bool,
 }
 
-#[bt_node(node_type = ControlNode, tick = tick)]
+#[bt_node(node_type = ControlNode, tick = tick, halt = halt)]
 impl FallbackNode {
     async fn tick(&mut self) -> NodeResult {
-        if self.status == NodeStatus::Idle {
+        if node_.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
 
-        self.status = NodeStatus::Running;
+        node_.status = NodeStatus::Running;
 
-        while self.child_idx < self.children.len() {
-            let cur_child = &mut self.children[self.child_idx];
+        while self.child_idx < node_.children.len() {
+            let cur_child = &mut node_.children[self.child_idx];
 
             let _prev_status = cur_child.status();
             let child_status = cur_child.execute_tick().await?;
@@ -51,7 +51,7 @@ impl FallbackNode {
                     self.child_idx += 1;
                 }
                 NodeStatus::Success => {
-                    self.reset_children().await;
+                    node_.reset_children().await;
                     self.child_idx = 0;
                     return Ok(NodeStatus::Success);
                 }
@@ -67,8 +67,8 @@ impl FallbackNode {
             };
         }
 
-        if self.child_idx == self.children.len() {
-            self.reset_children().await;
+        if self.child_idx == node_.children.len() {
+            node_.reset_children().await;
             self.child_idx = 0;
         }
 
@@ -80,6 +80,6 @@ impl FallbackNode {
 
     async fn halt(&mut self) {
         self.child_idx = 0;
-        self.reset_children().await;
+        node_.reset_children().await;
     }
 }

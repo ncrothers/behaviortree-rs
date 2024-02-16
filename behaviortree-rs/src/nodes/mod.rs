@@ -16,10 +16,10 @@ use crate::{
 pub use crate::basic_types::{NodeStatus, PortsList};
 
 pub mod control;
-pub use control::{ControlNodeBase, ControlNodePtr};
+pub use control::ControlNode;
 
 pub mod decorator;
-pub use decorator::{DecoratorNodeBase, DecoratorNodePtr};
+pub use decorator::DecoratorNode;
 
 pub mod action;
 pub use action::*;
@@ -48,7 +48,7 @@ pub trait TreeNodeBase:
 /// to for it to compile)
 pub type TreeNodePtr = Box<dyn TreeNodeBase + Send + Sync>;
 
-pub type NodeResult = Result<NodeStatus, NodeError>;
+pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 
 /// The only trait from `TreeNodeBase` that _needs_ to be
 /// implemented manually, without a derive macro. This is where
@@ -143,8 +143,8 @@ pub trait GetNodeType {
     fn node_type(&self) -> basic_types::NodeType;
 }
 
-type TickFn<T> = fn(&mut T) -> BoxFuture<NodeResult>;
-type HaltFn<T> = fn(&mut T) -> BoxFuture<()>;
+type TickFn<T: Send> = fn(&mut T) -> BoxFuture<NodeResult>;
+type HaltFn<T: Send> = fn(&mut T) -> BoxFuture<()>;
 type PortsFn = fn() -> PortsList;
 
 #[derive(Debug)]
@@ -154,60 +154,51 @@ pub enum TreeNode {
     Decorator(DecoratorNode),
 }
 
-#[derive(Debug)]
-pub enum ActionSubType {
-    Sync,
-    Stateful,
+impl TreeNode {
+    pub fn status(&self) -> NodeStatus {
+        match self {
+            Self::Control(node) => node.status,
+            _ => todo!(),
+        }
+    }
+
+    pub fn reset_status(&mut self) {
+        match self {
+            Self::Control(node) => node.status = NodeStatus::Idle,
+            _ => todo!(),
+        }
+    }
+
+    pub async fn execute_tick(&mut self) -> NodeResult {
+        match self {
+            Self::Control(ctrl) => {
+                ctrl.execute_tick().await
+            }
+            _ => todo!(),
+        }
+    }
+
+    pub async fn halt(&mut self) {
+        match self {
+            Self::Control(node) => node.halt().await,
+            _ => todo!(),
+        }
+    }
+
+    pub fn config_mut(&mut self) -> &mut NodeConfig {
+        match self {
+            Self::Control(node) => &mut node.config,
+            _ => todo!(),
+        }
+    }
+
+    // fn execute_tick(&mut self) -> BoxFuture<NodeResult> {
+    //     Box::pin(async move {
+    //         (self.tick_fn)(self).await
+    //     })
+    // }
 }
 
-#[derive(Debug)]
-pub struct ActionNode {
-    name: String,
-    type_str: String,
-    subtype: ActionSubType,
-    config: NodeConfig,
-    status: NodeStatus,
-    /// Function pointer to tick (on_running for stateful nodes)
-    tick_fn: TickFn<ActionNode>,
-    /// Function pointer to on_start function, if it exists
-    start_fn: TickFn<ActionNode>,
-    /// Function pointer to halt
-    halt_fn: HaltFn<ActionNode>,
-    ports_fn: PortsFn,
-    context: Box<dyn Any>,
-}
-
-#[derive(Debug)]
-pub struct ControlNode {
-    name: String,
-    type_str: String,
-    config: NodeConfig,
-    status: NodeStatus,
-    /// Vector of child nodes
-    children: Vec<TreeNode>,
-    /// Function pointer to tick
-    tick_fn: TickFn<ControlNode>,
-    /// Function pointer to halt
-    halt_fn: HaltFn<ControlNode>,
-    ports_fn: PortsFn,
-    context: Box<dyn Any>,
-}
-
-#[derive(Debug)]
-pub struct DecoratorNode {
-    name: String,
-    type_str: String,
-    config: NodeConfig,
-    status: NodeStatus,
-    /// Child node
-    child: Option<Box<TreeNode>>,
-    /// Function pointer to tick
-    tick_fn: TickFn<DecoratorNode>,
-    /// Function pointer to halt
-    halt_fn: HaltFn<DecoratorNode>,
-    ports_fn: PortsFn,
-    context: Box<dyn Any>,
-}
 
 // =============================
 // Enum Definitions
