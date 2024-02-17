@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::{Parse, Parser}, punctuated::Punctuated, spanned::Spanned, token::{Comma, SelfValue}, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, Expr, ExprPath, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
+    parse::Parse, punctuated::Punctuated, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
 };
 
 #[macro_use]
@@ -160,10 +160,10 @@ impl Parse for NodeImplConfig {
             .map(|val| (val.name.to_string(), val))
             .collect();
 
-        println!("Found impl attrs:");
-        for (attr, val) in attributes.iter() {
-            println!("{attr}: {}", val.value);
-        }
+        // println!("Found impl attrs:");
+        // for (attr, val) in attributes.iter() {
+        //     println!("{attr}: {}", val.value);
+        // }
 
         let node_type = attributes
             .remove("node_type")
@@ -174,12 +174,12 @@ impl Parse for NodeImplConfig {
 
         let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
             let tick_fn = attributes
-                .remove("on_start")
+                .remove("on_running")
                 .map(|val| val.value)
                 .unwrap_or_else(|| syn::parse2(quote! { on_running }).unwrap());
             
             let on_start_fn = attributes
-                .remove("on_running")
+                .remove("on_start")
                 .map(|val| val.value)
                 .unwrap_or_else(|| syn::parse2(quote! { on_start }).unwrap());
 
@@ -194,7 +194,7 @@ impl Parse for NodeImplConfig {
         };
 
         let ports = attributes.remove("ports").map(|val| val.value);
-        println!("Ports value: {}", ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
+        // println!("Ports value: {}", ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
         let halt = attributes.remove("halt").map(|val| val.value);
 
         if let Some((_, invalid_field)) = attributes.into_iter().next() {
@@ -250,19 +250,19 @@ struct CustomFnVisitor<'a> {
 
 impl VisitMut for CustomFnVisitor<'_> {
     fn visit_expr_method_call_mut(&mut self, i: &mut syn::ExprMethodCall) {
-        let new_arg: Expr = syn::parse2(quote! { node_ }).unwrap();
-        // If this method call is not a built-in call (e.g. tick()), add node_
-        let self_receiver = Ident::new("self", i.span());
-        if ident_matches_custom_fn(&i.method, self.custom_fn_names) {
-            match i.receiver.as_ref() {
-                Expr::Path(path) => {
-                    if path.path.is_ident(&self_receiver) {
-                        i.args.push(new_arg.clone());
-                    }
-                }
-                _ => ()
-            }
-        }
+        // let new_arg: Expr = syn::parse2(quote! { node_ }).unwrap();
+        // // If this method call is not a built-in call (e.g. tick()), add node_
+        // let self_receiver = Ident::new("self", i.span());
+        // if ident_matches_custom_fn(&i.method, self.custom_fn_names) {
+        //     match i.receiver.as_ref() {
+        //         Expr::Path(path) => {
+        //             if path.path.is_ident(&self_receiver) {
+        //                 i.args.push(new_arg.clone());
+        //             }
+        //         }
+        //         _ => ()
+        //     }
+        // }
 
         visit_mut::visit_expr_method_call_mut(self, i)
     }
@@ -285,8 +285,8 @@ impl VisitMut for SelfVisitor {
 
 fn alter_custom_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: &Ident) -> syn::Result<()> {
     // Append node_ to parameter list
-    let new_arg = syn::parse2(quote! { node_: &mut #type_ident })?;
-    fn_item.sig.inputs.push(new_arg);
+    // let new_arg = syn::parse2(quote! { node_: &mut #type_ident })?;
+    // fn_item.sig.inputs.push(new_arg);
 
     Ok(())
 }
@@ -299,7 +299,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: 
     // Rename parameters
     for arg in fn_item.sig.inputs.iter_mut() {
         if let FnArg::Receiver(_) = arg {
-            let new_arg = quote! { node_: &mut #type_ident };
+            let new_arg = quote! { node_: &mut ::behaviortree_rs::nodes::#type_ident };
             let new_arg = syn::parse2(new_arg)?;
             *arg = new_arg;
         }
@@ -328,7 +328,13 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: 
         quote! {
             {
                 ::std::boxed::Box::pin(async move {
-                    let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                    let mut self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                    // let mut self_: &mut #struct_type = unsafe {
+                    //     (*node_.context).downcast_mut().unwrap()
+                    // };
+                    // let mut locked_node = node_.context.lock().await;
+                    // let self_ = locked_node.downcast_mut::<#struct_type>().unwrap();
+                    // drop(locked_node);
                     #old_block
                 })
             }
@@ -337,7 +343,12 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: 
         // Wrap function block in Box::pin and create ctx
         quote! {
             {
-                let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                // let node_context: *mut (dyn Any + Send) = &*node_.context
+                let mut self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                // let mut self_: &mut #struct_type = unsafe {
+                //     (*node_.context).downcast_mut::<#struct_type>().unwrap()
+                // };
+                // let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
                 #old_block
             }
         }
@@ -356,7 +367,7 @@ fn get_custom_fn_idents(args: &NodeImplConfig, fn_item: &ItemImpl) -> Vec<Ident>
             ImplItem::Fn(fn_item) => {
                 let ident = &fn_item.sig.ident;
 
-                println!("Checking ident: {ident}");
+                // println!("Checking ident: {ident}");
 
                 // If it's not the tick() function
                 if *ident != args.tick_fn &&
@@ -368,7 +379,7 @@ fn get_custom_fn_idents(args: &NodeImplConfig, fn_item: &ItemImpl) -> Vec<Ident>
                     (args.ports.is_none() || args.ports.as_ref().is_some_and(|v| *v != *ident))
 
                 {
-                    println!("**Selected ident: {ident}");
+                    // println!("**Selected ident: {ident}");
                     Some(fn_item.sig.ident.clone())
                 } else {
                     None
@@ -390,7 +401,7 @@ fn bt_impl(
 
     let custom_fn_idents = get_custom_fn_idents(&args, &item);
 
-    println!("Ports value in args: {}", args.ports.as_ref().map(|v| format!("Some({v})")).unwrap_or(String::from("None")));
+    // println!("Ports value in args: {}", args.ports.as_ref().map(|v| format!("Some({v})")).unwrap_or(String::from("None")));
 
     let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
         syn::parse2::<Ident>(quote! { ActionNode })?
@@ -400,7 +411,7 @@ fn bt_impl(
     
     for sub_item in item.items.iter_mut() {
         if let ImplItem::Fn(fn_item) = sub_item {
-            println!("Processing function: {}", fn_item.sig.ident);
+            // println!("Processing function: {}", fn_item.sig.ident);
             let mut should_rewrite_def = false;
             // Rename methods
             let mut new_ident = None;
@@ -441,12 +452,12 @@ fn bt_impl(
 
             if let Some(new_ident) = new_ident {
                 if should_rewrite_def {
-                    alter_node_fn(fn_item, struct_type, &type_ident, true)?;
+                    alter_node_fn(fn_item, struct_type, &node_type, true)?;
                 }
                 
                 fn_item.sig.ident = new_ident;
             } else if ident_matches_custom_fn(&fn_item.sig.ident, &custom_fn_idents) {
-                alter_custom_fn(fn_item, struct_type, &type_ident)?;
+                alter_custom_fn(fn_item, struct_type, &node_type)?;
             }
 
         }
@@ -456,7 +467,7 @@ fn bt_impl(
 
     if args.halt.is_none() {
         extra_impls.push(syn::parse2(quote! {
-            fn _halt(node_: &mut #node_type) -> ::futures::future::BoxFuture<()> { ::std::boxed::Box::pin(async move {}) }
+            fn _halt(node_: &mut ::behaviortree_rs::nodes::#node_type) -> ::futures::future::BoxFuture<()> { ::std::boxed::Box::pin(async move {}) }
         })?)
     }
 
@@ -640,14 +651,16 @@ fn bt_struct(
                     #extra_fields
                 };
 
-                let node = #node_type {
+                let node = ::behaviortree_rs::nodes::#node_type {
                     name: name.as_ref().to_string(),
                     type_str: String::from(#struct_name),
                     config,
                     status: ::behaviortree_rs::basic_types::NodeStatus::Idle,
                     halt_fn: Self::_halt,
                     ports_fn: Self::_ports,
-                    context: Box::new(ctx),
+                    // context: ::std::sync::Arc::new(ctx),
+                    context: ::std::boxed::Box::new(ctx),
+                    // context: ::std::sync::Arc::new(::std::boxed::Box::leak(::std::boxed::Box::new(ctx))),
                     #node_specific_tokens
                 };
 
@@ -1195,14 +1208,15 @@ fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
 
     quote! {
         {
-            let mut node = #node_type::new(#name, config #cloned_names);
+            let mut node = #node_type::create_node(#name, config #cloned_names);
             let manifest = ::behaviortree_rs::basic_types::TreeNodeManifest {
-                node_type: <#node_type as ::behaviortree_rs::nodes::GetNodeType>::node_type(&node),
+                node_type: node.node_type(),
                 registration_id: #name.into(),
-                ports: <#node_type as ::behaviortree_rs::nodes::NodePorts>::provided_ports(&node),
+                ports: node.provided_ports(),
                 description: ::std::string::String::new(),
             };
-            <#node_type as ::behaviortree_rs::nodes::TreeNodeDefaults>::config_mut(&mut node).set_manifest(::std::sync::Arc::new(manifest));
+            node.config_mut().set_manifest(::std::sync::Arc::new(manifest));
+            // <#node_type as ::behaviortree_rs::nodes::TreeNodeDefaults>::config_mut(&mut node).set_manifest(::std::sync::Arc::new(manifest));
             node
         }
     }
@@ -1230,9 +1244,11 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
     let node = build_node(&node_registration);
 
     let extra_steps = match node_type {
-        NodeTypeInternal::Control => quote! { 
+        NodeTypeInternal::Control => quote! {
             for child in children {
-                node.children.push(child);
+                if let ::behaviortree_rs::nodes::TreeNode::Control(node) = node {
+                    node.children.push(child);
+                }
             }
         },
         NodeTypeInternal::Decorator => quote! { node.child = Some(children.remove(0)); },
@@ -1247,14 +1263,14 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
 
             let node_fn = move |
                 config: ::behaviortree_rs::nodes::NodeConfig,
-                mut children: ::std::vec::Vec<::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>>
-            | -> ::std::boxed::Box<dyn ::behaviortree_rs::nodes::TreeNodeBase + Send + Sync>
+                mut children: ::std::vec::Vec<::behaviortree_rs::nodes::TreeNode>
+            | -> ::behaviortree_rs::nodes::TreeNode
             {
                 let mut node = #node;
                 
                 #extra_steps
 
-                ::std::boxed::Box::new(node)
+                node
             };
 
             #factory.register_node(#name, node_fn, #node_type_token);

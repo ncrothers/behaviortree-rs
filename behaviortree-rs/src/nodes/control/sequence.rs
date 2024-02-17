@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The SequenceNode is used to tick children in an ordered sequence.
@@ -48,7 +47,9 @@ impl SequenceNode {
 
             match &child_status {
                 NodeStatus::Failure => {
-                    node_.reset_children().await;
+                    for child in node_.children.iter_mut() {
+                        child.halt().await;
+                    }
                     self.child_idx = 0;
                     return Ok(NodeStatus::Failure);
                 }
@@ -57,7 +58,7 @@ impl SequenceNode {
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
-                        "ParallelAllNode".to_string(),
+                        "SequenceNode".to_string(),
                         "Idle".to_string(),
                     ))
                 }
@@ -66,7 +67,9 @@ impl SequenceNode {
         }
 
         if self.child_idx == node_.children.len() {
-            node_.reset_children().await;
+            for child in node_.children.iter_mut() {
+                child.halt().await;
+            }
             self.child_idx = 0;
         }
 

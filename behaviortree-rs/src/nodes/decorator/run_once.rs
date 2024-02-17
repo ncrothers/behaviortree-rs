@@ -1,10 +1,9 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{DecoratorNode, NodeResult, TreeNodeDefaults},
+    nodes::NodeResult,
 };
 
 /// The RunOnceNode is used when you want to execute the child
@@ -44,13 +43,13 @@ impl RunOnceNode {
             };
         }
 
-        node_.set_status(NodeStatus::Running);
+        node_.status = NodeStatus::Running;
 
         let status = node_.child.as_mut().unwrap().execute_tick().await?;
 
         if status.is_completed() {
             self.already_ticked = true;
-            self.returned_status = status.clone();
+            self.returned_status = status;
             node_.reset_child().await;
         }
 

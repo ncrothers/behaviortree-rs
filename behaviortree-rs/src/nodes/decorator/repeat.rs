@@ -1,10 +1,9 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{DecoratorNode, NodeError, NodeResult, TreeNodeDefaults},
+    nodes::{NodeError, NodeResult},
 };
 
 /// /// The RetryNode is used to execute a child several times, as long
@@ -51,7 +50,7 @@ impl RepeatNode {
             self.all_skipped = true;
         }
 
-        node_.set_status(NodeStatus::Running);
+        node_.status = NodeStatus::Running;
 
         while do_loop {
             let child_status = node_.child.as_mut().unwrap().execute_tick().await?;
@@ -61,10 +60,17 @@ impl RepeatNode {
             match child_status {
                 NodeStatus::Success => {
                     self.repeat_count += 1;
-                    do_loop =
-                        (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
+                    do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 
-                    node_.reset_child().await;
+                    if let Some(child) = node_.child.as_mut() {
+                        if matches!(child.status(), NodeStatus::Running) {
+                            child.halt().await;
+                        }
+
+                        child.reset_status();
+                    }
+
+                    // node_.reset_child().await;
                 }
                 NodeStatus::Failure => {
                     self.repeat_count = 0;

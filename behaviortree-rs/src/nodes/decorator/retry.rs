@@ -1,10 +1,9 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{DecoratorNode, NodeError, NodeResult, TreeNodeDefaults},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The RetryNode is used to execute a child several times if it fails.
@@ -45,14 +44,13 @@ impl RetryNode {
         // Load num_cycles from the port value
         self.max_attempts = node_.config.get_input("num_attempts")?;
 
-        let mut do_loop =
-            (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
+        let mut do_loop = (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
         if matches!(node_.status, NodeStatus::Idle) {
             self.all_skipped = true;
         }
 
-        node_.set_status(NodeStatus::Running);
+        node_.status = NodeStatus::Running;
 
         while do_loop {
             let child_status = node_.child.as_mut().unwrap().execute_tick().await?;
@@ -62,7 +60,13 @@ impl RetryNode {
             match child_status {
                 NodeStatus::Success => {
                     self.try_count = 0;
-                    node_.reset_child().await;
+                    if let Some(child) = node_.child.as_mut() {
+                        if matches!(child.status(), NodeStatus::Running) {
+                            child.halt().await;
+                        }
+
+                        child.reset_status();
+                    }
 
                     return Ok(NodeStatus::Success);
                 }
@@ -71,11 +75,23 @@ impl RetryNode {
                     do_loop =
                         (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-                    node_.reset_child().await;
+                    if let Some(child) = node_.child.as_mut() {
+                        if matches!(child.status(), NodeStatus::Running) {
+                            child.halt().await;
+                        }
+
+                        child.reset_status();
+                    }
                 }
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Skipped => {
-                    node_.reset_child().await;
+                    if let Some(child) = node_.child.as_mut() {
+                        if matches!(child.status(), NodeStatus::Running) {
+                            child.halt().await;
+                        }
+
+                        child.reset_status();
+                    }
 
                     return Ok(NodeStatus::Skipped);
                 }

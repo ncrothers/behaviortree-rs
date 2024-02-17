@@ -1,11 +1,12 @@
-use std::{any::{Any, TypeId}, collections::HashMap, sync::Arc};
+use std::{any::TypeId, collections::HashMap, sync::Arc};
 
-use futures::{future::BoxFuture, Future};
+use futures::future::BoxFuture;
 use thiserror::Error;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortValue, PortsRemapping, TreeNodeManifest
+        get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortValue, PortsRemapping,
+        TreeNodeManifest,
     },
     blackboard::BlackboardString,
     tree::ParseError,
@@ -23,127 +24,14 @@ pub use decorator::DecoratorNode;
 pub mod action;
 pub use action::*;
 
-// =============================
-// Trait Definitions
-// =============================
-
-/// Supertrait that requires all of the base functions that need to
-/// be implemented for every tree node.
-pub trait TreeNodeBase:
-    std::fmt::Debug
-    + NodePorts
-    + TreeNodeDefaults
-    + GetNodeType
-    + ExecuteTick
-    + SyncHalt
-    + AsyncHalt
-    + SyncTick
-    + AsyncTick
-{
-}
-
 /// Pointer to the most general trait, which encapsulates all
 /// node types that implement `TreeNodeBase` (all nodes need
 /// to for it to compile)
 // pub type TreeNode = Box<dyn TreeNodeBase + Send + Sync>;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
-
-/// The only trait from `TreeNodeBase` that _needs_ to be
-/// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with
-/// `provided_ports()`.
-pub trait NodePorts {
-    fn provided_ports(&self) -> PortsList {
-        HashMap::new()
-    }
-}
-
-/// The only trait from `TreeNodeBase` that _needs_ to be
-/// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with
-/// `provided_ports()`.
-pub trait SyncTick {
-    fn tick(&mut self) -> NodeResult;
-}
-
-/// The only trait from `TreeNodeBase` that _needs_ to be
-/// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with
-/// `provided_ports()`.
-pub trait AsyncTick {
-    fn tick(&mut self) -> BoxFuture<NodeResult>;
-}
-
-/// Trait that defines the `halt()` function, which gets called
-/// when a node is stopped. This function typically contains any
-/// cleanup code for the node.
-pub trait SyncHalt {
-    fn halt(&mut self) {}
-}
-
-/// Trait that defines the `halt()` function, which gets called
-/// when a node is stopped. This function typically contains any
-/// cleanup code for the node.
-pub trait AsyncHalt {
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {})
-    }
-}
-
-pub trait RuntimeType {
-    fn get_runtime(&self) -> NodeRuntime;
-}
-
-/// Trait that should only be implemented with a derive macro.
-/// The automatic implementation defines helper functions.
-///
-/// The automatic implementation relies on certain named fields
-/// within the struct that it gets derived on.
-///
-/// # Examples
-///
-/// The struct below won't compile, but it contains the base derived
-/// traits and struct fields needed for all node definitions.
-///
-/// ```ignore
-/// use behaviortree_rs::basic_types::NodeStatus;
-/// use behaviortree_rs::nodes::NodeConfig;
-/// use behaviortree_rs::derive::TreeNodeDefaults;
-///
-/// #[derive(Debug, Clone, TreeNodeDefaults)]
-/// struct MyTreeNode {
-///     config: NodeConfig,
-///     status: NodeStatus,
-/// }
-/// ```
-pub trait TreeNodeDefaults {
-    fn name(&self) -> &String;
-    fn path(&self) -> &String;
-    fn status(&self) -> NodeStatus;
-    fn reset_status(&mut self);
-    fn set_status(&mut self, status: NodeStatus);
-    fn config(&self) -> &NodeConfig;
-    fn config_mut(&mut self) -> &mut NodeConfig;
-    fn into_boxed(self) -> Box<dyn TreeNodeBase>;
-}
-
-/// Automatically implemented for all node types. The implementation
-/// differs based on the `NodeType`.
-pub trait ExecuteTick {
-    fn execute_tick(&mut self) -> BoxFuture<NodeResult>;
-}
-
-/// TODO
-pub trait ConditionNode {}
-
-/// Automatically implemented for all node types.
-pub trait GetNodeType {
-    fn node_type(&self) -> basic_types::NodeType;
-}
-
-type TickFn<T: Send> = fn(&mut T) -> BoxFuture<NodeResult>;
-type HaltFn<T: Send> = fn(&mut T) -> BoxFuture<()>;
+type TickFn<T> = fn(&mut T) -> BoxFuture<NodeResult>;
+type HaltFn<T> = fn(&mut T) -> BoxFuture<()>;
 type PortsFn = fn() -> PortsList;
 
 #[derive(Debug)]
@@ -156,45 +44,49 @@ pub enum TreeNode {
 impl TreeNode {
     pub fn status(&self) -> NodeStatus {
         match self {
+            Self::Action(node) => node.status,
             Self::Control(node) => node.status,
-            _ => todo!(),
+            Self::Decorator(node) => node.status,
         }
     }
 
     pub fn reset_status(&mut self) {
         match self {
+            Self::Action(node) => node.status = NodeStatus::Idle,
             Self::Control(node) => node.status = NodeStatus::Idle,
-            _ => todo!(),
+            Self::Decorator(node) => node.status = NodeStatus::Idle,
         }
     }
 
     pub async fn execute_tick(&mut self) -> NodeResult {
         match self {
-            Self::Control(ctrl) => {
-                ctrl.execute_tick().await
-            }
-            _ => todo!(),
+            Self::Action(node) => node.execute_tick().await,
+            Self::Control(node) => node.execute_tick().await,
+            Self::Decorator(node) => node.execute_tick().await,
         }
     }
 
     pub async fn halt(&mut self) {
         match self {
+            Self::Action(node) => node.halt().await,
             Self::Control(node) => node.halt().await,
-            _ => todo!(),
+            Self::Decorator(node) => node.halt().await,
         }
     }
 
     pub fn config_mut(&mut self) -> &mut NodeConfig {
         match self {
+            Self::Action(node) => &mut node.config,
             Self::Control(node) => &mut node.config,
-            _ => todo!(),
+            Self::Decorator(node) => &mut node.config,
         }
     }
 
     pub fn config(&self) -> &NodeConfig {
         match self {
+            Self::Action(node) => &node.config,
             Self::Control(node) => &node.config,
-            _ => todo!(),
+            Self::Decorator(node) => &node.config,
         }
     }
 
@@ -205,28 +97,15 @@ impl TreeNode {
             TreeNode::Decorator(_) => NodeType::Decorator,
         }
     }
-    
+
     pub fn provided_ports(&self) -> PortsList {
         match self {
-            TreeNode::Action(node) => {
-                node.provided_ports()
-            }
-            TreeNode::Control(node) => {
-                node.provided_ports()
-            }
-            TreeNode::Decorator(node) => {
-                node.provided_ports()
-            }
+            TreeNode::Action(node) => node.provided_ports(),
+            TreeNode::Control(node) => node.provided_ports(),
+            TreeNode::Decorator(node) => node.provided_ports(),
         }
     }
-
-    // fn execute_tick(&mut self) -> BoxFuture<NodeResult> {
-    //     Box::pin(async move {
-    //         (self.tick_fn)(self).await
-    //     })
-    // }
 }
-
 
 // =============================
 // Enum Definitions

@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 /// The SequenceStarNode is used to tick children in an ordered sequence.
 /// If any child returns RUNNING, previous children are not ticked again.
@@ -51,7 +50,10 @@ impl SequenceWithMemoryNode {
                 NodeStatus::Failure => {
                     // Do NOT reset child_idx on failure
                     // Halt children at and after this index
-                    node_.halt_children(self.child_idx).await?;
+                    for i in self.child_idx..node_.children.len() {
+                        node_.children[i].halt().await;
+                    }
+                    // node_.halt_children(self.child_idx).await?;
 
                     return Ok(NodeStatus::Failure);
                 }
@@ -69,7 +71,9 @@ impl SequenceWithMemoryNode {
 
         // All children returned Success
         if self.child_idx == node_.children.len() {
-            node_.reset_children().await;
+            for child in node_.children.iter_mut() {
+                child.halt().await;
+            }
             self.child_idx = 0;
         }
 

@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{ControlNode, NodeError, NodeResult, TreeNodeDefaults},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The ParallelAllNode execute all its children
@@ -39,16 +38,16 @@ pub struct ParallelAllNode {
     halt = halt,
 )]
 impl ParallelAllNode {
-    fn failure_threshold(&self) -> usize {
+    fn failure_threshold(&self, n_children: i32) -> usize {
         if self.failure_threshold < 0 {
-            ((node_.children.len() as i32) + self.failure_threshold + 1).max(0) as usize
+            (n_children + self.failure_threshold + 1).max(0) as usize
         } else {
             self.failure_threshold as usize
         }
     }
 
     async fn tick(&mut self) -> NodeResult {
-        self.failure_threshold = node_.config_mut().get_input("max_failures")?;
+        self.failure_threshold = node_.config.get_input("max_failures")?;
 
         let children_count = node_.children.len();
 
@@ -93,14 +92,17 @@ impl ParallelAllNode {
 
         if skipped_count + self.completed_list.len() >= children_count {
             // Done!
-            node_.reset_children().await;
+            for child in node_.children.iter_mut() {
+                child.halt().await;
+            }
             self.completed_list.clear();
 
-            let status = if self.failure_count >= self.failure_threshold() {
-                NodeStatus::Failure
-            } else {
-                NodeStatus::Success
-            };
+            let status =
+                if self.failure_count >= self.failure_threshold(node_.children.len() as i32) {
+                    NodeStatus::Failure
+                } else {
+                    NodeStatus::Success
+                };
 
             // Reset failure_count after using it
             self.failure_count = 0;

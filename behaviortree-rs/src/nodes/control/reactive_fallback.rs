@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The ReactiveFallback is similar to a ParallelNode.

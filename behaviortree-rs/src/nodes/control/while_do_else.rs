@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// WhileDoElse must have exactly 2 or 3 children.

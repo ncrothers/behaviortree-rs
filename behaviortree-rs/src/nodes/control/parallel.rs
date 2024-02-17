@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{ControlNode, NodeError, NodeResult, TreeNodeDefaults},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The ParallelNode execute all its children
@@ -49,17 +48,17 @@ pub struct ParallelNode {
     halt = halt,
 )]
 impl ParallelNode {
-    fn success_threshold(&self) -> usize {
+    fn success_threshold(&self, n_children: i32) -> usize {
         if self.success_threshold < 0 {
-            ((node_.children.len() as i32) + self.success_threshold + 1).max(0) as usize
+            (n_children + self.success_threshold + 1).max(0) as usize
         } else {
             self.success_threshold as usize
         }
     }
 
-    fn failure_threshold(&self) -> usize {
+    fn failure_threshold(&self, n_children: i32) -> usize {
         if self.failure_threshold < 0 {
-            ((node_.children.len() as i32) + self.failure_threshold + 1).max(0) as usize
+            (n_children + self.failure_threshold + 1).max(0) as usize
         } else {
             self.failure_threshold as usize
         }
@@ -72,18 +71,18 @@ impl ParallelNode {
     }
 
     async fn tick(&mut self) -> NodeResult {
-        self.success_threshold = node_.config_mut().get_input("success_count").unwrap();
-        self.failure_threshold = node_.config_mut().get_input("failure_count").unwrap();
+        self.success_threshold = node_.config.get_input("success_count").unwrap();
+        self.failure_threshold = node_.config.get_input("failure_count").unwrap();
 
         let children_count = node_.children.len();
 
-        if children_count < self.success_threshold() {
+        if children_count < self.success_threshold(node_.children.len() as i32) {
             return Err(NodeError::NodeStructureError(
                 "Number of children is less than the threshold. Can never succeed.".to_string(),
             ));
         }
 
-        if children_count < self.failure_threshold() {
+        if children_count < self.failure_threshold(node_.children.len() as i32) {
             return Err(NodeError::NodeStructureError(
                 "Number of children is less than the threshold. Can never fail.".to_string(),
             ));
@@ -110,7 +109,7 @@ impl ParallelNode {
                 }
             }
 
-            let required_success_count = self.success_threshold();
+            let required_success_count = self.success_threshold(node_.children.len() as i32);
 
             // Check if success condition has been met
             if self.success_count >= required_success_count
@@ -123,7 +122,7 @@ impl ParallelNode {
             }
 
             if (children_count - self.failure_count) < required_success_count
-                || self.failure_count == self.failure_threshold()
+                || self.failure_count == self.failure_threshold(node_.children.len() as i32)
             {
                 self.clear();
                 node_.reset_children().await;

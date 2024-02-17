@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The ReactiveSequence is similar to a ParallelNode.
@@ -45,7 +44,8 @@ impl ReactiveSequenceNode {
             match child_status {
                 NodeStatus::Running => {
                     for i in 0..counter {
-                        node_.halt_child(i).await?;
+                        node_.children[i].halt().await;
+                        // node_.halt_child(i).await?;
                     }
                     if self.running_child == -1 {
                         self.running_child = counter as i32;
@@ -66,18 +66,21 @@ impl ReactiveSequenceNode {
                 NodeStatus::Success => {}
                 NodeStatus::Skipped => {
                     // Halt current child
-                    node_.halt_child(counter).await?;
+                    node_.children[counter].halt().await;
+                    // node_.halt_child(counter).await?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
-                        child.config().path.clone(),
+                        "ReactiveSequenceNode".into(),
                         "Idle".to_string(),
                     ));
                 }
             }
         }
 
-        node_.reset_children().await;
+        for child in node_.children.iter_mut() {
+            child.halt().await;
+        }
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),

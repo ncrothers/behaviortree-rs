@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The FallbackNode is used to try different strategies,
@@ -51,7 +50,10 @@ impl FallbackNode {
                     self.child_idx += 1;
                 }
                 NodeStatus::Success => {
-                    node_.reset_children().await;
+                    for child in node_.children.iter_mut() {
+                        child.halt().await;
+                    }
+                    // node_.reset_children().await;
                     self.child_idx = 0;
                     return Ok(NodeStatus::Success);
                 }
@@ -68,7 +70,10 @@ impl FallbackNode {
         }
 
         if self.child_idx == node_.children.len() {
-            node_.reset_children().await;
+            for child in node_.children.iter_mut() {
+                child.halt().await;
+            }
+            // node_.reset_children().await;
             self.child_idx = 0;
         }
 

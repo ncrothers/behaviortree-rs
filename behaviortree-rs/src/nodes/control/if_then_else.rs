@@ -1,10 +1,9 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 use log::warn;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// IfThenElseNode must have exactly 2 or 3 children. This node is NOT reactive.
@@ -71,7 +70,9 @@ impl IfThenElseNode {
             match status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 status => {
-                    node_.reset_children().await;
+                    for child in node_.children.iter_mut() {
+                        child.halt().await;
+                    }
                     self.child_idx = 0;
                     return Ok(status);
                 }
@@ -85,6 +86,8 @@ impl IfThenElseNode {
 
     async fn halt(&mut self) {
         self.child_idx = 0;
-        node_.reset_children().await;
+        for child in node_.children.iter_mut() {
+            child.halt().await;
+        }
     }
 }

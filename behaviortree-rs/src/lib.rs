@@ -147,24 +147,25 @@ use behaviortree_rs::{
 
 #[bt_node(
     node_type = SyncActionNode,
-    ports = provided_ports,
-    tick = tick,
 )]
 struct DummyActionStruct {}
 
+#[bt_node(
+    node_type = SyncActionNode,
+    ports = provided_ports,
+    tick = tick,
+)]
 impl DummyActionStruct {
-    fn tick(&mut self) -> BoxFuture<Result<NodeStatus, NodeError>> {
-        Box::pin(async move {
-            // Some implementation
-            // ...
+    async fn tick(&mut self) -> Result<NodeStatus, NodeError> {
+        // Some implementation
+        // ...
 
-            // You must return a `NodeStatus` (i.e. Failure, Success, Running, or Skipped)
-            // Or an Err
-            Ok(NodeStatus::Success)
-        })
+        // You must return a `NodeStatus` (i.e. Failure, Success, Running, or Skipped)
+        // Or an Err
+        Ok(NodeStatus::Success)
     }
 
-    fn provided_ports(&self) -> PortsList {
+    fn provided_ports() -> PortsList {
         define_ports!(
             // No default value
             input_port!("foo"),

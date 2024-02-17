@@ -1,6 +1,9 @@
 use std::any::Any;
 
-use crate::{nodes::{HaltFn, NodeConfig, NodeStatus, PortsFn, TickFn, TreeNode}, NodeResult};
+use crate::{
+    nodes::{HaltFn, NodeConfig, NodeStatus, PortsFn, PortsList, TickFn, TreeNode},
+    NodeResult,
+};
 
 mod force_failure;
 pub use force_failure::*;
@@ -16,23 +19,6 @@ mod retry;
 pub use retry::*;
 mod run_once;
 pub use run_once::*;
-
-use super::{NodeError, PortsList};
-
-// pub trait DecoratorNodeBase: TreeNodeBase + DecoratorNode {}
-
-// pub type DecoratorNodePtr = Rc<RefCell<dyn DecoratorNodeBase>>;
-
-// pub trait DecoratorNode: TreeNodeBase {
-//     /// Set child node for `Decorator`
-//     fn set_child(&mut self, child: TreeNode);
-//     /// Return reference to child
-//     fn child(&self) -> Result<&TreeNode, NodeError>;
-//     /// Call `halt()` on child, same as `reset_child()`
-//     fn halt_child(&mut self) -> BoxFuture<()>;
-//     /// Reset status of child and call `halt()`
-//     fn reset_child(&mut self) -> BoxFuture<()>;
-// }
 
 #[derive(Debug)]
 pub struct DecoratorNode {
