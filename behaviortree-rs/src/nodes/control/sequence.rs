@@ -22,11 +22,7 @@ pub struct SequenceNode {
     all_skipped: bool,
 }
 
-#[bt_node(
-    node_type = ControlNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl SequenceNode {
     async fn tick(&mut self) -> NodeResult {
         if node_.status == NodeStatus::Idle {

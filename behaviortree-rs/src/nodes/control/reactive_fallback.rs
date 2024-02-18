@@ -19,11 +19,7 @@ use crate::{
 #[bt_node(ControlNode)]
 pub struct ReactiveFallbackNode {}
 
-#[bt_node(
-    node_type = ControlNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl ReactiveFallbackNode {
     async fn tick(&mut self) -> NodeResult {
         let mut all_skipped = true;

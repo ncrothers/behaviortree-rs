@@ -140,18 +140,16 @@ You also need to implement the `NodePorts` trait regardless of sync vs. async. T
 ```rust
 use behaviortree_rs::{
     bt_node,
-    nodes::{AsyncTick, AsyncHalt, NodeStatus, NodeError, PortsList, NodePorts},
+    nodes::{NodeStatus, NodeError, PortsList},
     macros::{define_ports, input_port, output_port},
     sync::BoxFuture,
 };
 
-#[bt_node(
-    node_type = SyncActionNode,
-)]
+#[bt_node(SyncActionNode)]
 struct DummyActionStruct {}
 
 #[bt_node(
-    node_type = SyncActionNode,
+    SyncActionNode,
     ports = provided_ports,
     tick = tick,
 )]

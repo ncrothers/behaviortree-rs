@@ -24,11 +24,7 @@ pub struct IfThenElseNode {
     child_idx: usize,
 }
 
-#[bt_node(
-    node_type = ControlNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl IfThenElseNode {
     async fn tick(&mut self) -> NodeResult {
         let children_count = node_.children.len();

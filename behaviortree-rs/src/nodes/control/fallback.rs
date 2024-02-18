@@ -23,7 +23,7 @@ pub struct FallbackNode {
     all_skipped: bool,
 }
 
-#[bt_node(node_type = ControlNode, tick = tick, halt = halt)]
+#[bt_node(ControlNode)]
 impl FallbackNode {
     async fn tick(&mut self) -> NodeResult {
         if node_.status == NodeStatus::Idle {

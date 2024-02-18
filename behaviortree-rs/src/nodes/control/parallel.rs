@@ -39,12 +39,7 @@ pub struct ParallelNode {
     failure_count: usize,
 }
 
-#[bt_node(
-    node_type = ControlNode,
-    ports = provided_ports,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl ParallelNode {
     fn success_threshold(&self, n_children: i32) -> usize {
         if self.success_threshold < 0 {
@@ -136,7 +131,7 @@ impl ParallelNode {
         }
     }
 
-    fn provided_ports() -> crate::basic_types::PortsList {
+    fn ports() -> crate::basic_types::PortsList {
         define_ports!(
             input_port!("success_count", -1),
             input_port!("failure_count", 1)

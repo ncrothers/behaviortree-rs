@@ -17,7 +17,7 @@ pub fn test_setup() {
 pub struct StatusNode {}
 
 #[bt_node(
-    node_type = SyncActionNode,
+    SyncActionNode,
     ports = provided_ports,
     tick = tick,
 )]
@@ -42,7 +42,7 @@ pub struct SuccessThenFailure {
 }
 
 #[bt_node(
-    node_type = SyncActionNode,
+    SyncActionNode,
     ports = provided_ports,
     tick = tick,
 )]
@@ -69,7 +69,7 @@ impl SuccessThenFailure {
 pub struct EchoNode {}
 
 #[bt_node(
-    node_type = SyncActionNode,
+    SyncActionNode,
     ports = provided_ports,
     tick = tick,
 )]
@@ -94,7 +94,7 @@ pub struct RunForNode {
 }
 
 #[bt_node(
-    node_type = StatefulActionNode,
+    StatefulActionNode,
     on_start = on_start,
     on_running = on_running,
     ports = provided_ports,
@@ -132,7 +132,7 @@ pub struct DataNode {
 }
 
 #[bt_node(
-    node_type = SyncActionNode,
+    SyncActionNode,
     tick = tick,
 )]
 impl DataNode {

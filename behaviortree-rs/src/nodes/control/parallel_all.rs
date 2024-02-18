@@ -29,12 +29,7 @@ pub struct ParallelAllNode {
     failure_count: usize,
 }
 
-#[bt_node(
-    node_type = ControlNode,
-    ports = provided_ports,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl ParallelAllNode {
     fn failure_threshold(&self, n_children: i32) -> usize {
         if self.failure_threshold < 0 {
@@ -111,7 +106,7 @@ impl ParallelAllNode {
         Ok(NodeStatus::Running)
     }
 
-    fn provided_ports() -> crate::basic_types::PortsList {
+    fn ports() -> crate::basic_types::PortsList {
         define_ports!(input_port!("max_failures", 1))
     }
 

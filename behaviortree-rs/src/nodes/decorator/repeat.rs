@@ -31,12 +31,7 @@ pub struct RepeatNode {
     all_skipped: bool,
 }
 
-#[bt_node(
-    node_type = DecoratorNode,
-    ports = provided_ports,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(DecoratorNode)]
 impl RepeatNode {
     async fn tick(&mut self) -> NodeResult {
         // Load num_cycles from the port value
@@ -99,7 +94,7 @@ impl RepeatNode {
         }
     }
 
-    fn provided_ports() -> crate::basic_types::PortsList {
+    fn ports() -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_cycles"))
     }
 

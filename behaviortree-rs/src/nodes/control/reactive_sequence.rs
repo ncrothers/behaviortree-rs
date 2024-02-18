@@ -22,11 +22,7 @@ pub struct ReactiveSequenceNode {
     running_child: i32,
 }
 
-#[bt_node(
-    node_type = ControlNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl ReactiveSequenceNode {
     async fn tick(&mut self) -> NodeResult {
         let mut all_skipped = true;

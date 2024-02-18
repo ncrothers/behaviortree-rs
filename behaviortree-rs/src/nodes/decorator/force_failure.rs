@@ -6,11 +6,7 @@ use crate::{basic_types::NodeStatus, nodes::NodeResult};
 #[bt_node(DecoratorNode)]
 pub struct ForceFailureNode {}
 
-#[bt_node(
-    node_type = DecoratorNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(DecoratorNode)]
 impl ForceFailureNode {
     async fn tick(&mut self) -> NodeResult {
         node_.set_status(NodeStatus::Running);

@@ -19,11 +19,7 @@ use crate::{
 #[bt_node(ControlNode)]
 pub struct WhileDoElseNode {}
 
-#[bt_node(
-    node_type = ControlNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 impl WhileDoElseNode {
     async fn tick(&mut self) -> NodeResult {
         let children_count = node_.children.len();

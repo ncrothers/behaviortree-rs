@@ -23,12 +23,7 @@ pub struct RunOnceNode {
     returned_status: NodeStatus,
 }
 
-#[bt_node(
-    node_type = DecoratorNode,
-    ports = provided_ports,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(DecoratorNode)]
 impl RunOnceNode {
     async fn tick(&mut self) -> NodeResult {
         let skip = node_.config.get_input("then_skip")?;
@@ -54,7 +49,7 @@ impl RunOnceNode {
         Ok(status)
     }
 
-    fn provided_ports() -> crate::basic_types::PortsList {
+    fn ports() -> crate::basic_types::PortsList {
         define_ports!(input_port!("then_skip", true))
     }
 

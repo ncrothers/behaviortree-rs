@@ -155,59 +155,72 @@ struct NodeImplConfig {
 
 impl Parse for NodeImplConfig {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut attributes: HashMap<String, NodeAttribute> = input.parse_terminated(NodeAttribute::parse, Token![,])?
-            .into_iter()
-            .map(|val| (val.name.to_string(), val))
-            .collect();
-
-        // println!("Found impl attrs:");
-        // for (attr, val) in attributes.iter() {
-        //     println!("{attr}: {}", val.value);
-        // }
-
-        let node_type = attributes
-            .remove("node_type")
-            .map(|val| val.value)
-            .ok_or_else(|| input.error("missing `node_type` field"))?;
-
+        let node_type: Ident = input.parse()?;
         let node_type_str = node_type.to_string();
 
-        let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
-            let tick_fn = attributes
-                .remove("on_running")
-                .map(|val| val.value)
-                .unwrap_or_else(|| syn::parse2(quote! { on_running }).unwrap());
-            
-            let on_start_fn = attributes
-                .remove("on_start")
-                .map(|val| val.value)
-                .unwrap_or_else(|| syn::parse2(quote! { on_start }).unwrap());
+        if input.parse::<Token![,]>().is_ok() {
+            let mut attributes: HashMap<String, NodeAttribute> = input.parse_terminated(NodeAttribute::parse, Token![,])?
+                .into_iter()
+                .map(|val| (val.name.to_string(), val))
+                .collect();
+    
+            // let node_type = attributes
+            //     .remove("node_type")
+            //     .map(|val| val.value)
+            //     .ok_or_else(|| input.error("missing `node_type` field"))?;
+    
+    
+            let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
+                let tick_fn = attributes
+                    .remove("on_running")
+                    .map(|val| val.value)
+                    .unwrap_or_else(|| syn::parse2(quote! { on_running }).unwrap());
+                
+                let on_start_fn = attributes
+                    .remove("on_start")
+                    .map(|val| val.value)
+                    .unwrap_or_else(|| syn::parse2(quote! { on_start }).unwrap());
+    
+                (tick_fn, Some(on_start_fn))
+            } else {
+                let tick_fn = attributes
+                    .remove("tick")
+                    .map(|val| val.value)
+                    .unwrap_or_else(|| syn::parse2(quote! { tick }).unwrap());
+    
+                (tick_fn, None)
+            };
+    
+            let ports = attributes.remove("ports").map(|val| val.value);
+            // println!("Ports value: {}", ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
+            let halt = attributes.remove("halt").map(|val| val.value);
+    
+            if let Some((_, invalid_field)) = attributes.into_iter().next() {
+                return Err(syn::Error::new(invalid_field.name.span(), "invalid field name"));
+            }
 
-            (tick_fn, Some(on_start_fn))
+            Ok(Self {
+                node_type,
+                tick_fn,
+                on_start_fn,
+                ports,
+                halt,
+            })
         } else {
-            let tick_fn = attributes
-                .remove("tick")
-                .map(|val| val.value)
-                .unwrap_or_else(|| syn::parse2(quote! { tick }).unwrap());
+            let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
+                (Ident::new("on_running", input.span()), Some(Ident::new("on_start", input.span())))
+            } else {
+                (Ident::new("tick", input.span()), None)
+            };
 
-            (tick_fn, None)
-        };
-
-        let ports = attributes.remove("ports").map(|val| val.value);
-        // println!("Ports value: {}", ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
-        let halt = attributes.remove("halt").map(|val| val.value);
-
-        if let Some((_, invalid_field)) = attributes.into_iter().next() {
-            return Err(syn::Error::new(invalid_field.name.span(), "invalid field name"));
+            Ok(Self {
+                node_type,
+                tick_fn,
+                on_start_fn,
+                ports: None,
+                halt: None,
+            })
         }
-
-        Ok(Self {
-            node_type,
-            tick_fn,
-            on_start_fn,
-            ports,
-            halt,
-        })
     }
 }
 
@@ -349,24 +362,30 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Iden
 // }
 
 fn bt_impl(
-    args: NodeImplConfig,
+    mut args: NodeImplConfig,
     mut item: ItemImpl,
 ) -> syn::Result<proc_macro2::TokenStream> {
 
     let type_ident = &args.node_type;
     let struct_type = &item.self_ty;
 
-    // println!("Ports value in args: {}", args.ports.as_ref().map(|v| format!("Some({v})")).unwrap_or(String::from("None")));
-
     let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
         syn::parse2::<Ident>(quote! { ActionNode })?
     } else {
         type_ident.clone()
     };
+
+    let fn_names: Vec<Ident> = item.items.iter().filter_map(|item| {
+        if let ImplItem::Fn(item) = item {
+            Some(item.sig.ident.clone())
+        } else {
+            None
+        }
+    })
+    .collect();
     
     for sub_item in item.items.iter_mut() {
         if let ImplItem::Fn(fn_item) = sub_item {
-            // println!("Processing function: {}", fn_item.sig.ident);
             let mut should_rewrite_def = false;
             // Rename methods
             let mut new_ident = None;
@@ -393,12 +412,19 @@ fn bt_impl(
                     new_ident = Some(syn::parse2(quote! { _halt })?);
                     should_rewrite_def = true;
                 }
+            } else if &fn_item.sig.ident == "halt" {
+                args.halt = Some(fn_item.sig.ident.clone());
+                new_ident = Some(syn::parse2(quote! { _halt })?);
+                should_rewrite_def = true;
             }
             // Check if it's a ports
             if let Some(ports) = args.ports.as_ref() {
                 if &fn_item.sig.ident == ports {
                     new_ident = Some(syn::parse2(quote! { _ports })?);
                 }
+            } else if &fn_item.sig.ident == "ports" {
+                args.ports = Some(fn_item.sig.ident.clone());
+                new_ident = Some(syn::parse2(quote! { _ports })?);
             }
 
             if let Some(new_ident) = new_ident {
@@ -426,23 +452,6 @@ fn bt_impl(
     }
 
     item.items.extend(extra_impls);
-
-    // let struct_name = LitStr::new(&struct_type.to_token_stream().to_string(), struct_type.span());
-
-    // let impl_new = quote! {
-    //     pub fn new(foo: u32) -> ControlNode {
-    //         ::behaviortree_rs::nodes::# {
-    //             type_str: String::from(#struct_name),
-    //             children: Vec::new(),
-    //             tick_fn: Self::tick,
-    //             context: Box::new(Self { foo }),
-    //         }
-    //     }
-    // };
-
-    // let impl_new = syn::parse2(impl_new)?;
-
-    // item.items.push(impl_new);
 
     Ok(quote! { #item })
 }
