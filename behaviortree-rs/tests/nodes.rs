@@ -13,9 +13,7 @@ pub fn test_setup() {
         .try_init();
 }
 
-#[bt_node(
-    node_type = SyncActionNode,
-)]
+#[bt_node(SyncActionNode)]
 pub struct StatusNode {}
 
 #[bt_node(
@@ -37,9 +35,7 @@ impl StatusNode {
     }
 }
 
-#[bt_node(
-    node_type = SyncActionNode,
-)]
+#[bt_node(SyncActionNode)]
 pub struct SuccessThenFailure {
     #[bt(default)]
     iter: usize,
@@ -69,9 +65,7 @@ impl SuccessThenFailure {
     }
 }
 
-#[bt_node(
-    node_type = SyncActionNode,
-)]
+#[bt_node(SyncActionNode)]
 pub struct EchoNode {}
 
 #[bt_node(
@@ -93,9 +87,7 @@ impl EchoNode {
     }
 }
 
-#[bt_node(
-    node_type = StatefulActionNode,
-)]
+#[bt_node(StatefulActionNode)]
 pub struct RunForNode {
     #[bt(default)]
     counter: usize,
@@ -134,9 +126,7 @@ impl RunForNode {
     }
 }
 
-#[bt_node(
-    node_type = SyncActionNode,
-)]
+#[bt_node(SyncActionNode)]
 pub struct DataNode {
     inner_name: String,
 }

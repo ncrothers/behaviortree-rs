@@ -19,9 +19,7 @@ use crate::{
 /// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
 ///
 /// Therefore -1 is equivalent to the number of children.
-#[bt_node(
-    node_type = ControlNode,
-)]
+#[bt_node(ControlNode)]
 pub struct ParallelAllNode {
     #[bt(default = "-1")]
     failure_threshold: i32,

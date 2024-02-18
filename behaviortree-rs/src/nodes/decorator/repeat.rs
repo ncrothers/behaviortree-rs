@@ -21,9 +21,7 @@ use crate::{
 ///   <ClapYourHandsOnce/>
 /// </Repeat>
 /// ```
-#[bt_node(
-    node_type = DecoratorNode,
-)]
+#[bt_node(DecoratorNode)]
 pub struct RepeatNode {
     #[bt(default = "-1")]
     num_cycles: i32,

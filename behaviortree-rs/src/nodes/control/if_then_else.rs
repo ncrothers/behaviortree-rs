@@ -18,9 +18,7 @@ use crate::{
 /// statement returns FAILURE.
 ///
 /// This is equivalent to add AlwaysFailure as 3rd child.
-#[bt_node(
-    node_type = ControlNode,
-)]
+#[bt_node(ControlNode)]
 pub struct IfThenElseNode {
     #[bt(default = "0")]
     child_idx: usize,

@@ -15,9 +15,7 @@ use crate::{
 ///
 /// - if TRUE (default), the node will be skipped in the future.
 /// - if FALSE, return synchronously the same status returned by the child, forever.
-#[bt_node(
-    node_type = DecoratorNode,
-)]
+#[bt_node(DecoratorNode)]
 pub struct RunOnceNode {
     #[bt(default = "false")]
     already_ticked: bool,

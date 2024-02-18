@@ -16,9 +16,7 @@ use crate::{
 ///
 /// IMPORTANT: to work properly, this node should not have more than
 ///            a single asynchronous child.
-#[bt_node(
-    node_type = ControlNode,
-)]
+#[bt_node(ControlNode)]
 pub struct ReactiveFallbackNode {}
 
 #[bt_node(

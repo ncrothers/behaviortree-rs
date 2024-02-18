@@ -16,9 +16,7 @@ use crate::{
 ///
 /// If the 2nd or 3d child is RUNNING and the statement changes,
 /// the RUNNING child will be stopped before starting the sibling.
-#[bt_node(
-    node_type = ControlNode,
-)]
+#[bt_node(ControlNode)]
 pub struct WhileDoElseNode {}
 
 #[bt_node(

@@ -21,9 +21,7 @@ use crate::{
 ///     <OpenDoor/>
 /// </RetryUntilSuccessful>
 /// ```
-#[bt_node(
-    node_type = DecoratorNode,
-)]
+#[bt_node(DecoratorNode)]
 pub struct RetryNode {
     #[bt(default = "-1")]
     max_attempts: i32,

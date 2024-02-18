@@ -6,9 +6,7 @@ use crate::{
 };
 
 /// The InverterNode returns Failure on Success, and Success on Failure
-#[bt_node(
-    node_type = DecoratorNode,
-)]
+#[bt_node(DecoratorNode)]
 pub struct InverterNode {}
 
 #[bt_node(

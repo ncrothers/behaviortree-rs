@@ -233,41 +233,6 @@ impl Parse for NodeStructConfig {
     }
 }
 
-fn ident_matches_custom_fn(input: &Ident, custom_fns: &Vec<Ident>) -> bool {
-    for fn_name in custom_fns.iter() {
-        // If this method call is not a built-in call, add node_
-        if input == fn_name {
-            return true;
-        }
-    }
-
-    false
-}
-
-struct CustomFnVisitor<'a> {
-    custom_fn_names: &'a Vec<Ident>,
-}
-
-impl VisitMut for CustomFnVisitor<'_> {
-    fn visit_expr_method_call_mut(&mut self, i: &mut syn::ExprMethodCall) {
-        // let new_arg: Expr = syn::parse2(quote! { node_ }).unwrap();
-        // // If this method call is not a built-in call (e.g. tick()), add node_
-        // let self_receiver = Ident::new("self", i.span());
-        // if ident_matches_custom_fn(&i.method, self.custom_fn_names) {
-        //     match i.receiver.as_ref() {
-        //         Expr::Path(path) => {
-        //             if path.path.is_ident(&self_receiver) {
-        //                 i.args.push(new_arg.clone());
-        //             }
-        //         }
-        //         _ => ()
-        //     }
-        // }
-
-        visit_mut::visit_expr_method_call_mut(self, i)
-    }
-}
-
 struct SelfVisitor;
 
 impl VisitMut for SelfVisitor {
@@ -283,15 +248,7 @@ impl VisitMut for SelfVisitor {
     }
 }
 
-fn alter_custom_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: &Ident) -> syn::Result<()> {
-    // Append node_ to parameter list
-    // let new_arg = syn::parse2(quote! { node_: &mut #type_ident })?;
-    // fn_item.sig.inputs.push(new_arg);
-
-    Ok(())
-}
-
-fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: &Ident, is_async: bool) -> syn::Result<()> {
+fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Ident, is_async: bool) -> syn::Result<()> {
     // Remove async
     if is_async {
         fn_item.sig.asyncness = None;
@@ -361,35 +318,35 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Box<Type>, type_ident: 
     Ok(())
 }
 
-fn get_custom_fn_idents(args: &NodeImplConfig, fn_item: &ItemImpl) -> Vec<Ident> {
-    fn_item.items.iter().filter_map(|item| {
-        match item {
-            ImplItem::Fn(fn_item) => {
-                let ident = &fn_item.sig.ident;
+// fn get_custom_fn_idents(args: &NodeImplConfig, fn_item: &ItemImpl) -> Vec<Ident> {
+//     fn_item.items.iter().filter_map(|item| {
+//         match item {
+//             ImplItem::Fn(fn_item) => {
+//                 let ident = &fn_item.sig.ident;
 
-                // println!("Checking ident: {ident}");
+//                 // println!("Checking ident: {ident}");
 
-                // If it's not the tick() function
-                if *ident != args.tick_fn &&
-                    // Nor halt()
-                    (args.halt.is_none() || args.halt.as_ref().is_some_and(|v| *v != *ident)) &&
-                    // Nor on_start()
-                    (args.on_start_fn.is_none() || args.on_start_fn.as_ref().is_some_and(|v| *v != *ident)) &&
-                    // Nor ports()
-                    (args.ports.is_none() || args.ports.as_ref().is_some_and(|v| *v != *ident))
+//                 // If it's not the tick() function
+//                 if *ident != args.tick_fn &&
+//                     // Nor halt()
+//                     (args.halt.is_none() || args.halt.as_ref().is_some_and(|v| *v != *ident)) &&
+//                     // Nor on_start()
+//                     (args.on_start_fn.is_none() || args.on_start_fn.as_ref().is_some_and(|v| *v != *ident)) &&
+//                     // Nor ports()
+//                     (args.ports.is_none() || args.ports.as_ref().is_some_and(|v| *v != *ident))
 
-                {
-                    // println!("**Selected ident: {ident}");
-                    Some(fn_item.sig.ident.clone())
-                } else {
-                    None
-                }
-            },
-            _ => None,
-        }
-    })
-    .collect()
-}
+//                 {
+//                     // println!("**Selected ident: {ident}");
+//                     Some(fn_item.sig.ident.clone())
+//                 } else {
+//                     None
+//                 }
+//             },
+//             _ => None,
+//         }
+//     })
+//     .collect()
+// }
 
 fn bt_impl(
     args: NodeImplConfig,
@@ -398,8 +355,6 @@ fn bt_impl(
 
     let type_ident = &args.node_type;
     let struct_type = &item.self_ty;
-
-    let custom_fn_idents = get_custom_fn_idents(&args, &item);
 
     // println!("Ports value in args: {}", args.ports.as_ref().map(|v| format!("Some({v})")).unwrap_or(String::from("None")));
 
@@ -446,20 +401,13 @@ fn bt_impl(
                 }
             }
 
-            let old_block = &mut fn_item.block;
-            // Add node_ to all occurrences of non-node methods
-            CustomFnVisitor { custom_fn_names: &custom_fn_idents }.visit_block_mut(old_block);
-
             if let Some(new_ident) = new_ident {
                 if should_rewrite_def {
                     alter_node_fn(fn_item, struct_type, &node_type, true)?;
                 }
                 
                 fn_item.sig.ident = new_ident;
-            } else if ident_matches_custom_fn(&fn_item.sig.ident, &custom_fn_idents) {
-                alter_custom_fn(fn_item, struct_type, &node_type)?;
             }
-
         }
     }
 
@@ -500,13 +448,13 @@ fn bt_impl(
 }
 
 fn bt_struct(
-    args: NodeStructConfig,
+    type_ident: Path,
     mut item: ItemStruct,
 ) -> syn::Result<proc_macro2::TokenStream> {
     let mut derives =
         vec![quote! { ::std::fmt::Debug }];
 
-    let type_ident = args.node_type;
+    let type_ident = type_ident.require_ident()?;
     let type_ident_str = type_ident.to_string();
 
     let item_ident = &item.ident;
@@ -818,7 +766,8 @@ fn node_fields(type_ident: &Ident) -> proc_macro2::TokenStream {
 #[proc_macro_attribute]
 pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
     if let Ok(struct_) = syn::parse::<ItemStruct>(input.clone()) {
-        let args = parse_macro_input!(args as NodeStructConfig);
+        let args = parse_macro_input!(args as Path);
+        // let args = parse_macro_input!(args as NodeStructConfig);
         bt_struct(args, struct_).unwrap_or_else(syn::Error::into_compile_error).into()
     } else if let Ok(impl_) = syn::parse::<ItemImpl>(input) {
         let args = parse_macro_input!(args as NodeImplConfig);

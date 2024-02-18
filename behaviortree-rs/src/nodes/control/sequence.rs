@@ -14,9 +14,7 @@ use crate::{
 ///   Loop is NOT restarted, the same running child will be ticked again.
 ///
 /// - If a child returns FAILURE, stop the loop and return FAILURE.
-#[bt_node(
-    node_type = ControlNode,
-)]
+#[bt_node(ControlNode)]
 pub struct SequenceNode {
     #[bt(default = "0")]
     child_idx: usize,

@@ -3,9 +3,7 @@ use behaviortree_rs_derive::bt_node;
 use crate::{basic_types::NodeStatus, nodes::NodeResult};
 
 /// The ForceFailureNode returns always Failure or Running
-#[bt_node(
-    node_type = DecoratorNode,
-)]
+#[bt_node(DecoratorNode)]
 pub struct ForceFailureNode {}
 
 #[bt_node(

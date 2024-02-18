@@ -3,9 +3,7 @@ use behaviortree_rs_derive::bt_node;
 use crate::{basic_types::NodeStatus, nodes::NodeResult};
 
 /// The ForceSuccessNode returns always Success or Running
-#[bt_node(
-    node_type = DecoratorNode,
-)]
+#[bt_node(DecoratorNode)]
 pub struct ForceSuccessNode {}
 
 #[bt_node(
