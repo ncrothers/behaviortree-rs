@@ -74,6 +74,14 @@ impl TreeNode {
         }
     }
 
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Action(node) => &node.name,
+            Self::Control(node) => &node.name,
+            Self::Decorator(node) => &node.name,
+        }
+    }
+
     pub fn config_mut(&mut self) -> &mut NodeConfig {
         match self {
             Self::Action(node) => &mut node.config,
