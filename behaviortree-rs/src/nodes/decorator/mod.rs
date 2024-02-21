@@ -45,11 +45,11 @@ impl DecoratorNode {
         (self.halt_fn)(self).await
     }
 
-    async fn halt_child(&mut self) {
+    pub async fn halt_child(&mut self) {
         self.reset_child().await
     }
 
-    async fn reset_child(&mut self) {
+    pub async fn reset_child(&mut self) {
         if let Some(child) = self.child.as_mut() {
             if matches!(child.status(), NodeStatus::Running) {
                 child.halt().await;
