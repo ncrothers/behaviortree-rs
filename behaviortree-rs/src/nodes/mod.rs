@@ -113,6 +113,50 @@ impl TreeNode {
             TreeNode::Decorator(node) => node.provided_ports(),
         }
     }
+
+    pub fn children(&self) -> Option<impl Iterator<Item = &TreeNode>> {
+        match self {
+            TreeNode::Action(_) => None,
+            TreeNode::Control(node) => Some(ChildIter::new_control(&node.children)),
+            TreeNode::Decorator(node) => Some(ChildIter::new_decorator(node.child.as_ref().unwrap()))
+        }
+    }
+}
+
+enum ChildIter<'a> {
+    Control(core::slice::Iter<'a, TreeNode>),
+    Decorator {
+        has_sent: bool,
+        data: &'a TreeNode,
+    }
+}
+
+impl<'a> ChildIter<'a> {
+    pub fn new_control(slice: &'a [TreeNode]) -> Self {
+        Self::Control(slice.iter())
+    }
+
+    pub fn new_decorator(data: &'a TreeNode) -> Self {
+        Self::Decorator { has_sent: false, data }
+    }
+}
+
+impl<'a> Iterator for ChildIter<'a> {
+    type Item = &'a TreeNode;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Control(iter) => iter.next(),
+            Self::Decorator { has_sent, data } => {
+                if *has_sent {
+                    None
+                } else {
+                    *has_sent = true;
+                    Some(*data)
+                }
+            }
+        }
+    }
 }
 
 // =============================
