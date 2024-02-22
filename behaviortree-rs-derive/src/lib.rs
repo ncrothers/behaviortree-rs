@@ -1203,14 +1203,14 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
 
     let extra_steps = match node_type {
         NodeTypeInternal::Control => quote! {
-            if let ::behaviortree_rs::nodes::TreeNode::Control(node) = node {
+            if let ::behaviortree_rs::nodes::TreeNode::Control(node) = &mut node {
                 for child in children {
                     node.children.push(child);
                 }
             }
         },
         NodeTypeInternal::Decorator => quote! { 
-            if let ::behaviortree_rs::nodes::TreeNode::Decorator(node) = node {
+            if let ::behaviortree_rs::nodes::TreeNode::Decorator(node) = &mut node {
                 node.child = Some(Box::new(children.remove(0)));
             }
         },
