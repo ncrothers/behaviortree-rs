@@ -118,7 +118,7 @@ impl TreeNode {
         match self {
             TreeNode::Action(_) => None,
             TreeNode::Control(node) => Some(ChildIter::new_control(&node.children)),
-            TreeNode::Decorator(node) => Some(ChildIter::new_decorator(node.child.as_ref().unwrap()))
+            TreeNode::Decorator(node) => node.child.as_ref().map(|node| ChildIter::new_decorator(node))
         }
     }
 }
