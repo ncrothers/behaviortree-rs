@@ -1209,7 +1209,11 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
                 }
             }
         },
-        NodeTypeInternal::Decorator => quote! { node.child = Some(children.remove(0)); },
+        NodeTypeInternal::Decorator => quote! { 
+            if let ::behaviortree_rs::nodes::TreeNode::Decorator(node) = node {
+                node.child = Some(children.remove(0));
+            }
+        },
         _ => quote!{ }
     };
 
