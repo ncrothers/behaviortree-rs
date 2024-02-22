@@ -1203,15 +1203,15 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
 
     let extra_steps = match node_type {
         NodeTypeInternal::Control => quote! {
-            for child in children {
-                if let ::behaviortree_rs::nodes::TreeNode::Control(node) = node {
+            if let ::behaviortree_rs::nodes::TreeNode::Control(node) = node {
+                for child in children {
                     node.children.push(child);
                 }
             }
         },
         NodeTypeInternal::Decorator => quote! { 
             if let ::behaviortree_rs::nodes::TreeNode::Decorator(node) = node {
-                node.child = Some(children.remove(0));
+                node.child = Some(Box::new(children.remove(0)));
             }
         },
         _ => quote!{ }
