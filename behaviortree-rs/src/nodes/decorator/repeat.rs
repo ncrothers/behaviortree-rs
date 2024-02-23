@@ -46,7 +46,7 @@ impl RepeatNode {
         node_.status = NodeStatus::Running;
 
         while do_loop {
-            let child_status = node_.child.as_mut().unwrap().execute_tick().await?;
+            let child_status = node_.child().unwrap().execute_tick().await?;
 
             self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
 
@@ -55,15 +55,7 @@ impl RepeatNode {
                     self.repeat_count += 1;
                     do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 
-                    if let Some(child) = node_.child.as_mut() {
-                        if matches!(child.status(), NodeStatus::Running) {
-                            child.halt().await;
-                        }
-
-                        child.reset_status();
-                    }
-
-                    // node_.reset_child().await;
+                    node_.reset_child().await;
                 }
                 NodeStatus::Failure => {
                     self.repeat_count = 0;

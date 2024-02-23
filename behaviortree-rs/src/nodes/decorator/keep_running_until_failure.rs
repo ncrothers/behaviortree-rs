@@ -11,7 +11,7 @@ impl KeepRunningUntilFailureNode {
     async fn tick(&mut self) -> NodeResult {
         node_.set_status(NodeStatus::Running);
 
-        let child_status = node_.child.as_mut().unwrap().execute_tick().await?;
+        let child_status = node_.child().unwrap().execute_tick().await?;
 
         match child_status {
             NodeStatus::Success => {

@@ -43,14 +43,14 @@ impl WhileDoElseNode {
         match condition_status {
             NodeStatus::Success => {
                 if children_count == 3 {
-                    node_.halt_child(2).await?;
+                    node_.halt_child_idx(2).await?;
                 }
 
                 status = node_.children[1].execute_tick().await?;
             }
             NodeStatus::Failure => match children_count {
                 3 => {
-                    node_.halt_child(1).await?;
+                    node_.halt_child_idx(1).await?;
                     status = node_.children[2].execute_tick().await?;
                 }
                 2 => {

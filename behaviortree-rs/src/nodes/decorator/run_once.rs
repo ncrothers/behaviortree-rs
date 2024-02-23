@@ -38,7 +38,7 @@ impl RunOnceNode {
 
         node_.status = NodeStatus::Running;
 
-        let status = node_.child.as_mut().unwrap().execute_tick().await?;
+        let status = node_.child().unwrap().execute_tick().await?;
 
         if status.is_completed() {
             self.already_ticked = true;

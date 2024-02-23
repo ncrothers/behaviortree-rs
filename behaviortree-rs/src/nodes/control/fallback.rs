@@ -48,10 +48,7 @@ impl FallbackNode {
                     self.child_idx += 1;
                 }
                 NodeStatus::Success => {
-                    for child in node_.children.iter_mut() {
-                        child.halt().await;
-                    }
-                    // node_.reset_children().await;
+                    node_.reset_children().await;
                     self.child_idx = 0;
                     return Ok(NodeStatus::Success);
                 }
@@ -68,10 +65,7 @@ impl FallbackNode {
         }
 
         if self.child_idx == node_.children.len() {
-            for child in node_.children.iter_mut() {
-                child.halt().await;
-            }
-            // node_.reset_children().await;
+            node_.reset_children().await;
             self.child_idx = 0;
         }
 

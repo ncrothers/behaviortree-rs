@@ -72,9 +72,7 @@ impl ReactiveSequenceNode {
             }
         }
 
-        for child in node_.children.iter_mut() {
-            child.halt().await;
-        }
+        node_.reset_children().await;
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),

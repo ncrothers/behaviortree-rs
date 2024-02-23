@@ -46,20 +46,14 @@ impl RetryNode {
         node_.status = NodeStatus::Running;
 
         while do_loop {
-            let child_status = node_.child.as_mut().unwrap().execute_tick().await?;
+            let child_status = node_.child().unwrap().execute_tick().await?;
 
             self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
 
             match child_status {
                 NodeStatus::Success => {
                     self.try_count = 0;
-                    if let Some(child) = node_.child.as_mut() {
-                        if matches!(child.status(), NodeStatus::Running) {
-                            child.halt().await;
-                        }
-
-                        child.reset_status();
-                    }
+                    node_.reset_child().await;
 
                     return Ok(NodeStatus::Success);
                 }
@@ -68,23 +62,11 @@ impl RetryNode {
                     do_loop =
                         (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-                    if let Some(child) = node_.child.as_mut() {
-                        if matches!(child.status(), NodeStatus::Running) {
-                            child.halt().await;
-                        }
-
-                        child.reset_status();
-                    }
+                    node_.reset_child().await;
                 }
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Skipped => {
-                    if let Some(child) = node_.child.as_mut() {
-                        if matches!(child.status(), NodeStatus::Running) {
-                            child.halt().await;
-                        }
-
-                        child.reset_status();
-                    }
+                    node_.reset_child().await;
 
                     return Ok(NodeStatus::Skipped);
                 }

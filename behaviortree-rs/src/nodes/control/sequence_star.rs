@@ -44,10 +44,7 @@ impl SequenceWithMemoryNode {
                 NodeStatus::Failure => {
                     // Do NOT reset child_idx on failure
                     // Halt children at and after this index
-                    for i in self.child_idx..node_.children.len() {
-                        node_.children[i].halt().await;
-                    }
-                    // node_.halt_children(self.child_idx).await?;
+                    node_.halt_children(self.child_idx).await?;
 
                     return Ok(NodeStatus::Failure);
                 }
@@ -65,9 +62,7 @@ impl SequenceWithMemoryNode {
 
         // All children returned Success
         if self.child_idx == node_.children.len() {
-            for child in node_.children.iter_mut() {
-                child.halt().await;
-            }
+            node_.reset_children().await;
             self.child_idx = 0;
         }
 

@@ -35,7 +35,7 @@ impl ReactiveFallbackNode {
             match &child_status {
                 NodeStatus::Running => {
                     for i in 0..index {
-                        node_.halt_child(i).await?;
+                        node_.halt_child_idx(i).await?;
                     }
 
                     return Ok(NodeStatus::Running);
@@ -46,7 +46,7 @@ impl ReactiveFallbackNode {
                     return Ok(NodeStatus::Success);
                 }
                 NodeStatus::Skipped => {
-                    node_.halt_child(index).await?;
+                    node_.halt_child_idx(index).await?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(

@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::Parse, punctuated::Punctuated, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, FnArg, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
+    parse::Parse, punctuated::Punctuated, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, FnArg, GenericParam, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
 };
 
 #[macro_use]
@@ -162,13 +162,7 @@ impl Parse for NodeImplConfig {
             let mut attributes: HashMap<String, NodeAttribute> = input.parse_terminated(NodeAttribute::parse, Token![,])?
                 .into_iter()
                 .map(|val| (val.name.to_string(), val))
-                .collect();
-    
-            // let node_type = attributes
-            //     .remove("node_type")
-            //     .map(|val| val.value)
-            //     .ok_or_else(|| input.error("missing `node_type` field"))?;
-    
+                .collect();    
     
             let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
                 let tick_fn = attributes
@@ -192,7 +186,6 @@ impl Parse for NodeImplConfig {
             };
     
             let ports = attributes.remove("ports").map(|val| val.value);
-            // println!("Ports value: {}", ports.as_ref().map(|v| v.to_string()).unwrap_or(String::from("None")));
             let halt = attributes.remove("halt").map(|val| val.value);
     
             if let Some((_, invalid_field)) = attributes.into_iter().next() {
@@ -224,28 +217,6 @@ impl Parse for NodeImplConfig {
     }
 }
 
-struct NodeStructConfig {
-    node_type: syn::Ident,
-}
-
-impl Parse for NodeStructConfig {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut attributes: HashMap<String, NodeAttribute> = input.parse_terminated(NodeAttribute::parse, Token![,])?
-            .into_iter()
-            .map(|val| (val.name.to_string(), val))
-            .collect();
-
-        let node_type = attributes
-            .remove("node_type")
-            .map(|val| val.value)
-            .ok_or_else(|| input.error("missing `node_type` field"))?;
-
-        Ok(Self {
-            node_type,
-        })
-    }
-}
-
 struct SelfVisitor;
 
 impl VisitMut for SelfVisitor {
@@ -261,19 +232,26 @@ impl VisitMut for SelfVisitor {
     }
 }
 
-fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Ident, is_async: bool) -> syn::Result<()> {
+fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -> syn::Result<()> {
     // Remove async
     if is_async {
         fn_item.sig.asyncness = None;
     }
+    // Add lifetime to signature
+    let lifetime: GenericParam = syn::parse2(quote!{ 'a })?;
+    fn_item.sig.generics.params.push(lifetime);
     // Rename parameters
     for arg in fn_item.sig.inputs.iter_mut() {
         if let FnArg::Receiver(_) = arg {
-            let new_arg = quote! { node_: &mut ::behaviortree_rs::nodes::#type_ident };
+            let new_arg = quote! { node_: &'a mut ::behaviortree_rs::nodes::TreeNodeData };
             let new_arg = syn::parse2(new_arg)?;
             *arg = new_arg;
         }
     }
+
+    let new_arg = syn::parse2(quote! { ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send> })?;
+
+    fn_item.sig.inputs.push(new_arg);
 
     let old_block = &mut fn_item.block;
     // Rename occurrences of self
@@ -288,7 +266,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Iden
 
         // Wrap return type in BoxFuture
         let new_return = quote! {
-            -> ::futures::future::BoxFuture<#old_return>
+            -> ::futures::future::BoxFuture<'a, #old_return>
         };
 
         let new_return = syn::parse2(new_return)?;
@@ -298,13 +276,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Iden
         quote! {
             {
                 ::std::boxed::Box::pin(async move {
-                    let mut self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
-                    // let mut self_: &mut #struct_type = unsafe {
-                    //     (*node_.context).downcast_mut().unwrap()
-                    // };
-                    // let mut locked_node = node_.context.lock().await;
-                    // let self_ = locked_node.downcast_mut::<#struct_type>().unwrap();
-                    // drop(locked_node);
+                    let mut self_ = ctx.downcast_mut::<#struct_type>().unwrap();
                     #old_block
                 })
             }
@@ -313,12 +285,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Iden
         // Wrap function block in Box::pin and create ctx
         quote! {
             {
-                // let node_context: *mut (dyn Any + Send) = &*node_.context
-                let mut self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
-                // let mut self_: &mut #struct_type = unsafe {
-                //     (*node_.context).downcast_mut::<#struct_type>().unwrap()
-                // };
-                // let self_ = node_.context.downcast_mut::<#struct_type>().unwrap();
+                let mut self_ = ctx.downcast_mut::<#struct_type>().unwrap();
                 #old_block
             }
         }
@@ -331,58 +298,11 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, type_ident: &Iden
     Ok(())
 }
 
-// fn get_custom_fn_idents(args: &NodeImplConfig, fn_item: &ItemImpl) -> Vec<Ident> {
-//     fn_item.items.iter().filter_map(|item| {
-//         match item {
-//             ImplItem::Fn(fn_item) => {
-//                 let ident = &fn_item.sig.ident;
-
-//                 // println!("Checking ident: {ident}");
-
-//                 // If it's not the tick() function
-//                 if *ident != args.tick_fn &&
-//                     // Nor halt()
-//                     (args.halt.is_none() || args.halt.as_ref().is_some_and(|v| *v != *ident)) &&
-//                     // Nor on_start()
-//                     (args.on_start_fn.is_none() || args.on_start_fn.as_ref().is_some_and(|v| *v != *ident)) &&
-//                     // Nor ports()
-//                     (args.ports.is_none() || args.ports.as_ref().is_some_and(|v| *v != *ident))
-
-//                 {
-//                     // println!("**Selected ident: {ident}");
-//                     Some(fn_item.sig.ident.clone())
-//                 } else {
-//                     None
-//                 }
-//             },
-//             _ => None,
-//         }
-//     })
-//     .collect()
-// }
-
 fn bt_impl(
     mut args: NodeImplConfig,
     mut item: ItemImpl,
 ) -> syn::Result<proc_macro2::TokenStream> {
-
-    let type_ident = &args.node_type;
     let struct_type = &item.self_ty;
-
-    let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
-        syn::parse2::<Ident>(quote! { ActionNode })?
-    } else {
-        type_ident.clone()
-    };
-
-    let fn_names: Vec<Ident> = item.items.iter().filter_map(|item| {
-        if let ImplItem::Fn(item) = item {
-            Some(item.sig.ident.clone())
-        } else {
-            None
-        }
-    })
-    .collect();
     
     for sub_item in item.items.iter_mut() {
         if let ImplItem::Fn(fn_item) = sub_item {
@@ -429,7 +349,7 @@ fn bt_impl(
 
             if let Some(new_ident) = new_ident {
                 if should_rewrite_def {
-                    alter_node_fn(fn_item, struct_type, &node_type, true)?;
+                    alter_node_fn(fn_item, struct_type, true)?;
                 }
                 
                 fn_item.sig.ident = new_ident;
@@ -441,7 +361,7 @@ fn bt_impl(
 
     if args.halt.is_none() {
         extra_impls.push(syn::parse2(quote! {
-            fn _halt(node_: &mut ::behaviortree_rs::nodes::#node_type) -> ::futures::future::BoxFuture<()> { ::std::boxed::Box::pin(async move {}) }
+            fn _halt<'a>(node_: &'a mut ::behaviortree_rs::nodes::TreeNodeData, ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send>) -> ::futures::future::BoxFuture<'a, ()> { ::std::boxed::Box::pin(async move {}) }
         })?)
     }
 
@@ -580,20 +500,32 @@ fn bt_struct(
         .concat_list(default_fields)
         .concat_list(manual_fields);
 
-    let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
-        syn::parse2::<Ident>(quote! { ActionNode })?
-    } else {
-        type_ident.clone()
-    };
+    // let node_type = match type_ident_str.as_str() {
+    //     ""
+    // }
 
-    let node_variant = match type_ident_str.as_str() {
+    // let node_type = if type_ident == "StatefulActionNode" || type_ident == "SyncActionNode" {
+    //     syn::parse2::<Ident>(quote! { ActionNode })?
+    // } else {
+    //     type_ident.clone()
+    // };
+
+    let node_category = match type_ident_str.as_str() {
         "StatefulActionNode" | "SyncActionNode" => syn::parse2::<Path>(quote! { Action })?,
         "ControlNode" => syn::parse2::<Path>(quote! { Control })?,
         "DecoratorNode" => syn::parse2::<Path>(quote! { Decorator })?,
         _ => return Err(syn::Error::new_spanned(type_ident, "Invalid node type"))
     };
 
-    let node_specific_tokens = node_fields(&type_ident);
+    let node_type = match type_ident_str.as_str() {
+        "StatefulActionNode" => syn::parse2::<Path>(quote! { StatefulAction })?,
+        "SyncActionNode" => syn::parse2::<Path>(quote! { SyncAction })?,
+        "ControlNode" => syn::parse2::<Path>(quote! { Control })?,
+        "DecoratorNode" => syn::parse2::<Path>(quote! { Decorator })?,
+        _ => return Err(syn::Error::new_spanned(type_ident, "Invalid node type"))
+    };
+
+    let node_specific_tokens = node_fields(&type_ident_str);
 
     let struct_name = LitStr::new(&item_ident.to_token_stream().to_string(), item_ident.span());
 
@@ -608,20 +540,23 @@ fn bt_struct(
                     #extra_fields
                 };
 
-                let node = ::behaviortree_rs::nodes::#node_type {
+                let node_data = ::behaviortree_rs::nodes::TreeNodeData {
                     name: name.as_ref().to_string(),
                     type_str: String::from(#struct_name),
+                    node_type: ::behaviortree_rs::nodes::NodeType::#node_type,
+                    node_category: ::behaviortree_rs::basic_types::NodeCategory::#node_category,
                     config,
                     status: ::behaviortree_rs::basic_types::NodeStatus::Idle,
-                    halt_fn: Self::_halt,
+                    children: ::std::vec::Vec::new(),
                     ports_fn: Self::_ports,
-                    // context: ::std::sync::Arc::new(ctx),
-                    context: ::std::boxed::Box::new(ctx),
-                    // context: ::std::sync::Arc::new(::std::boxed::Box::leak(::std::boxed::Box::new(ctx))),
-                    #node_specific_tokens
                 };
-
-                ::behaviortree_rs::nodes::TreeNode::#node_variant(node)
+                
+                ::behaviortree_rs::nodes::TreeNode {
+                    data: node_data,
+                    context: ::std::boxed::Box::new(ctx),
+                    halt_fn: Self::_halt,
+                    #node_specific_tokens
+                }
             }
         }
 
@@ -631,31 +566,21 @@ fn bt_struct(
     Ok(output)
 }
 
-fn node_fields(type_ident: &Ident) -> proc_macro2::TokenStream {
-    if type_ident == "StatefulActionNode" {
-        quote! {
-            subtype: ::behaviortree_rs::nodes::ActionSubType::Stateful,
-            tick_fn: Self::_on_running,
-            start_fn: Self::_on_start,
+fn node_fields(type_ident_str: &str) -> proc_macro2::TokenStream {
+    match type_ident_str {
+        "StatefulActionNode" => {
+            quote! {
+                tick_fn: Self::_on_running,
+                start_fn: Self::_on_start,
+            }
         }
-    } else if type_ident == "SyncActionNode" {
-        quote! {
-            subtype: ::behaviortree_rs::nodes::ActionSubType::Sync,
-            tick_fn: Self::_tick,
-            start_fn: Self::_tick,
+        // Don't need to check others, it has already been checked before now
+        _ => {
+            quote! {
+                tick_fn: Self::_tick,
+                start_fn: Self::_tick,
+            }
         }
-    } else if type_ident == "ControlNode" {
-        quote! {
-            children: ::std::vec::Vec::new(),
-            tick_fn: Self::_tick,
-        }
-    } else if type_ident == "DecoratorNode" {
-        quote! {
-            child: None,
-            tick_fn: Self::_tick,
-        }
-    } else {
-        quote! {}
     }
 }
 
@@ -793,312 +718,6 @@ pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
     //     .into()
 }
 
-#[proc_macro_derive(TreeNodeDefaults)]
-/// Test docstring
-pub fn derive_tree_node(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = input.ident;
-
-    let expanded = quote! {
-        impl ::behaviortree_rs::nodes::TreeNodeDefaults for #ident {
-            fn name(&self) -> &String {
-                &self.name
-            }
-
-            fn path(&self) -> &String {
-                &self.config.path
-            }
-
-            fn status(&self) -> ::behaviortree_rs::basic_types::NodeStatus {
-                self.status.clone()
-            }
-
-            fn reset_status(&mut self) {
-                self.status = ::behaviortree_rs::basic_types::NodeStatus::Idle
-            }
-
-            fn set_status(&mut self, status: ::behaviortree_rs::basic_types::NodeStatus) {
-                self.status = status;
-            }
-
-            fn config(&self) -> &::behaviortree_rs::nodes::NodeConfig {
-                &self.config
-            }
-
-            fn config_mut(&mut self) -> &mut ::behaviortree_rs::nodes::NodeConfig {
-                &mut self.config
-            }
-
-            fn into_boxed(self) -> Box<dyn ::behaviortree_rs::nodes::TreeNodeBase> {
-                Box::new(self)
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::TreeNodeBase for #ident {}
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_derive(ActionNode)]
-/// Test docstring
-pub fn derive_action_node(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = input.ident;
-
-    let expanded = quote! {
-        impl ::behaviortree_rs::nodes::ActionNode for #ident {
-            fn execute_action_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
-                ::std::boxed::Box::pin(async move {
-                    match <Self as ::behaviortree_rs::nodes::AsyncTick>::tick(self).await? {
-                        ::behaviortree_rs::basic_types::NodeStatus::Idle => Err(::behaviortree_rs::nodes::NodeError::StatusError(self.config.path.clone(), "Idle".to_string())),
-                        status => Ok(status)
-                    }
-                })
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::ActionNodeBase for #ident {}
-
-        impl ::behaviortree_rs::nodes::GetNodeType for #ident {
-            fn node_type(&self) -> ::behaviortree_rs::basic_types::NodeType {
-                ::behaviortree_rs::basic_types::NodeType::Action
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_derive(ControlNode)]
-pub fn derive_control_node(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = input.ident;
-
-    let expanded = quote! {
-        impl ::behaviortree_rs::nodes::ControlNode for #ident {
-            fn add_child(&mut self, child: ::behaviortree_rs::nodes::TreeNode) {
-                self.children.push(child);
-            }
-
-            fn children(&self) -> &Vec<::behaviortree_rs::nodes::TreeNode> {
-                &self.children
-            }
-
-            fn halt_child(&mut self, index: usize) -> ::behaviortree_rs::sync::BoxFuture<Result<(), ::behaviortree_rs::nodes::NodeError>> {
-                ::std::boxed::Box::pin(async move {
-                    match self.children.get_mut(index) {
-                        Some(child) => {
-                            if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
-                                let child_ptr: *mut _ = &mut **child;
-                                unsafe {
-                                    ::behaviortree_rs::nodes::AsyncHalt::halt(&mut *child_ptr).await;
-                                }
-                            }
-                            Ok(child.reset_status())
-                        }
-                        None => Err(::behaviortree_rs::nodes::NodeError::IndexError),
-                    }
-                })
-            }
-
-            fn halt_children(&mut self, start: usize) -> ::behaviortree_rs::sync::BoxFuture<Result<(), ::behaviortree_rs::nodes::NodeError>> {
-                ::std::boxed::Box::pin(async move {
-
-                    if start >= self.children.len() {
-                        return Err(::behaviortree_rs::nodes::NodeError::IndexError);
-                    }
-
-                    let end = self.children.len();
-
-                    for i in start..end {
-                        self.halt_child(i).await?;
-                    }
-
-                    Ok(())
-                })
-            }
-
-            fn reset_children(&mut self) -> ::behaviortree_rs::sync::BoxFuture<()> {
-                ::std::boxed::Box::pin(async move {
-                    self.halt_children(0).await.unwrap();
-                })
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
-                ::std::boxed::Box::pin(async move {
-                    ::log::debug!("[behaviortree_rs]: {}::tick()", <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::path(self));
-                    <Self as ::behaviortree_rs::nodes::AsyncTick>::tick(self).await
-                })
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::ControlNodeBase for #ident {}
-
-        impl ::behaviortree_rs::nodes::GetNodeType for #ident {
-            fn node_type(&self) -> ::behaviortree_rs::basic_types::NodeType {
-                ::behaviortree_rs::basic_types::NodeType::Control
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_derive(DecoratorNode)]
-pub fn derive_decorator_node(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = input.ident;
-
-    let expanded = quote! {
-        impl ::behaviortree_rs::nodes::DecoratorNode for #ident {
-            fn set_child(&mut self, child: ::behaviortree_rs::nodes::TreeNode) {
-                self.child = Some(child);
-            }
-
-            fn child(&self) -> Result<&::behaviortree_rs::nodes::TreeNode, ::behaviortree_rs::nodes::NodeError> {
-                match &self.child {
-                    Some(child) => Ok(child),
-                    None => Err(::behaviortree_rs::nodes::NodeError::ChildMissing)
-                }
-            }
-
-            fn halt_child(&mut self) -> BoxFuture<()> {
-                ::std::boxed::Box::pin(async move {
-                    self.reset_child().await;
-                })
-            }
-
-            fn reset_child(&mut self) -> BoxFuture<()> {
-                ::std::boxed::Box::pin(async move {
-                    if let Some(child) = self.child.as_mut() {
-                        let mut child = child;
-                        if matches!(child.status(), ::behaviortree_rs::basic_types::NodeStatus::Running) {
-                            let child_ptr: *mut _ = &mut **child;
-                            unsafe {
-                                ::behaviortree_rs::nodes::AsyncHalt::halt(&mut *child_ptr).await;
-                            }
-                        }
-
-                        child.reset_status();
-                    }
-                })
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
-                ::std::boxed::Box::pin(async move {
-                    if self.child.is_none() {
-                        return Err(::behaviortree_rs::nodes::NodeError::ChildMissing);
-                    }
-
-                    ::log::debug!("[behaviortree_rs]: {}::tick()", <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::name(self));
-                    <Self as ::behaviortree_rs::nodes::AsyncTick>::tick(self).await
-                })
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::DecoratorNodeBase for #ident {}
-
-        impl ::behaviortree_rs::nodes::GetNodeType for #ident {
-            fn node_type(&self) -> ::behaviortree_rs::basic_types::NodeType {
-                ::behaviortree_rs::basic_types::NodeType::Decorator
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_derive(SyncActionNode)]
-/// Test docstring
-pub fn derive_sync_action_node(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = input.ident;
-
-    let expanded = quote! {
-        impl ::behaviortree_rs::nodes::ExecuteTick for #ident {
-            fn execute_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
-                ::std::boxed::Box::pin(async move {
-                    ::log::debug!("[behaviortree_rs]: {}::tick()", <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::name(self));
-                    match <Self as ::behaviortree_rs::nodes::ActionNode>::execute_action_tick(self).await? {
-                        ::behaviortree_rs::basic_types::NodeStatus::Running => Err(::behaviortree_rs::nodes::NodeError::StatusError(self.config.path.clone(), "Running".to_string())),
-                        status => Ok(status)
-                    }
-                })
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_derive(StatefulActionNode)]
-/// Test docstring
-pub fn derive_stateful_action_node(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = input.ident;
-
-    let expanded = quote! {
-        impl ::behaviortree_rs::nodes::ExecuteTick for #ident where #ident: ::behaviortree_rs::nodes::AsyncStatefulActionNode {
-            fn execute_tick(&mut self) -> ::behaviortree_rs::sync::BoxFuture<::behaviortree_rs::NodeResult> {
-                ::std::boxed::Box::pin(async move {
-                    let prev_status = <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::status(self);
-
-                    let new_status = match prev_status {
-                        ::behaviortree_rs::basic_types::NodeStatus::Idle => {
-                            ::log::debug!("[behaviortree_rs]: {}::on_start()", <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::path(self));
-                            let new_status = ::behaviortree_rs::nodes::action::AsyncStatefulActionNode::on_start(self).await?;
-                            if matches!(new_status, ::behaviortree_rs::basic_types::NodeStatus::Idle) {
-                                return Err(::behaviortree_rs::nodes::NodeError::StatusError(format!("{}::on_start()", self.config.path), "Idle".to_string()))
-                            }
-                            new_status
-                        }
-                        ::behaviortree_rs::basic_types::NodeStatus::Running => {
-                            ::log::debug!("[behaviortree_rs]: {}::on_running()", <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::path(self));
-                            let new_status = ::behaviortree_rs::nodes::action::AsyncStatefulActionNode::on_running(self).await?;
-                            if matches!(new_status, ::behaviortree_rs::basic_types::NodeStatus::Idle) {
-                                return Err(::behaviortree_rs::nodes::NodeError::StatusError(format!("{}::on_running()", self.config.path), "Idle".to_string()))
-                            }
-                            new_status
-                        }
-                        prev_status => prev_status
-                    };
-
-                    <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::set_status(self, new_status.clone());
-
-                    Ok(new_status)
-                })
-            }
-        }
-
-        impl ::behaviortree_rs::nodes::AsyncHalt for #ident {
-            fn halt(&mut self) -> ::behaviortree_rs::sync::BoxFuture<()> {
-                ::std::boxed::Box::pin(async move {
-                    self.halt_requested = true;
-
-                    if matches!(<Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::status(self), ::behaviortree_rs::basic_types::NodeStatus::Running) {
-                        <Self as ::behaviortree_rs::nodes::AsyncStatefulActionNode>::on_halted(self).await;
-                    }
-
-                    <Self as ::behaviortree_rs::nodes::TreeNodeDefaults>::reset_status(self);
-                })
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
 #[proc_macro_derive(FromString)]
 pub fn derive_from_string(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -1168,13 +787,12 @@ fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
         {
             let mut node = #node_type::create_node(#name, config #cloned_names);
             let manifest = ::behaviortree_rs::basic_types::TreeNodeManifest {
-                node_type: node.node_type(),
+                node_type: node.node_category(),
                 registration_id: #name.into(),
                 ports: node.provided_ports(),
                 description: ::std::string::String::new(),
             };
             node.config_mut().set_manifest(::std::sync::Arc::new(manifest));
-            // <#node_type as ::behaviortree_rs::nodes::TreeNodeDefaults>::config_mut(&mut node).set_manifest(::std::sync::Arc::new(manifest));
             node
         }
     }
@@ -1203,16 +821,10 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
 
     let extra_steps = match node_type {
         NodeTypeInternal::Control => quote! {
-            if let ::behaviortree_rs::nodes::TreeNode::Control(node) = &mut node {
-                for child in children {
-                    node.children.push(child);
-                }
-            }
+            node.data.children = children;
         },
         NodeTypeInternal::Decorator => quote! { 
-            if let ::behaviortree_rs::nodes::TreeNode::Decorator(node) = &mut node {
-                node.child = Some(Box::new(children.remove(0)));
-            }
+            node.data.children = children;
         },
         _ => quote!{ }
     };
@@ -1266,7 +878,7 @@ enum NodeTypeInternal {
 /// ```
 #[proc_macro]
 pub fn register_action_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Action }, NodeTypeInternal::Action)
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeCategory::Action }, NodeTypeInternal::Action)
 }
 
 /// Registers an Control type node with the factory.
@@ -1287,7 +899,7 @@ pub fn register_action_node(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn register_control_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Control }, NodeTypeInternal::Control)
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeCategory::Control }, NodeTypeInternal::Control)
 }
 
 /// Registers an Decorator type node with the factory.
@@ -1308,5 +920,5 @@ pub fn register_control_node(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn register_decorator_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeType::Decorator }, NodeTypeInternal::Decorator)
+    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeCategory::Decorator }, NodeTypeInternal::Decorator)
 }

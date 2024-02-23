@@ -85,9 +85,7 @@ impl ParallelAllNode {
 
         if skipped_count + self.completed_list.len() >= children_count {
             // Done!
-            for child in node_.children.iter_mut() {
-                child.halt().await;
-            }
+            node_.reset_children().await;
             self.completed_list.clear();
 
             let status =

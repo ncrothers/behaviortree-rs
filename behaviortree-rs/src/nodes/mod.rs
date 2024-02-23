@@ -1,12 +1,16 @@
-use std::{any::TypeId, collections::HashMap, sync::Arc};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    sync::Arc,
+};
 
 use futures::future::BoxFuture;
 use thiserror::Error;
 
 use crate::{
     basic_types::{
-        get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortValue, PortsRemapping,
-        TreeNodeManifest,
+        get_remapped_key, FromString, NodeCategory, ParseStr, PortDirection, PortValue,
+        PortsRemapping, TreeNodeManifest,
     },
     blackboard::BlackboardString,
     tree::ParseError,
@@ -15,147 +19,262 @@ use crate::{
 
 pub use crate::basic_types::{NodeStatus, PortsList};
 
-pub mod control;
-pub use control::ControlNode;
-
-pub mod decorator;
-pub use decorator::DecoratorNode;
-
 pub mod action;
-pub use action::*;
-
-/// Pointer to the most general trait, which encapsulates all
-/// node types that implement `TreeNodeBase` (all nodes need
-/// to for it to compile)
-// pub type TreeNode = Box<dyn TreeNodeBase + Send + Sync>;
+pub mod control;
+pub mod decorator;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
-type TickFn<T> = fn(&mut T) -> BoxFuture<NodeResult>;
-type HaltFn<T> = fn(&mut T) -> BoxFuture<()>;
+type TickFn = for<'a> fn(
+    &'a mut TreeNodeData,
+    &'a mut Box<dyn Any + Send>,
+) -> BoxFuture<'a, Result<NodeStatus, NodeError>>;
+type HaltFn = for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send>) -> BoxFuture<'a, ()>;
 type PortsFn = fn() -> PortsList;
 
+#[derive(Clone, Copy, Debug)]
+pub enum NodeType {
+    Control,
+    Decorator,
+    StatefulAction,
+    SyncAction,
+}
+
 #[derive(Debug)]
-pub enum TreeNode {
-    Action(ActionNode),
-    Control(ControlNode),
-    Decorator(DecoratorNode),
+pub struct TreeNodeData {
+    pub name: String,
+    pub type_str: String,
+    pub node_type: NodeType,
+    pub node_category: NodeCategory,
+    pub config: NodeConfig,
+    pub status: NodeStatus,
+    /// Vector of child nodes
+    pub children: Vec<TreeNode>,
+    pub ports_fn: PortsFn,
+}
+
+#[derive(Debug)]
+pub struct TreeNode {
+    pub data: TreeNodeData,
+    pub context: Box<dyn Any + Send>,
+    /// Function pointer to tick
+    pub tick_fn: TickFn,
+    /// Function pointer to on_start function (if StatefulActionNode)
+    /// Otherwise points to tick_fn
+    pub start_fn: TickFn,
+    /// Function pointer to halt
+    pub halt_fn: HaltFn,
 }
 
 impl TreeNode {
+    /// Returns the current node's status
     pub fn status(&self) -> NodeStatus {
-        match self {
-            Self::Action(node) => node.status,
-            Self::Control(node) => node.status,
-            Self::Decorator(node) => node.status,
-        }
+        self.data.status
     }
 
+    /// Resets the status back to `NodeStatus::Idle`
     pub fn reset_status(&mut self) {
-        match self {
-            Self::Action(node) => node.status = NodeStatus::Idle,
-            Self::Control(node) => node.status = NodeStatus::Idle,
-            Self::Decorator(node) => node.status = NodeStatus::Idle,
-        }
+        self.data.status = NodeStatus::Idle;
     }
 
-    pub async fn execute_tick(&mut self) -> NodeResult {
-        match self {
-            Self::Action(node) => node.execute_tick().await,
-            Self::Control(node) => node.execute_tick().await,
-            Self::Decorator(node) => node.execute_tick().await,
-        }
+    /// Update the node's status
+    pub fn set_status(&mut self, status: NodeStatus) {
+        self.data.status = status;
     }
 
-    pub async fn halt(&mut self) {
-        match self {
-            Self::Action(node) => node.halt().await,
-            Self::Control(node) => node.halt().await,
-            Self::Decorator(node) => node.halt().await,
-        }
-    }
+    /// Internal-only, calls the action-type-specific tick
+    async fn action_tick(&mut self) -> NodeResult {
+        match self.data.node_type {
+            NodeType::StatefulAction => {
+                let prev_status = self.data.status;
 
-    pub fn name(&self) -> &str {
-        match self {
-            Self::Action(node) => &node.name,
-            Self::Control(node) => &node.name,
-            Self::Decorator(node) => &node.name,
-        }
-    }
+                let new_status = match prev_status {
+                    NodeStatus::Idle => {
+                        ::log::debug!("[behaviortree_rs]: {}::on_start()", &self.data.config.path);
+                        // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
+                        let new_status = (self.start_fn)(&mut self.data, &mut self.context).await?;
+                        // drop(wrapper);
+                        if matches!(new_status, NodeStatus::Idle) {
+                            return Err(NodeError::StatusError(
+                                format!("{}::on_start()", self.data.config.path),
+                                "Idle".to_string(),
+                            ));
+                        }
+                        new_status
+                    }
+                    NodeStatus::Running => {
+                        ::log::debug!(
+                            "[behaviortree_rs]: {}::on_running()",
+                            &self.data.config.path
+                        );
+                        let new_status = (self.tick_fn)(&mut self.data, &mut self.context).await?;
+                        if matches!(new_status, NodeStatus::Idle) {
+                            return Err(NodeError::StatusError(
+                                format!("{}::on_running()", self.data.config.path),
+                                "Idle".to_string(),
+                            ));
+                        }
+                        new_status
+                    }
+                    prev_status => prev_status,
+                };
 
-    pub fn config_mut(&mut self) -> &mut NodeConfig {
-        match self {
-            Self::Action(node) => &mut node.config,
-            Self::Control(node) => &mut node.config,
-            Self::Decorator(node) => &mut node.config,
-        }
-    }
+                self.set_status(new_status);
 
-    pub fn config(&self) -> &NodeConfig {
-        match self {
-            Self::Action(node) => &node.config,
-            Self::Control(node) => &node.config,
-            Self::Decorator(node) => &node.config,
-        }
-    }
-
-    pub fn node_type(&self) -> NodeType {
-        match self {
-            TreeNode::Action(_) => NodeType::Action,
-            TreeNode::Control(_) => NodeType::Control,
-            TreeNode::Decorator(_) => NodeType::Decorator,
-        }
-    }
-
-    pub fn provided_ports(&self) -> PortsList {
-        match self {
-            TreeNode::Action(node) => node.provided_ports(),
-            TreeNode::Control(node) => node.provided_ports(),
-            TreeNode::Decorator(node) => node.provided_ports(),
-        }
-    }
-
-    pub fn children(&self) -> Option<impl Iterator<Item = &TreeNode>> {
-        match self {
-            TreeNode::Action(_) => None,
-            TreeNode::Control(node) => Some(ChildIter::new_control(&node.children)),
-            TreeNode::Decorator(node) => node.child.as_ref().map(|node| ChildIter::new_decorator(node))
-        }
-    }
-}
-
-enum ChildIter<'a> {
-    Control(core::slice::Iter<'a, TreeNode>),
-    Decorator {
-        has_sent: bool,
-        data: &'a TreeNode,
-    }
-}
-
-impl<'a> ChildIter<'a> {
-    pub fn new_control(slice: &'a [TreeNode]) -> Self {
-        Self::Control(slice.iter())
-    }
-
-    pub fn new_decorator(data: &'a TreeNode) -> Self {
-        Self::Decorator { has_sent: false, data }
-    }
-}
-
-impl<'a> Iterator for ChildIter<'a> {
-    type Item = &'a TreeNode;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Control(iter) => iter.next(),
-            Self::Decorator { has_sent, data } => {
-                if *has_sent {
-                    None
-                } else {
-                    *has_sent = true;
-                    Some(*data)
+                Ok(new_status)
+            }
+            NodeType::SyncAction => {
+                match (self.tick_fn)(&mut self.data, &mut self.context).await? {
+                    status @ (NodeStatus::Running | NodeStatus::Idle) => {
+                        Err(::behaviortree_rs::nodes::NodeError::StatusError(
+                            self.data.config.path.clone(),
+                            status.to_string(),
+                        ))
+                    }
+                    status => Ok(status),
                 }
             }
+            _ => panic!(
+                "This should not be possible, action_tick() was called for a non-action node"
+            ),
         }
+    }
+
+    /// Tick the node
+    pub async fn execute_tick(&mut self) -> NodeResult {
+        match self.data.node_type {
+            NodeType::Control | NodeType::Decorator => {
+                (self.tick_fn)(&mut self.data, &mut self.context).await
+            }
+            NodeType::StatefulAction | NodeType::SyncAction => self.action_tick().await,
+        }
+    }
+
+    /// Halt the node
+    pub async fn halt(&mut self) {
+        (self.halt_fn)(&mut self.data, &mut self.context).await;
+    }
+
+    /// Get the name of the node
+    pub fn name(&self) -> &str {
+        &self.data.name
+    }
+
+    /// Get a mutable reference to the `NodeConfig`
+    pub fn config_mut(&mut self) -> &mut NodeConfig {
+        &mut self.data.config
+    }
+
+    /// Get a reference to the `NodeConfig`
+    pub fn config(&self) -> &NodeConfig {
+        &self.data.config
+    }
+
+    /// Get the node's `NodeType`, which is only:
+    /// * `NodeType::Control`
+    /// * `NodeType::Decorator`
+    /// * `NodeType::SyncAction`
+    /// * `NodeType::StatefulAction`
+    pub fn node_type(&self) -> NodeType {
+        self.data.node_type
+    }
+
+    /// Get the node's `NodeCategory`, which is more general than `NodeType`
+    pub fn node_category(&self) -> NodeCategory {
+        self.data.node_category
+    }
+
+    /// Call the node's `ports()` function if it has one, returning the
+    /// `PortsList` object
+    pub fn provided_ports(&self) -> PortsList {
+        (self.data.ports_fn)()
+    }
+
+    /// Return an iterator over the children. Returns `None` if this node
+    /// has no children (i.e. an `Action` node)
+    pub fn children(&self) -> Option<impl Iterator<Item = &TreeNode>> {
+        if self.data.children.is_empty() {
+            None
+        } else {
+            Some(self.data.children.iter())
+        }
+    }
+
+    /// Return a mutable iterator over the children. Returns `None` if this node
+    /// has no children (i.e. an `Action` node)
+    pub fn children_mut(&mut self) -> Option<impl Iterator<Item = &mut TreeNode>> {
+        if self.data.children.is_empty() {
+            None
+        } else {
+            Some(self.data.children.iter_mut())
+        }
+    }
+}
+
+impl TreeNodeData {
+    /// Halt children from this index to the end.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NodeError::IndexError` if `start` is out of bounds.
+    pub async fn halt_children(&mut self, start: usize) -> NodeResult<()> {
+        if start >= self.children.len() {
+            return Err(NodeError::IndexError);
+        }
+
+        let end = self.children.len();
+
+        for i in start..end {
+            self.halt_child_idx(i).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Halts and resets all children
+    pub async fn reset_children(&mut self) {
+        self.halt_children(0)
+            .await
+            .expect("reset_children failed, shouldn't be possible. Report this")
+    }
+
+    /// Halt child at the `index`. Not to be confused with `halt_child()`, which is
+    /// a helper that calls `halt_child_idx(0)`, primarily used for `Decorator` nodes.
+    pub async fn halt_child_idx(&mut self, index: usize) -> NodeResult<()> {
+        let child = self.children.get_mut(index).ok_or(NodeError::IndexError)?;
+        if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
+            child.halt().await;
+        }
+        child.reset_status();
+        Ok(())
+    }
+
+    /// Sets the status of this node
+    pub fn set_status(&mut self, status: NodeStatus) {
+        self.status = status;
+    }
+
+    /// Calls `halt_child_idx(0)`. This should only be used in
+    /// `Decorator` nodes
+    pub async fn halt_child(&mut self) {
+        self.reset_child().await
+    }
+
+    /// Halts and resets the first child. This should only be used in
+    /// `Decorator` nodes
+    pub async fn reset_child(&mut self) {
+        if let Some(child) = self.children.get_mut(0) {
+            if matches!(child.status(), NodeStatus::Running) {
+                child.halt().await;
+            }
+
+            child.reset_status();
+        }
+    }
+
+    /// Gets a mutable reference to the first child. Helper for
+    /// `Decorator` nodes to get their child.
+    pub fn child(&mut self) -> Option<&mut TreeNode> {
+        self.children.get_mut(0)
     }
 }
 

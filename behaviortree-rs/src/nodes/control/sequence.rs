@@ -41,9 +41,7 @@ impl SequenceNode {
 
             match &child_status {
                 NodeStatus::Failure => {
-                    for child in node_.children.iter_mut() {
-                        child.halt().await;
-                    }
+                    node_.reset_children().await;
                     self.child_idx = 0;
                     return Ok(NodeStatus::Failure);
                 }
@@ -61,9 +59,7 @@ impl SequenceNode {
         }
 
         if self.child_idx == node_.children.len() {
-            for child in node_.children.iter_mut() {
-                child.halt().await;
-            }
+            node_.reset_children().await;
             self.child_idx = 0;
         }
 

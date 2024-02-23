@@ -64,9 +64,7 @@ impl IfThenElseNode {
             match status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 status => {
-                    for child in node_.children.iter_mut() {
-                        child.halt().await;
-                    }
+                    node_.reset_children().await;
                     self.child_idx = 0;
                     return Ok(status);
                 }
@@ -80,8 +78,6 @@ impl IfThenElseNode {
 
     async fn halt(&mut self) {
         self.child_idx = 0;
-        for child in node_.children.iter_mut() {
-            child.halt().await;
-        }
+        node_.reset_children().await;
     }
 }
