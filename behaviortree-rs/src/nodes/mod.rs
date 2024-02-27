@@ -26,9 +26,9 @@ pub mod decorator;
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 type TickFn = for<'a> fn(
     &'a mut TreeNodeData,
-    &'a mut Box<dyn Any + Send>,
+    &'a mut Box<dyn Any + Send + Sync>,
 ) -> BoxFuture<'a, Result<NodeStatus, NodeError>>;
-type HaltFn = for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send>) -> BoxFuture<'a, ()>;
+type HaltFn = for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
 type PortsFn = fn() -> PortsList;
 
 #[derive(Clone, Copy, Debug)]
@@ -55,7 +55,7 @@ pub struct TreeNodeData {
 #[derive(Debug)]
 pub struct TreeNode {
     pub data: TreeNodeData,
-    pub context: Box<dyn Any + Send>,
+    pub context: Box<dyn Any + Send + Sync>,
     /// Function pointer to tick
     pub tick_fn: TickFn,
     /// Function pointer to on_start function (if StatefulActionNode)

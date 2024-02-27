@@ -249,7 +249,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -
         }
     }
 
-    let new_arg = syn::parse2(quote! { ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send> })?;
+    let new_arg = syn::parse2(quote! { ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send + ::core::marker::Sync> })?;
 
     fn_item.sig.inputs.push(new_arg);
 
@@ -361,7 +361,7 @@ fn bt_impl(
 
     if args.halt.is_none() {
         extra_impls.push(syn::parse2(quote! {
-            fn _halt<'a>(node_: &'a mut ::behaviortree_rs::nodes::TreeNodeData, ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send>) -> ::futures::future::BoxFuture<'a, ()> { ::std::boxed::Box::pin(async move {}) }
+            fn _halt<'a>(node_: &'a mut ::behaviortree_rs::nodes::TreeNodeData, ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send + ::core::marker::Sync>) -> ::futures::future::BoxFuture<'a, ()> { ::std::boxed::Box::pin(async move {}) }
         })?)
     }
 
