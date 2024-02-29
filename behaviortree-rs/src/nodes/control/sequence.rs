@@ -40,6 +40,7 @@ impl SequenceNode {
             self.all_skipped &= child_status == NodeStatus::Skipped;
 
             match &child_status {
+                NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Failure => {
                     node_.reset_children().await;
                     self.child_idx = 0;
@@ -54,7 +55,6 @@ impl SequenceNode {
                         "Idle".to_string(),
                     ))
                 }
-                _ => {}
             };
         }
 
