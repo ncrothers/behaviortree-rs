@@ -1,7 +1,7 @@
 [package]
 name = "behaviortree-rs"
 description = "Rust implementation of BehaviorTree.CPP, a robust behavior tree library in C++"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["Nicholas Crothers <ncrothers523@gmail.com>"]
 license = "MIT"
