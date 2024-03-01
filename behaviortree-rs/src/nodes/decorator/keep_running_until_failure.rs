@@ -1,43 +1,32 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
-use crate::{
-    basic_types::NodeStatus,
-    nodes::{DecoratorNode, NodeResult, TreeNodeDefaults},
-};
+use crate::{basic_types::NodeStatus, nodes::NodeResult};
 
 /// The KeepRunningUntilFailureNode returns always Failure or Running
-#[bt_node(
-    node_type = DecoratorNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(DecoratorNode)]
 pub struct KeepRunningUntilFailureNode {}
 
+#[bt_node(DecoratorNode)]
 impl KeepRunningUntilFailureNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            self.set_status(NodeStatus::Running);
+    async fn tick(&mut self) -> NodeResult {
+        node_.set_status(NodeStatus::Running);
 
-            let child_status = self.child.as_mut().unwrap().execute_tick().await?;
+        let child_status = node_.child().unwrap().execute_tick().await?;
 
-            match child_status {
-                NodeStatus::Success => {
-                    self.reset_child().await;
-                    Ok(NodeStatus::Running)
-                }
-                NodeStatus::Failure => {
-                    self.reset_child().await;
-                    Ok(NodeStatus::Failure)
-                }
-                _ => Ok(NodeStatus::Running),
+        match child_status {
+            NodeStatus::Success => {
+                node_.reset_child().await;
+                Ok(NodeStatus::Running)
             }
-        })
+            NodeStatus::Failure => {
+                node_.reset_child().await;
+                Ok(NodeStatus::Failure)
+            }
+            _ => Ok(NodeStatus::Running),
+        }
     }
 
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.reset_child().await;
-        })
+    async fn halt(&mut self) {
+        node_.reset_child().await;
     }
 }

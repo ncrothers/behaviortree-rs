@@ -15,7 +15,7 @@ proc-macro = true
 log = "0.4.20"
 proc-macro2 = "1.0.66"
 quote = "1.0.33"
-syn = { version = "2.0.29", features = ["full"] }
+syn = { version = "2.0.29", features = ["full", "visit-mut", "visit"] }
 
 [dev-dependencies]
 behaviortree-rs = { path = "../behaviortree-rs" }

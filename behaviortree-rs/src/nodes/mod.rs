@@ -1,12 +1,16 @@
-use std::{any::TypeId, collections::HashMap, sync::Arc};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    sync::Arc,
+};
 
 use futures::future::BoxFuture;
 use thiserror::Error;
 
 use crate::{
     basic_types::{
-        self, get_remapped_key, FromString, ParseStr, PortDirection, PortValue, PortsRemapping,
-        TreeNodeManifest,
+        get_remapped_key, FromString, NodeCategory, ParseStr, PortDirection, PortValue,
+        PortsRemapping, TreeNodeManifest,
     },
     blackboard::BlackboardString,
     tree::ParseError,
@@ -15,132 +19,263 @@ use crate::{
 
 pub use crate::basic_types::{NodeStatus, PortsList};
 
-pub mod control;
-pub use control::{ControlNode, ControlNodeBase, ControlNodePtr};
-
-pub mod decorator;
-pub use decorator::{DecoratorNode, DecoratorNodeBase, DecoratorNodePtr};
-
 pub mod action;
-pub use action::*;
+pub mod control;
+pub mod decorator;
 
-// =============================
-// Trait Definitions
-// =============================
+pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
+type TickFn = for<'a> fn(
+    &'a mut TreeNodeData,
+    &'a mut Box<dyn Any + Send + Sync>,
+) -> BoxFuture<'a, Result<NodeStatus, NodeError>>;
+type HaltFn = for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
+type PortsFn = fn() -> PortsList;
 
-/// Supertrait that requires all of the base functions that need to
-/// be implemented for every tree node.
-pub trait TreeNodeBase:
-    std::fmt::Debug
-    + NodePorts
-    + TreeNodeDefaults
-    + GetNodeType
-    + ExecuteTick
-    + SyncHalt
-    + AsyncHalt
-    + SyncTick
-    + AsyncTick
-{
+#[derive(Clone, Copy, Debug)]
+pub enum NodeType {
+    Control,
+    Decorator,
+    StatefulAction,
+    SyncAction,
 }
 
-/// Pointer to the most general trait, which encapsulates all
-/// node types that implement `TreeNodeBase` (all nodes need
-/// to for it to compile)
-pub type TreeNodePtr = Box<dyn TreeNodeBase + Send + Sync>;
+#[derive(Debug)]
+pub struct TreeNodeData {
+    pub name: String,
+    pub type_str: String,
+    pub node_type: NodeType,
+    pub node_category: NodeCategory,
+    pub config: NodeConfig,
+    pub status: NodeStatus,
+    /// Vector of child nodes
+    pub children: Vec<TreeNode>,
+    pub ports_fn: PortsFn,
+}
 
-pub type NodeResult = Result<NodeStatus, NodeError>;
+#[derive(Debug)]
+pub struct TreeNode {
+    pub data: TreeNodeData,
+    pub context: Box<dyn Any + Send + Sync>,
+    /// Function pointer to tick
+    pub tick_fn: TickFn,
+    /// Function pointer to on_start function (if StatefulActionNode)
+    /// Otherwise points to tick_fn
+    pub start_fn: TickFn,
+    /// Function pointer to halt
+    pub halt_fn: HaltFn,
+}
 
-/// The only trait from `TreeNodeBase` that _needs_ to be
-/// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with
-/// `provided_ports()`.
-pub trait NodePorts {
-    fn provided_ports(&self) -> PortsList {
-        HashMap::new()
+impl TreeNode {
+    /// Returns the current node's status
+    pub fn status(&self) -> NodeStatus {
+        self.data.status
+    }
+
+    /// Resets the status back to `NodeStatus::Idle`
+    pub fn reset_status(&mut self) {
+        self.data.status = NodeStatus::Idle;
+    }
+
+    /// Update the node's status
+    pub fn set_status(&mut self, status: NodeStatus) {
+        self.data.status = status;
+    }
+
+    /// Internal-only, calls the action-type-specific tick
+    async fn action_tick(&mut self) -> NodeResult {
+        match self.data.node_type {
+            NodeType::StatefulAction => {
+                let prev_status = self.data.status;
+
+                let new_status = match prev_status {
+                    NodeStatus::Idle => {
+                        ::log::debug!("[behaviortree_rs]: {}::on_start()", &self.data.config.path);
+                        // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
+                        let new_status = (self.start_fn)(&mut self.data, &mut self.context).await?;
+                        // drop(wrapper);
+                        if matches!(new_status, NodeStatus::Idle) {
+                            return Err(NodeError::StatusError(
+                                format!("{}::on_start()", self.data.config.path),
+                                "Idle".to_string(),
+                            ));
+                        }
+                        new_status
+                    }
+                    NodeStatus::Running => {
+                        ::log::debug!(
+                            "[behaviortree_rs]: {}::on_running()",
+                            &self.data.config.path
+                        );
+                        let new_status = (self.tick_fn)(&mut self.data, &mut self.context).await?;
+                        if matches!(new_status, NodeStatus::Idle) {
+                            return Err(NodeError::StatusError(
+                                format!("{}::on_running()", self.data.config.path),
+                                "Idle".to_string(),
+                            ));
+                        }
+                        new_status
+                    }
+                    prev_status => prev_status,
+                };
+
+                self.set_status(new_status);
+
+                Ok(new_status)
+            }
+            NodeType::SyncAction => {
+                match (self.tick_fn)(&mut self.data, &mut self.context).await? {
+                    status @ (NodeStatus::Running | NodeStatus::Idle) => {
+                        Err(::behaviortree_rs::nodes::NodeError::StatusError(
+                            self.data.config.path.clone(),
+                            status.to_string(),
+                        ))
+                    }
+                    status => Ok(status),
+                }
+            }
+            _ => panic!(
+                "This should not be possible, action_tick() was called for a non-action node"
+            ),
+        }
+    }
+
+    /// Tick the node
+    pub async fn execute_tick(&mut self) -> NodeResult {
+        match self.data.node_type {
+            NodeType::Control | NodeType::Decorator => {
+                (self.tick_fn)(&mut self.data, &mut self.context).await
+            }
+            NodeType::StatefulAction | NodeType::SyncAction => self.action_tick().await,
+        }
+    }
+
+    /// Halt the node
+    pub async fn halt(&mut self) {
+        (self.halt_fn)(&mut self.data, &mut self.context).await;
+    }
+
+    /// Get the name of the node
+    pub fn name(&self) -> &str {
+        &self.data.name
+    }
+
+    /// Get a mutable reference to the `NodeConfig`
+    pub fn config_mut(&mut self) -> &mut NodeConfig {
+        &mut self.data.config
+    }
+
+    /// Get a reference to the `NodeConfig`
+    pub fn config(&self) -> &NodeConfig {
+        &self.data.config
+    }
+
+    /// Get the node's `NodeType`, which is only:
+    /// * `NodeType::Control`
+    /// * `NodeType::Decorator`
+    /// * `NodeType::SyncAction`
+    /// * `NodeType::StatefulAction`
+    pub fn node_type(&self) -> NodeType {
+        self.data.node_type
+    }
+
+    /// Get the node's `NodeCategory`, which is more general than `NodeType`
+    pub fn node_category(&self) -> NodeCategory {
+        self.data.node_category
+    }
+
+    /// Call the node's `ports()` function if it has one, returning the
+    /// `PortsList` object
+    pub fn provided_ports(&self) -> PortsList {
+        (self.data.ports_fn)()
+    }
+
+    /// Return an iterator over the children. Returns `None` if this node
+    /// has no children (i.e. an `Action` node)
+    pub fn children(&self) -> Option<impl Iterator<Item = &TreeNode>> {
+        if self.data.children.is_empty() {
+            None
+        } else {
+            Some(self.data.children.iter())
+        }
+    }
+
+    /// Return a mutable iterator over the children. Returns `None` if this node
+    /// has no children (i.e. an `Action` node)
+    pub fn children_mut(&mut self) -> Option<impl Iterator<Item = &mut TreeNode>> {
+        if self.data.children.is_empty() {
+            None
+        } else {
+            Some(self.data.children.iter_mut())
+        }
     }
 }
 
-/// The only trait from `TreeNodeBase` that _needs_ to be
-/// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with
-/// `provided_ports()`.
-pub trait SyncTick {
-    fn tick(&mut self) -> NodeResult;
-}
+impl TreeNodeData {
+    /// Halt children from this index to the end.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NodeError::IndexError` if `start` is out of bounds.
+    pub async fn halt_children(&mut self, start: usize) -> NodeResult<()> {
+        if start >= self.children.len() {
+            return Err(NodeError::IndexError);
+        }
 
-/// The only trait from `TreeNodeBase` that _needs_ to be
-/// implemented manually, without a derive macro. This is where
-/// the `tick()` is defined as well as the ports, with
-/// `provided_ports()`.
-pub trait AsyncTick {
-    fn tick(&mut self) -> BoxFuture<NodeResult>;
-}
+        let end = self.children.len();
 
-/// Trait that defines the `halt()` function, which gets called
-/// when a node is stopped. This function typically contains any
-/// cleanup code for the node.
-pub trait SyncHalt {
-    fn halt(&mut self) {}
-}
+        for i in start..end {
+            self.halt_child_idx(i).await?;
+        }
 
-/// Trait that defines the `halt()` function, which gets called
-/// when a node is stopped. This function typically contains any
-/// cleanup code for the node.
-pub trait AsyncHalt {
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {})
+        Ok(())
     }
-}
 
-pub trait RuntimeType {
-    fn get_runtime(&self) -> NodeRuntime;
-}
+    /// Halts and resets all children
+    pub async fn reset_children(&mut self) {
+        self.halt_children(0)
+            .await
+            .expect("reset_children failed, shouldn't be possible. Report this")
+    }
 
-/// Trait that should only be implemented with a derive macro.
-/// The automatic implementation defines helper functions.
-///
-/// The automatic implementation relies on certain named fields
-/// within the struct that it gets derived on.
-///
-/// # Examples
-///
-/// The struct below won't compile, but it contains the base derived
-/// traits and struct fields needed for all node definitions.
-///
-/// ```ignore
-/// use behaviortree_rs::basic_types::NodeStatus;
-/// use behaviortree_rs::nodes::NodeConfig;
-/// use behaviortree_rs::derive::TreeNodeDefaults;
-///
-/// #[derive(Debug, Clone, TreeNodeDefaults)]
-/// struct MyTreeNode {
-///     config: NodeConfig,
-///     status: NodeStatus,
-/// }
-/// ```
-pub trait TreeNodeDefaults {
-    fn name(&self) -> &String;
-    fn path(&self) -> &String;
-    fn status(&self) -> NodeStatus;
-    fn reset_status(&mut self);
-    fn set_status(&mut self, status: NodeStatus);
-    fn config(&self) -> &NodeConfig;
-    fn config_mut(&mut self) -> &mut NodeConfig;
-    fn into_boxed(self) -> Box<dyn TreeNodeBase>;
-}
+    /// Halt child at the `index`. Not to be confused with `halt_child()`, which is
+    /// a helper that calls `halt_child_idx(0)`, primarily used for `Decorator` nodes.
+    pub async fn halt_child_idx(&mut self, index: usize) -> NodeResult<()> {
+        let child = self.children.get_mut(index).ok_or(NodeError::IndexError)?;
+        if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
+            child.halt().await;
+        }
+        child.reset_status();
+        Ok(())
+    }
 
-/// Automatically implemented for all node types. The implementation
-/// differs based on the `NodeType`.
-pub trait ExecuteTick {
-    fn execute_tick(&mut self) -> BoxFuture<NodeResult>;
-}
+    /// Sets the status of this node
+    pub fn set_status(&mut self, status: NodeStatus) {
+        self.status = status;
+    }
 
-/// TODO
-pub trait ConditionNode {}
+    /// Calls `halt_child_idx(0)`. This should only be used in
+    /// `Decorator` nodes
+    pub async fn halt_child(&mut self) {
+        self.reset_child().await
+    }
 
-/// Automatically implemented for all node types.
-pub trait GetNodeType {
-    fn node_type(&self) -> basic_types::NodeType;
+    /// Halts and resets the first child. This should only be used in
+    /// `Decorator` nodes
+    pub async fn reset_child(&mut self) {
+        if let Some(child) = self.children.get_mut(0) {
+            if matches!(child.status(), NodeStatus::Running) {
+                child.halt().await;
+            }
+
+            child.reset_status();
+        }
+    }
+
+    /// Gets a mutable reference to the first child. Helper for
+    /// `Decorator` nodes to get their child.
+    pub fn child(&mut self) -> Option<&mut TreeNode> {
+        self.children.get_mut(0)
+    }
 }
 
 // =============================

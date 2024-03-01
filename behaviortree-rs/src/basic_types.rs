@@ -10,8 +10,8 @@ use crate::{
 };
 
 /// Specifies all types of nodes that can be used in a behavior tree.
-#[derive(Debug, Clone, PartialEq)]
-pub enum NodeType {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NodeCategory {
     Undefined,
     /// Leaf node that executes an action
     Action,
@@ -26,7 +26,7 @@ pub enum NodeType {
     SubTree,
 }
 
-impl std::fmt::Display for NodeType {
+impl std::fmt::Display for NodeCategory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let text = match self {
             Self::Undefined => "Undefined",
@@ -43,7 +43,7 @@ impl std::fmt::Display for NodeType {
 
 /// Specifies the status of a node's execution. Returned from
 /// functions `execute_tick()` and `tick()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeStatus {
     Idle,
     Running,
@@ -247,17 +247,17 @@ impl FromString for NodeStatus {
     }
 }
 
-impl FromString for NodeType {
+impl FromString for NodeCategory {
     type Err = ParseNodeTypeError;
 
-    fn from_string(value: impl AsRef<str>) -> Result<NodeType, Self::Err> {
+    fn from_string(value: impl AsRef<str>) -> Result<NodeCategory, Self::Err> {
         match value.as_ref() {
-            "Undefined" => Ok(NodeType::Undefined),
-            "Action" => Ok(NodeType::Action),
-            "Condition" => Ok(NodeType::Condition),
-            "Control" => Ok(NodeType::Control),
-            "Decorator" => Ok(NodeType::Decorator),
-            "SubTree" => Ok(NodeType::SubTree),
+            "Undefined" => Ok(NodeCategory::Undefined),
+            "Action" => Ok(NodeCategory::Action),
+            "Condition" => Ok(NodeCategory::Condition),
+            "Control" => Ok(NodeCategory::Control),
+            "Decorator" => Ok(NodeCategory::Decorator),
+            "SubTree" => Ok(NodeCategory::SubTree),
             _ => Err(ParseNodeTypeError::NoMatch),
         }
     }
@@ -303,7 +303,7 @@ impl_into_string!(
     f64,
     bool,
     NodeStatus,
-    NodeType,
+    NodeCategory,
     PortDirection,
     &str
 );
@@ -316,7 +316,7 @@ pub type PortsList = HashMap<String, PortInfo>;
 
 #[derive(Clone, Debug)]
 pub struct TreeNodeManifest {
-    pub node_type: NodeType,
+    pub node_type: NodeCategory,
     pub registration_id: String,
     pub ports: PortsList,
     pub description: String,
@@ -324,7 +324,7 @@ pub struct TreeNodeManifest {
 
 impl TreeNodeManifest {
     pub fn new(
-        node_type: NodeType,
+        node_type: NodeCategory,
         registration_id: impl AsRef<str>,
         ports: PortsList,
         description: impl AsRef<str>,

@@ -1,9 +1,8 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{ControlNode, NodeError, NodeResult},
+    nodes::{NodeError, NodeResult},
 };
 
 /// The FallbackNode is used to try different strategies,
@@ -16,11 +15,7 @@ use crate::{
 ///
 /// - If a child returns SUCCESS, stop the loop and return SUCCESS.
 // #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-#[bt_node(
-    node_type = ControlNode,
-    tick = tick,
-    halt = halt,
-)]
+#[bt_node(ControlNode)]
 pub struct FallbackNode {
     #[bt(default = "0")]
     child_idx: usize,
@@ -28,63 +23,60 @@ pub struct FallbackNode {
     all_skipped: bool,
 }
 
+#[bt_node(ControlNode)]
 impl FallbackNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            if self.status == NodeStatus::Idle {
-                self.all_skipped = true;
-            }
+    async fn tick(&mut self) -> NodeResult {
+        if node_.status == NodeStatus::Idle {
+            self.all_skipped = true;
+        }
 
-            self.status = NodeStatus::Running;
+        node_.status = NodeStatus::Running;
 
-            while self.child_idx < self.children.len() {
-                let cur_child = &mut self.children[self.child_idx];
+        while self.child_idx < node_.children.len() {
+            let cur_child = &mut node_.children[self.child_idx];
 
-                let _prev_status = cur_child.status();
-                let child_status = cur_child.execute_tick().await?;
+            let _prev_status = cur_child.status();
+            let child_status = cur_child.execute_tick().await?;
 
-                self.all_skipped &= child_status == NodeStatus::Skipped;
+            self.all_skipped &= child_status == NodeStatus::Skipped;
 
-                match &child_status {
-                    NodeStatus::Running => {
-                        return Ok(NodeStatus::Running);
-                    }
-                    NodeStatus::Failure => {
-                        self.child_idx += 1;
-                    }
-                    NodeStatus::Success => {
-                        self.reset_children().await;
-                        self.child_idx = 0;
-                        return Ok(NodeStatus::Success);
-                    }
-                    NodeStatus::Skipped => {
-                        self.child_idx += 1;
-                    }
-                    NodeStatus::Idle => {
-                        return Err(NodeError::StatusError(
-                            "Name here".to_string(),
-                            "Idle".to_string(),
-                        ));
-                    }
-                };
-            }
+            match &child_status {
+                NodeStatus::Running => {
+                    return Ok(NodeStatus::Running);
+                }
+                NodeStatus::Failure => {
+                    self.child_idx += 1;
+                }
+                NodeStatus::Success => {
+                    node_.reset_children().await;
+                    self.child_idx = 0;
+                    return Ok(NodeStatus::Success);
+                }
+                NodeStatus::Skipped => {
+                    self.child_idx += 1;
+                }
+                NodeStatus::Idle => {
+                    return Err(NodeError::StatusError(
+                        "Name here".to_string(),
+                        "Idle".to_string(),
+                    ));
+                }
+            };
+        }
 
-            if self.child_idx == self.children.len() {
-                self.reset_children().await;
-                self.child_idx = 0;
-            }
+        if self.child_idx == node_.children.len() {
+            node_.reset_children().await;
+            self.child_idx = 0;
+        }
 
-            match self.all_skipped {
-                true => Ok(NodeStatus::Skipped),
-                false => Ok(NodeStatus::Failure),
-            }
-        })
+        match self.all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Failure),
+        }
     }
 
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.child_idx = 0;
-            self.reset_children().await;
-        })
+    async fn halt(&mut self) {
+        self.child_idx = 0;
+        node_.reset_children().await;
     }
 }
