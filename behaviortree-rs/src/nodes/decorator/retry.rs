@@ -1,12 +1,9 @@
 use behaviortree_rs_derive::bt_node;
-use futures::future::BoxFuture;
 
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{
-        AsyncHalt, AsyncTick, DecoratorNode, NodeError, NodePorts, NodeResult, TreeNodeDefaults,
-    },
+    nodes::{NodeError, NodeResult},
 };
 
 /// The RetryNode is used to execute a child several times if it fails.
@@ -34,76 +31,68 @@ pub struct RetryNode {
     all_skipped: bool,
 }
 
-impl AsyncTick for RetryNode {
-    fn tick(&mut self) -> BoxFuture<NodeResult> {
-        Box::pin(async move {
-            // Load num_cycles from the port value
-            self.max_attempts = self.config.get_input("num_attempts").await?;
+#[bt_node(DecoratorNode)]
+impl RetryNode {
+    async fn tick(&mut self) -> NodeResult {
+        // Load num_cycles from the port value
+        self.max_attempts = node_.config.get_input("num_attempts")?;
 
-            let mut do_loop =
-                (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
+        let mut do_loop = (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-            if matches!(self.status, NodeStatus::Idle) {
-                self.all_skipped = true;
-            }
+        if matches!(node_.status, NodeStatus::Idle) {
+            self.all_skipped = true;
+        }
 
-            self.set_status(NodeStatus::Running);
+        node_.status = NodeStatus::Running;
 
-            while do_loop {
-                let child_status = self.child.as_mut().unwrap().execute_tick().await?;
+        while do_loop {
+            let child_status = node_.child().unwrap().execute_tick().await?;
 
-                self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
+            self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
 
-                match child_status {
-                    NodeStatus::Success => {
-                        self.try_count = 0;
-                        self.reset_child().await;
+            match child_status {
+                NodeStatus::Success => {
+                    self.try_count = 0;
+                    node_.reset_child().await;
 
-                        return Ok(NodeStatus::Success);
-                    }
-                    NodeStatus::Failure => {
-                        self.try_count += 1;
-                        do_loop =
-                            (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
+                    return Ok(NodeStatus::Success);
+                }
+                NodeStatus::Failure => {
+                    self.try_count += 1;
+                    do_loop =
+                        (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-                        self.reset_child().await;
-                    }
-                    NodeStatus::Running => return Ok(NodeStatus::Running),
-                    NodeStatus::Skipped => {
-                        self.reset_child().await;
+                    node_.reset_child().await;
+                }
+                NodeStatus::Running => return Ok(NodeStatus::Running),
+                NodeStatus::Skipped => {
+                    node_.reset_child().await;
 
-                        return Ok(NodeStatus::Skipped);
-                    }
-                    NodeStatus::Idle => {
-                        return Err(NodeError::StatusError(
-                            "InverterNode".to_string(),
-                            "Idle".to_string(),
-                        ))
-                    }
+                    return Ok(NodeStatus::Skipped);
+                }
+                NodeStatus::Idle => {
+                    return Err(NodeError::StatusError(
+                        "InverterNode".to_string(),
+                        "Idle".to_string(),
+                    ))
                 }
             }
+        }
 
-            self.try_count = 0;
+        self.try_count = 0;
 
-            match self.all_skipped {
-                true => Ok(NodeStatus::Skipped),
-                false => Ok(NodeStatus::Failure),
-            }
-        })
+        match self.all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Failure),
+        }
     }
-}
 
-impl NodePorts for RetryNode {
-    fn provided_ports(&self) -> crate::basic_types::PortsList {
+    fn ports() -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_attempts"))
     }
-}
 
-impl AsyncHalt for RetryNode {
-    fn halt(&mut self) -> BoxFuture<()> {
-        Box::pin(async move {
-            self.try_count = 0;
-            self.reset_child().await;
-        })
+    async fn halt(&mut self) {
+        self.try_count = 0;
+        node_.reset_child().await;
     }
 }

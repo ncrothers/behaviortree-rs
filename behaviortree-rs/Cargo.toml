@@ -1,7 +1,7 @@
 [package]
 name = "behaviortree-rs"
 description = "Rust implementation of BehaviorTree.CPP, a robust behavior tree library in C++"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["Nicholas Crothers <ncrothers523@gmail.com>"]
 license = "MIT"
@@ -11,13 +11,13 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0.75"
-behaviortree-rs-derive = "0.2.1"
+behaviortree-rs-derive = "0.2.2"
 futures = { version = "0.3.28" }
 log = "0.4.20"
 pretty_env_logger = "0.5.0"
 quick-xml = { version = "0.30.0", features = ["serde", "serialize"] }
 thiserror = "1.0.47"
-tokio = { version = "1.32.0", features = ["sync", "macros"] }
 
 [dev-dependencies]
+tokio = { version = "1.32.0", features = ["macros"] }
 tokio-test = "0.4.3"
