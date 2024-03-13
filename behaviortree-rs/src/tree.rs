@@ -638,9 +638,10 @@ impl Factory {
                         break;
                     }
                 }
-                _ => {
+                Event::Comment(_) => (),
+                x => {
                     return Err(ParseError::InternalError(
-                        "Something bad has happened. Please report this.".to_string(),
+                        format!("Something bad has happened. Please report this. {x:?}")
                     ))
                 }
             };
