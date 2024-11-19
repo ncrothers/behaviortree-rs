@@ -473,7 +473,7 @@ pub fn get_remapped_key(
     if port_name.as_ref() == "=" {
         Some(port_name.as_ref().to_string())
     } else {
-        remapped_port.as_ref().strip_bb_pointer()
+        remapped_port.as_ref().strip_bb_pointer().map(ToOwned::to_owned)
     }
 }
 

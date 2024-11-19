@@ -2,10 +2,11 @@ use behaviortree_rs_derive::bt_node;
 use evalexpr::{build_operator_tree, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext, Value};
 
 use crate::{
-    basic_types::NodeStatus, macros::{define_ports, input_port}, nodes::{NodeError, NodeResult, TreeNodeData}
+    basic_types::NodeStatus, blackboard::BlackboardString, macros::{define_ports, input_port}, nodes::{NodeError, NodeResult, TreeNodeData}
 };
 
-/// The InverterNode returns Failure on Success, and Success on Failure
+/// Define a conditional expression in a port, resulting in the node returning
+/// either `Success` or `Failure` based on the expression result.
 #[bt_node(SyncActionNode)]
 pub struct ConditionNode {
     #[bt(default)]
@@ -38,11 +39,9 @@ impl ConditionNode {
 
         for key in expr.iter_variable_identifiers() {
             // Check if it's a blackboard pointer
-            if key.starts_with('{') && key.ends_with('}') {
-                // Remove the brackets
-                let inner_key = &key[1..(key.len()-1)];
+            if let Some(inner_key) = key.strip_bb_pointer() {
                 let (name, var_type) = inner_key.split_once(':').expect("variable missing : delimiter, shouldn't be possible");
-
+    
                 let value = match var_type {
                     "int" => Value::Int(node.config.blackboard.get::<i64>(name).ok_or_else(|| NodeError::BlackboardError(format!("Couldn't load blackboard key {name} as an integer")))?),
                     "float" => Value::Float(node.config.blackboard.get::<f64>(name).ok_or_else(|| NodeError::BlackboardError(format!("Couldn't load blackboard key {name} as a float")))?),
@@ -50,8 +49,9 @@ impl ConditionNode {
                     "bool" => Value::Boolean(node.config.blackboard.get::<bool>(name).ok_or_else(|| NodeError::BlackboardError(format!("Couldn't load blackboard key {name} as a bool")))?),
                     _ => unreachable!()
                 };
-
+    
                 context.set_value(key.to_owned(), value).map_err(|e| NodeError::ConditionExpressionError(e.to_string()))?;
+
             }
         }
 

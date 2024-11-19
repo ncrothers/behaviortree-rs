@@ -653,7 +653,7 @@ impl Factory {
 
                                 if let Some(port_name) = value.strip_bb_pointer() {
                                     // Add remapping if `value` is a Blackboard pointer
-                                    child_blackboard.add_subtree_remapping(attr.clone(), port_name);
+                                    child_blackboard.add_subtree_remapping(attr.clone(), port_name.to_owned());
                                 } else {
                                     // Set string value into Blackboard
                                     child_blackboard.set(attr, value.clone());

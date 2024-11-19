@@ -17,9 +17,9 @@ pub trait BlackboardString {
     ///
     /// assert_eq!("value".strip_bb_pointer(), None);
     ///
-    /// assert_eq!("{value}".strip_bb_pointer(), Some(String::from("value")));
+    /// assert_eq!("{value}".strip_bb_pointer(), Some("value"));
     /// ```
-    fn strip_bb_pointer(&self) -> Option<String>;
+    fn strip_bb_pointer(&self) -> Option<&str>;
     fn is_bb_pointer(&self) -> bool;
 }
 
@@ -27,22 +27,10 @@ impl<T> BlackboardString for T
 where
     T: AsRef<str> + Clone,
 {
-    fn strip_bb_pointer(&self) -> Option<String> {
+    fn strip_bb_pointer(&self) -> Option<&str> {
         let str_ref = self.as_ref();
 
-        // Is bb pointer
-        if str_ref.starts_with('{') && str_ref.ends_with('}') {
-            Some(
-                str_ref
-                    .strip_prefix('{')
-                    .unwrap()
-                    .strip_suffix('}')
-                    .unwrap()
-                    .to_string(),
-            )
-        } else {
-            None
-        }
+        str_ref.strip_prefix('{').and_then(|str_ref| str_ref.strip_suffix('}'))
     }
 
     fn is_bb_pointer(&self) -> bool {

@@ -484,11 +484,10 @@ impl NodeConfig {
         match self.output_ports.get(port) {
             Some(port_value) => {
                 let blackboard_key = match port_value.as_str() {
-                    "=" => port.to_string(),
-                    value => match value.is_bb_pointer() {
-                        true => value.strip_bb_pointer().unwrap(),
-                        false => value.to_string(),
-                    },
+                    "=" => port.to_owned(),
+                    value => {
+                        value.strip_bb_pointer().unwrap_or(value).to_owned()
+                    }
                 };
 
                 self.blackboard.set(blackboard_key, value);
