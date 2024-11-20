@@ -402,15 +402,11 @@ impl PortInfo {
         }
     }
 
-    pub fn default_value(&self) -> Option<&String> {
+    pub fn default_value(&self) -> Option<&str> {
         match &self.default_value {
             Some(v) => Some(v),
             None => None,
         }
-    }
-
-    pub fn default_value_str(&self) -> Option<String> {
-        self.default_value.as_ref().map(|v| v.bt_to_string())
     }
 
     pub fn set_default(&mut self, default: impl BTToString) {

@@ -423,7 +423,7 @@ impl NodeConfig {
     /// - `T` doesn't match the type of the stored value
     /// - If a default value is needed (value is empty), couldn't parse default value
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
-    /// key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
+    ///     key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
     where
