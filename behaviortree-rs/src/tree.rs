@@ -58,10 +58,7 @@ pub enum ParseError {
     #[error("Variable in blackboard pointer \"{0}\" is missing a type.")]
     PortExpressionMissingType(String),
     #[error("Invalid type \"{type_name}\" for variable \"{ident}\". Valid types are: int, float, str, bool")]
-    PortExpressionInvalidType {
-        ident: String,
-        type_name: String,
-    },
+    PortExpressionInvalidType { ident: String, type_name: String },
 }
 
 type NodeCreateFnDyn = dyn Fn(NodeConfig, Vec<TreeNode>) -> TreeNode + Send + Sync;
@@ -279,26 +276,23 @@ impl Factory {
         uid
     }
 
-    async fn recursively_build_subtree(
+    fn recursively_build_subtree(
         &self,
-        tree_id: &String,
-        tree_name: &String,
-        path_prefix: &String,
+        tree_id: &str,
+        tree_name: &str,
+        path_prefix: &str,
         blackboard: Blackboard,
     ) -> Result<TreeNode, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
             None => {
-                return Err(ParseError::UnknownTree(tree_id.clone()));
+                return Err(ParseError::UnknownTree(tree_id.to_owned()));
             }
         };
 
         // Loop until either a child or end tag is found
         loop {
-            match self
-                .build_child(&mut reader, &blackboard, tree_name, path_prefix)
-                .await?
-            {
+            match self.build_child(&mut reader, &blackboard, tree_name, path_prefix)? {
                 CreateNodeResult::Node(child) => break Ok(child),
                 CreateNodeResult::Continue => (),
                 CreateNodeResult::End => {
@@ -330,7 +324,7 @@ impl Factory {
         }
     }
 
-    pub async fn create_async_tree_from_text(
+    pub fn create_async_tree_from_text(
         &mut self,
         text: String,
         blackboard: &Blackboard,
@@ -343,12 +337,12 @@ impl Factory {
             // Unwrap is safe because we check that tree_roots.len() == 1
             let main_tree_id = self.tree_roots.iter().next().unwrap().0.clone();
 
-            self.instantiate_async_tree(blackboard, &main_tree_id).await
+            self.instantiate_async_tree(blackboard, &main_tree_id)
         } else {
             // Unwrap is safe here because there are more than 1 root and
             // self.main_tree_id is Some
             let main_tree_id = self.main_tree_id.clone().unwrap();
-            self.instantiate_async_tree(blackboard, &main_tree_id).await
+            self.instantiate_async_tree(blackboard, &main_tree_id)
         }
     }
 
@@ -362,17 +356,12 @@ impl Factory {
 
         let main_tree_id = String::from(main_tree_id);
 
-        let root_node = futures::executor::block_on(self.recursively_build_subtree(
-            &main_tree_id,
-            &String::new(),
-            &String::new(),
-            blackboard,
-        ))?;
+        let root_node = self.recursively_build_subtree(&main_tree_id, "", "", blackboard)?;
 
         Ok(SyncTree::new(root_node))
     }
 
-    pub async fn instantiate_async_tree(
+    pub fn instantiate_async_tree(
         &mut self,
         blackboard: &Blackboard,
         main_tree_id: &str,
@@ -382,50 +371,44 @@ impl Factory {
 
         let main_tree_id = String::from(main_tree_id);
 
-        let root_node = self
-            .recursively_build_subtree(&main_tree_id, &String::new(), &String::new(), blackboard)
-            .await?;
+        let root_node = self.recursively_build_subtree(&main_tree_id, "", "", blackboard)?;
 
         Ok(AsyncTree::new(root_node))
     }
 
-    async fn build_leaf_node<'a>(
+    fn build_leaf_node(
         &self,
-        node_name: &String,
-        attributes: Attributes<'a>,
+        node_name: &str,
+        attributes: Attributes,
         config: NodeConfig,
     ) -> Result<TreeNode, ParseError> {
         // Get clone of node from node_map based on tag name
         let (node_type, node_fn) = self
             .node_map
             .get(node_name)
-            .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
+            .ok_or_else(|| ParseError::UnknownNode(node_name.to_owned()))?;
         if !matches!(node_type, NodeCategory::Action) {
             return Err(ParseError::NodeTypeMismatch(String::from("Action")));
         }
 
         let mut node = self.create_node(node_fn, config, Vec::new());
 
-        self.add_ports_to_node(&mut node, node_name, attributes)
-            .await?;
+        self.add_ports_to_node(&mut node, node_name, attributes)?;
 
         Ok(node)
     }
 
-    async fn build_children(
+    fn build_children(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
         blackboard: &Blackboard,
-        tree_name: &String,
-        path_prefix: &String,
+        tree_name: &str,
+        path_prefix: &str,
     ) -> Result<Vec<TreeNode>, ParseError> {
         let mut nodes = Vec::new();
 
         loop {
-            match self
-                .build_child(reader, blackboard, tree_name, path_prefix)
-                .await?
-            {
+            match self.build_child(reader, blackboard, tree_name, path_prefix)? {
                 CreateNodeResult::Node(node) => {
                     nodes.push(node);
                 }
@@ -437,11 +420,11 @@ impl Factory {
         Ok(nodes)
     }
 
-    async fn add_ports_to_node<'a>(
+    fn add_ports_to_node(
         &self,
         node_ptr: &mut TreeNode,
         node_name: &str,
-        attributes: Attributes<'a>,
+        attributes: Attributes,
     ) -> Result<(), ParseError> {
         let config = node_ptr.config_mut();
         let manifest = config.manifest()?;
@@ -469,16 +452,21 @@ impl Factory {
                 // Validate that any expr-enabled ports contain valid expressions,
                 // and the provided types for blackboard pointers are one of the valid ones
                 if port.parse_expr() {
-                    let expr = evalexpr::build_operator_tree::<evalexpr::DefaultNumericTypes>(&remap_val)?;
+                    let expr =
+                        evalexpr::build_operator_tree::<evalexpr::DefaultNumericTypes>(&remap_val)?;
 
                     for key in expr.iter_variable_identifiers() {
                         // Check if it's a blackboard pointer
                         if key.starts_with('{') && key.ends_with('}') {
                             // Remove the brackets
-                            let inner_key = &key[1..(key.len()-1)];
+                            let inner_key = &key[1..(key.len() - 1)];
                             // Split the type from the name
-                            let (name, var_type) = inner_key.split_once(':').ok_or_else(|| ::behaviortree_rs::tree::ParseError::PortExpressionMissingType(inner_key.to_owned()))?;
-            
+                            let (name, var_type) = inner_key.split_once(':').ok_or_else(|| {
+                                ::behaviortree_rs::tree::ParseError::PortExpressionMissingType(
+                                    inner_key.to_owned(),
+                                )
+                            })?;
+
                             // Check if the type is supported
                             match var_type {
                                 "int" | "float" | "str" | "bool" => (),
@@ -487,7 +475,7 @@ impl Factory {
                         }
                     }
                 }
-                
+
                 config.add_port(port.direction().clone(), remap_name, remap_val);
             }
         }
@@ -511,203 +499,192 @@ impl Factory {
         Ok(())
     }
 
-    fn build_child<'a>(
-        &'a self,
-        reader: &'a mut Reader<Cursor<Vec<u8>>>,
-        blackboard: &'a Blackboard,
-        tree_name: &'a String,
-        path_prefix: &'a String,
-    ) -> BoxFuture<Result<CreateNodeResult, ParseError>> {
-        Box::pin(async move {
-            let mut buf = Vec::new();
+    fn build_child(
+        &self,
+        reader: &mut Reader<Cursor<Vec<u8>>>,
+        blackboard: &Blackboard,
+        tree_name: &str,
+        path_prefix: &str,
+    ) -> Result<CreateNodeResult, ParseError> {
+        let mut buf = Vec::new();
 
-            let node = match reader.read_event_into(&mut buf)? {
-                // exits the loop when reaching end of file
-                Event::Eof => {
-                    debug!("EOF");
-                    return Err(ParseError::UnexpectedEof);
-                }
-                // Node with Children
-                Event::Start(e) => {
-                    let node_name = String::from_utf8(e.name().0.into())?;
-                    let attributes = e.attributes();
+        let node = match reader.read_event_into(&mut buf)? {
+            // exits the loop when reaching end of file
+            Event::Eof => {
+                debug!("EOF");
+                return Err(ParseError::UnexpectedEof);
+            }
+            // Node with Children
+            Event::Start(e) => {
+                let node_name = String::from_utf8(e.name().0.into())?;
+                let attributes = e.attributes();
 
-                    debug!("build_child Start: {node_name}");
+                debug!("build_child Start: {node_name}");
 
-                    let mut config = NodeConfig::new(blackboard.clone());
-                    config.path = path_prefix.to_owned() + &node_name;
+                let mut config = NodeConfig::new(blackboard.clone());
+                config.path = path_prefix.to_owned() + &node_name;
 
-                    let (node_type, node_fn) = self
-                        .node_map
-                        .get(&node_name)
-                        .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
+                let (node_type, node_fn) = self
+                    .node_map
+                    .get(&node_name)
+                    .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
 
-                    let node = match node_type {
-                        NodeCategory::Control => {
-                            let children = self
-                                .build_children(
-                                    reader,
-                                    blackboard,
-                                    tree_name,
-                                    &(config.path.to_owned() + "/"),
-                                )
-                                .await?;
+                let node = match node_type {
+                    NodeCategory::Control => {
+                        let children = self.build_children(
+                            reader,
+                            blackboard,
+                            tree_name,
+                            &(config.path.to_owned() + "/"),
+                        )?;
 
-                            let mut node = self.create_node(node_fn, config, children);
+                        let mut node = self.create_node(node_fn, config, children);
 
-                            self.add_ports_to_node(&mut node, &node_name, attributes)
-                                .await?;
+                        self.add_ports_to_node(&mut node, &node_name, attributes)?;
 
-                            node
-                        }
-                        NodeCategory::Decorator => {
-                            // Make checkpoint to rewind to if necessary
-                            let checkpoint = reader.buffer_position();
-                            // Loop until either an end tag or the child is found
-                            let child = loop {
-                                match self
-                                    .build_child(
-                                        reader,
-                                        blackboard,
-                                        tree_name,
-                                        &(config.path.to_owned() + "/"),
-                                    )
-                                    .await?
-                                {
-                                    CreateNodeResult::Node(node) => break node,
-                                    CreateNodeResult::Continue => (),
-                                    CreateNodeResult::End => {
-                                        return Err(ParseError::NodeTypeMismatch(
-                                            "Decorator".to_string(),
-                                        ))
-                                    }
+                        node
+                    }
+                    NodeCategory::Decorator => {
+                        // Make checkpoint to rewind to if necessary
+                        let checkpoint = reader.buffer_position();
+                        // Loop until either an end tag or the child is found
+                        let child = loop {
+                            match self.build_child(
+                                reader,
+                                blackboard,
+                                tree_name,
+                                &(config.path.to_owned() + "/"),
+                            )? {
+                                CreateNodeResult::Node(node) => break node,
+                                CreateNodeResult::Continue => (),
+                                CreateNodeResult::End => {
+                                    return Err(ParseError::NodeTypeMismatch(
+                                        "Decorator".to_string(),
+                                    ))
                                 }
-                            };
+                            }
+                        };
 
-                            let mut buf = Vec::new();
+                        let mut buf = Vec::new();
 
-                            // Try to match the end tag to close the Decorator
-                            loop {
-                                match reader.read_event_into(&mut buf)? {
-                                    // Ignore comments
-                                    Event::Comment(_) => continue,
-                                    Event::End(tag) => {
-                                        // If a matching end tag is found, all good
-                                        if tag.name() == e.name() {
-                                            break;
-                                        } else {
-                                            // Otherwise, an error. Theoretically this should be unreachable since the XML parser should catch this error, but keeping it here just in case
-                                            return Err(ParseError::ViolateNodeConstraint(
-                                                format!(
-                                                    "Expected end tag for Decorator {node_name}"
-                                                ),
-                                            ));
-                                        }
-                                    }
-                                    _ => {
+                        // Try to match the end tag to close the Decorator
+                        loop {
+                            match reader.read_event_into(&mut buf)? {
+                                // Ignore comments
+                                Event::Comment(_) => continue,
+                                Event::End(tag) => {
+                                    // If a matching end tag is found, all good
+                                    if tag.name() == e.name() {
+                                        break;
+                                    } else {
+                                        // Otherwise, an error. Theoretically this should be unreachable since the XML parser should catch this error, but keeping it here just in case
                                         return Err(ParseError::ViolateNodeConstraint(format!(
-                                            "Decorator node [{node_name}] may only have one child"
+                                            "Expected end tag for Decorator {node_name}"
                                         )));
                                     }
                                 }
+                                _ => {
+                                    return Err(ParseError::ViolateNodeConstraint(format!(
+                                        "Decorator node [{node_name}] may only have one child"
+                                    )));
+                                }
                             }
-
-                            let mut node = self.create_node(node_fn, config, vec![child]);
-
-                            self.add_ports_to_node(&mut node, &node_name, attributes)
-                                .await?;
-
-                            node
                         }
-                        // TODO: expand more
-                        x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
-                    };
 
-                    CreateNodeResult::Node(node)
-                }
-                // Leaf Node
-                Event::Empty(e) => {
-                    let node_name = String::from_utf8(e.name().0.into())?;
-                    debug!("[Leaf node]: {node_name}");
-                    let attributes = e.attributes();
+                        let mut node = self.create_node(node_fn, config, vec![child]);
 
-                    let mut config = NodeConfig::new(blackboard.clone());
-                    config.path = path_prefix.to_owned() + &node_name;
+                        self.add_ports_to_node(&mut node, &node_name, attributes)?;
 
-                    let node = match node_name.as_str() {
-                        "SubTree" => {
-                            let attributes = attributes.to_map()?;
-                            let mut child_blackboard = Blackboard::with_parent(blackboard);
+                        node
+                    }
+                    // TODO: expand more
+                    x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
+                };
 
-                            // Process attributes (Ports, special fields, etc)
-                            for (attr, value) in attributes.iter() {
-                                // Set autoremapping to true or false
-                                if attr == "_autoremap" {
-                                    child_blackboard.enable_auto_remapping(
-                                        <bool as FromString>::from_string(value)?,
-                                    );
-                                    continue;
-                                } else if !attr.is_allowed_port_name() {
-                                    continue;
-                                }
+                CreateNodeResult::Node(node)
+            }
+            // Leaf Node
+            Event::Empty(e) => {
+                let node_name = String::from_utf8(e.name().0.into())?;
+                debug!("[Leaf node]: {node_name}");
+                let attributes = e.attributes();
 
-                                if let Some(port_name) = value.strip_bb_pointer() {
-                                    // Add remapping if `value` is a Blackboard pointer
-                                    child_blackboard.add_subtree_remapping(attr.clone(), port_name.to_owned());
-                                } else {
-                                    // Set string value into Blackboard
-                                    child_blackboard.set(attr, value.clone());
-                                }
+                let mut config = NodeConfig::new(blackboard.clone());
+                config.path = path_prefix.to_owned() + &node_name;
+
+                let node = match node_name.as_str() {
+                    "SubTree" => {
+                        let attributes = attributes.to_map()?;
+                        let mut child_blackboard = Blackboard::with_parent(blackboard);
+
+                        // Process attributes (Ports, special fields, etc)
+                        for (attr, value) in attributes.iter() {
+                            // Set autoremapping to true or false
+                            if attr == "_autoremap" {
+                                child_blackboard.enable_auto_remapping(
+                                    <bool as FromString>::from_string(value)?,
+                                );
+                                continue;
+                            } else if !attr.is_allowed_port_name() {
+                                continue;
                             }
 
-                            let id = match attributes.get("ID") {
-                                Some(id) => id,
-                                None => return Err(ParseError::MissingAttribute("ID".to_string())),
-                            };
-
-                            let mut subtree_name = tree_name.clone();
-                            if !subtree_name.is_empty() {
-                                subtree_name += "/";
-                            }
-
-                            if let Some(name_attr) = attributes.get("name") {
-                                subtree_name += name_attr;
+                            if let Some(port_name) = value.strip_bb_pointer() {
+                                // Add remapping if `value` is a Blackboard pointer
+                                child_blackboard
+                                    .add_subtree_remapping(attr.clone(), port_name.to_owned());
                             } else {
-                                subtree_name += &format!("{id}::{}", self.get_uid());
+                                // Set string value into Blackboard
+                                child_blackboard.set(attr, value.clone());
                             }
-
-                            let new_prefix = format!("{subtree_name}/");
-
-                            self.recursively_build_subtree(
-                                id,
-                                &subtree_name,
-                                &new_prefix,
-                                child_blackboard,
-                            )
-                            .await?
                         }
-                        _ => self.build_leaf_node(&node_name, attributes, config).await?,
-                    };
 
-                    CreateNodeResult::Node(node)
-                }
-                Event::End(_e) => CreateNodeResult::End,
-                Event::Comment(content) => {
-                    debug!("Comment - \"{content:?}\"");
-                    CreateNodeResult::Continue
-                }
-                e => {
-                    debug!("Other - SHOULDN'T BE HERE");
-                    debug!("{e:?}");
+                        let id = match attributes.get("ID") {
+                            Some(id) => id,
+                            None => return Err(ParseError::MissingAttribute("ID".to_string())),
+                        };
 
-                    return Err(ParseError::InternalError(
-                        "Didn't match one of the expected XML tag types.".to_string(),
-                    ));
-                }
-            };
+                        let mut subtree_name = tree_name.to_owned();
+                        if !subtree_name.is_empty() {
+                            subtree_name += "/";
+                        }
 
-            Ok(node)
-        })
+                        if let Some(name_attr) = attributes.get("name") {
+                            subtree_name += name_attr;
+                        } else {
+                            subtree_name += &format!("{id}::{}", self.get_uid());
+                        }
+
+                        let new_prefix = format!("{subtree_name}/");
+
+                        self.recursively_build_subtree(
+                            id,
+                            &subtree_name,
+                            &new_prefix,
+                            child_blackboard,
+                        )?
+                    }
+                    _ => self.build_leaf_node(&node_name, attributes, config)?,
+                };
+
+                CreateNodeResult::Node(node)
+            }
+            Event::End(_e) => CreateNodeResult::End,
+            Event::Comment(content) => {
+                debug!("Comment - \"{content:?}\"");
+                CreateNodeResult::Continue
+            }
+            e => {
+                debug!("Other - SHOULDN'T BE HERE");
+                debug!("{e:?}");
+
+                return Err(ParseError::InternalError(
+                    "Didn't match one of the expected XML tag types.".to_string(),
+                ));
+            }
+        };
+
+        Ok(node)
     }
 
     pub fn register_bt_from_text(&mut self, xml: String) -> Result<(), ParseError> {
@@ -967,15 +944,11 @@ fn builtin_nodes() -> HashMap<String, (NodeCategory, Arc<NodeCreateFnDyn>)> {
     // Condition node
     let node = Arc::new(
         move |config: NodeConfig, _children: Vec<TreeNode>| -> TreeNode {
-            let node =
-                build_node_ptr!(config, "Condition", nodes::action::ConditionNode);
+            let node = build_node_ptr!(config, "Condition", nodes::action::ConditionNode);
             node
         },
     );
-    node_map.insert(
-        String::from("Condition"),
-        (NodeCategory::Action, node),
-    );
+    node_map.insert(String::from("Condition"), (NodeCategory::Action, node));
 
     let node = Arc::new(
         move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {

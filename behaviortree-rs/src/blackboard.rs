@@ -30,7 +30,9 @@ where
     fn strip_bb_pointer(&self) -> Option<&str> {
         let str_ref = self.as_ref();
 
-        str_ref.strip_prefix('{').and_then(|str_ref| str_ref.strip_suffix('}'))
+        str_ref
+            .strip_prefix('{')
+            .and_then(|str_ref| str_ref.strip_suffix('}'))
     }
 
     fn is_bb_pointer(&self) -> bool {

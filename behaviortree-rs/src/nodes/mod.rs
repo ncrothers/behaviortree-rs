@@ -485,9 +485,7 @@ impl NodeConfig {
             Some(port_value) => {
                 let blackboard_key = match port_value.as_str() {
                     "=" => port.to_owned(),
-                    value => {
-                        value.strip_bb_pointer().unwrap_or(value).to_owned()
-                    }
+                    value => value.strip_bb_pointer().unwrap_or(value).to_owned(),
                 };
 
                 self.blackboard.set(blackboard_key, value);

@@ -315,7 +315,7 @@ fn async_test() {
             register_action_node!(factory, "EchoNode", EchoNode);
 
             let blackboard = Blackboard::create();
-            let tree = factory.create_async_tree_from_text(xml, &blackboard).await;
+            let tree = factory.create_async_tree_from_text(xml, &blackboard);
 
             if tree.is_err() {
                 log::error!("{}", tree.as_ref().err().unwrap());
