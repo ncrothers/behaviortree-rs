@@ -1,10 +1,11 @@
-use behaviortree_rs_derive::bt_node;
 use log::warn;
 
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// IfThenElseNode must have exactly 2 or 3 children. This node is NOT reactive.
 ///
@@ -18,16 +19,15 @@ use crate::{
 /// statement returns FAILURE.
 ///
 /// This is equivalent to add AlwaysFailure as 3rd child.
-#[bt_node(ControlNode)]
+#[derive(Debug, Default)]
 pub struct IfThenElseNode {
-    #[bt(default = "0")]
+    /// Default: 0
     child_idx: usize,
 }
 
-#[bt_node(ControlNode)]
-impl IfThenElseNode {
-    async fn tick(&mut self) -> NodeResult {
-        let children_count = node_.children.len();
+impl ControlNode for IfThenElseNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let children_count = ctx.children.len();
         // Node should only have 2 or 3 children
         if !(2..=3).contains(&children_count) {
             return Err(NodeError::NodeStructureError(
@@ -35,10 +35,10 @@ impl IfThenElseNode {
             ));
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
         if self.child_idx == 0 {
-            let status = node_.children[0].execute_tick().await?;
+            let status = ctx.children[0].execute_tick()?;
             match status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Success => self.child_idx += 1,
@@ -60,11 +60,11 @@ impl IfThenElseNode {
         }
 
         if self.child_idx > 0 {
-            let status = node_.children[self.child_idx].execute_tick().await?;
+            let status = ctx.children[self.child_idx].execute_tick()?;
             match status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 status => {
-                    node_.reset_children().await;
+                    ctx.reset_children();
                     self.child_idx = 0;
                     return Ok(status);
                 }
@@ -76,8 +76,8 @@ impl IfThenElseNode {
         ))
     }
 
-    async fn halt(&mut self) {
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
         self.child_idx = 0;
-        node_.reset_children().await;
+        ctx.reset_children()
     }
 }

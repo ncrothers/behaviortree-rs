@@ -1,9 +1,9 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// The ReactiveSequence is similar to a ParallelNode.
 /// All the children are ticked from first to last:
@@ -16,30 +16,35 @@ use crate::{
 ///
 /// IMPORTANT: to work properly, this node should not have more than a single
 ///            asynchronous child.
-#[bt_node(ControlNode)]
+#[derive(Debug)]
 pub struct ReactiveSequenceNode {
-    #[bt(default = "-1")]
+    /// Default: -1
     running_child: i32,
 }
 
-#[bt_node(ControlNode)]
-impl ReactiveSequenceNode {
-    async fn tick(&mut self) -> NodeResult {
+impl Default for ReactiveSequenceNode {
+    fn default() -> Self {
+        Self { running_child: -1 }
+    }
+}
+
+impl ControlNode for ReactiveSequenceNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
         let mut all_skipped = true;
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
-        for counter in 0..node_.children.len() {
-            let child = &mut node_.children[counter];
-            let child_status = child.execute_tick().await?;
+        for counter in 0..ctx.children.len() {
+            let child = &mut ctx.children[counter];
+            let child_status = child.execute_tick()?;
 
             all_skipped &= child_status == NodeStatus::Skipped;
 
             match child_status {
                 NodeStatus::Running => {
                     for i in 0..counter {
-                        node_.children[i].halt().await;
-                        // node_.halt_child(i).await?;
+                        ctx.children[i].halt();
+                        // ctx.halt_child(i)?;
                     }
                     if self.running_child == -1 {
                         self.running_child = counter as i32;
@@ -53,15 +58,15 @@ impl ReactiveSequenceNode {
                     return Ok(NodeStatus::Running);
                 }
                 NodeStatus::Failure => {
-                    node_.reset_children().await;
+                    ctx.reset_children();
                     return Ok(NodeStatus::Failure);
                 }
                 // Do nothing on Success
                 NodeStatus::Success => {}
                 NodeStatus::Skipped => {
                     // Halt current child
-                    node_.children[counter].halt().await;
-                    // node_.halt_child(counter).await?;
+                    ctx.children[counter].halt()?;
+                    // ctx.halt_child(counter)?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
@@ -72,7 +77,7 @@ impl ReactiveSequenceNode {
             }
         }
 
-        node_.reset_children().await;
+        ctx.reset_children()?;
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),
@@ -80,7 +85,7 @@ impl ReactiveSequenceNode {
         }
     }
 
-    async fn halt(&mut self) {
-        node_.reset_children().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_children()
     }
 }

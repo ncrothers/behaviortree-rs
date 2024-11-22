@@ -1,7 +1,10 @@
 use behaviortree_rs::{
     basic_types::{BTToString, NodeStatus, PortsList},
     macros::{define_ports, input_port},
-    nodes::NodeResult,
+    nodes::{
+        action::{StatefulActionNode, SyncActionNode},
+        NodeData, NodeResult,
+    },
 };
 use behaviortree_rs_derive::{bt_node, BTToString, FromString};
 use log::info;
@@ -22,42 +25,31 @@ pub fn test_setup() {
         .try_init();
 }
 
-#[bt_node(SyncActionNode)]
-pub struct StatusNode {}
+#[derive(Debug)]
+pub struct StatusNode;
 
-#[bt_node(
-    SyncActionNode,
-    ports = provided_ports,
-    tick = tick,
-)]
-impl StatusNode {
-    async fn tick(&mut self) -> NodeResult {
-        let status: NodeStatus = node_.config.get_input("status")?;
+impl SyncActionNode for StatusNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let status: NodeStatus = ctx.config.get_input("status")?;
 
         info!("I am a node that returns {}!", status.bt_to_string());
 
         Ok(status)
     }
 
-    fn provided_ports() -> PortsList {
+    fn ports(&self) -> PortsList {
         define_ports!(input_port!("status"))
     }
 }
 
-#[bt_node(SyncActionNode)]
+#[derive(Debug, Default)]
 pub struct SuccessThenFailure {
-    #[bt(default)]
     iter: usize,
 }
 
-#[bt_node(
-    SyncActionNode,
-    ports = provided_ports,
-    tick = tick,
-)]
-impl SuccessThenFailure {
-    async fn tick(&mut self) -> NodeResult {
-        let max_iters: usize = node_.config.get_input("iters")?;
+impl SyncActionNode for SuccessThenFailure {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let max_iters: usize = ctx.config.get_input("iters")?;
 
         info!("SuccessThenFailure!");
 
@@ -69,83 +61,75 @@ impl SuccessThenFailure {
         }
     }
 
-    fn provided_ports() -> PortsList {
+    fn ports(&self) -> PortsList {
         define_ports!(input_port!("iters"))
     }
 }
 
-#[bt_node(SyncActionNode)]
-pub struct EchoNode {}
+#[derive(Debug)]
+pub struct EchoNode;
 
-#[bt_node(
-    SyncActionNode,
-    ports = provided_ports,
-    tick = tick,
-)]
-impl EchoNode {
-    async fn tick(&mut self) -> NodeResult {
-        let msg: String = node_.config.get_input("msg")?;
+impl SyncActionNode for EchoNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let msg: String = ctx.config.get_input("msg")?;
 
         info!("{msg}");
 
         Ok(NodeStatus::Success)
     }
 
-    fn provided_ports() -> PortsList {
+    fn ports(&self) -> PortsList {
         define_ports!(input_port!("msg"))
     }
 }
 
-#[bt_node(StatefulActionNode)]
+#[derive(Debug, Default)]
 pub struct RunForNode {
-    #[bt(default)]
     counter: usize,
 }
 
-#[bt_node(
-    StatefulActionNode,
-    on_start = on_start,
-    on_running = on_running,
-    ports = provided_ports,
-)]
-impl RunForNode {
-    fn provided_ports() -> PortsList {
+impl StatefulActionNode for RunForNode {
+    fn ports(&self) -> PortsList {
         define_ports!(
             input_port!("iters"),
             input_port!("status", NodeStatus::Success)
         )
     }
 
-    async fn on_start(&mut self) -> NodeResult {
+    fn on_start(&mut self, ctx: &mut NodeData) -> NodeResult {
         info!("on_start()");
 
         Ok(NodeStatus::Running)
     }
 
-    async fn on_running(&mut self) -> NodeResult {
-        let limit: usize = node_.config.get_input("iters")?;
+    fn on_running(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let limit: usize = ctx.config.get_input("iters")?;
 
         if self.counter < limit {
-            info!("RunFor {}", self_.counter);
+            info!("RunFor {}", self.counter);
             self.counter += 1;
             Ok(NodeStatus::Running)
         } else {
-            Ok(node_.config.get_input("status")?)
+            Ok(ctx.config.get_input("status")?)
         }
     }
 }
 
-#[bt_node(SyncActionNode)]
+#[derive(Debug)]
 pub struct DataNode {
     inner_name: String,
 }
 
-#[bt_node(
-    SyncActionNode,
-    tick = tick,
-)]
 impl DataNode {
-    async fn tick(&mut self) -> NodeResult {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self {
+            inner_name: value.into(),
+        }
+    }
+}
+
+impl SyncActionNode for DataNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
         Ok(NodeStatus::Success)
     }
 }

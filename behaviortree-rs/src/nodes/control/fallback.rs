@@ -1,9 +1,9 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// The FallbackNode is used to try different strategies,
 /// until one succeeds.
@@ -14,29 +14,36 @@ use crate::{
 /// - If a child returns RUNNING, this node returns RUNNING.
 ///
 /// - If a child returns SUCCESS, stop the loop and return SUCCESS.
-// #[derive(TreeNodeDefaults, ControlNode, Debug, Clone)]
-#[bt_node(ControlNode)]
+#[derive(Debug)]
 pub struct FallbackNode {
-    #[bt(default = "0")]
+    /// Default: 0
     child_idx: usize,
-    #[bt(default = "true")]
+    /// Default: true
     all_skipped: bool,
 }
 
-#[bt_node(ControlNode)]
-impl FallbackNode {
-    async fn tick(&mut self) -> NodeResult {
-        if node_.status == NodeStatus::Idle {
+impl Default for FallbackNode {
+    fn default() -> Self {
+        Self {
+            child_idx: 0,
+            all_skipped: true,
+        }
+    }
+}
+
+impl ControlNode for FallbackNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        if ctx.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
-        while self.child_idx < node_.children.len() {
-            let cur_child = &mut node_.children[self.child_idx];
+        while self.child_idx < ctx.children.len() {
+            let cur_child = &mut ctx.children[self.child_idx];
 
             let _prev_status = cur_child.status();
-            let child_status = cur_child.execute_tick().await?;
+            let child_status = cur_child.execute_tick()?;
 
             self.all_skipped &= child_status == NodeStatus::Skipped;
 
@@ -48,7 +55,7 @@ impl FallbackNode {
                     self.child_idx += 1;
                 }
                 NodeStatus::Success => {
-                    node_.reset_children().await;
+                    ctx.reset_children();
                     self.child_idx = 0;
                     return Ok(NodeStatus::Success);
                 }
@@ -64,8 +71,8 @@ impl FallbackNode {
             };
         }
 
-        if self.child_idx == node_.children.len() {
-            node_.reset_children().await;
+        if self.child_idx == ctx.children.len() {
+            ctx.reset_children();
             self.child_idx = 0;
         }
 
@@ -75,8 +82,8 @@ impl FallbackNode {
         }
     }
 
-    async fn halt(&mut self) {
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
         self.child_idx = 0;
-        node_.reset_children().await;
+        ctx.reset_children()
     }
 }

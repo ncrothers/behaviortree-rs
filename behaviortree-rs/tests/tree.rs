@@ -1,4 +1,8 @@
-use behaviortree_rs::{nodes::TreeNode, Blackboard, Factory};
+use behaviortree_rs::{
+    basic_types::NodeCategory,
+    nodes::{ToBoxed, TreeNode},
+    Blackboard, Factory,
+};
 use behaviortree_rs_derive::register_action_node;
 use nodes::StatusNode;
 
@@ -23,7 +27,7 @@ fn visitor() {
     .to_string();
 
     let mut factory = Factory::new();
-    register_action_node!(factory, "StatusNode", StatusNode);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_sync_tree_from_text(xml, &blackboard);

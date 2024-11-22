@@ -125,21 +125,21 @@ macro_rules! __output_port {
 #[doc(inline)]
 pub use __output_port as output_port;
 
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __build_node_ptr {
-    ($conf:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
-        {
-            let mut node = <$t>::create_node($n, $conf, $($x),*);
-            let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_category(), $n, node.provided_ports(), "");
-            node.config_mut().set_manifest(::std::sync::Arc::new(manifest));
-            // let node = Box::new(node);
-            node
-        }
-    };
-    // ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
-    //     <$t>::new($n, $($x),*)
-    // };
-}
-#[doc(inline)]
-pub use __build_node_ptr as build_node_ptr;
+// #[macro_export]
+// #[doc(hidden)]
+// macro_rules! __build_node_ptr {
+//     ($conf:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
+//         {
+//             let mut node = <$t>::create_node($n, $conf, $($x),*);
+//             let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_category(), $n, node.provided_ports(), "");
+//             node.config_mut().set_manifest(::std::sync::Arc::new(manifest));
+//             // let node = Box::new(node);
+//             node
+//         }
+//     };
+//     // ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
+//     //     <$t>::new($n, $($x),*)
+//     // };
+// }
+// #[doc(inline)]
+// pub use __build_node_ptr as build_node_ptr;

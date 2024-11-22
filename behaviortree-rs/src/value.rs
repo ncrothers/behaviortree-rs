@@ -39,7 +39,7 @@ impl Value {
                     let as_str = item.as_string()?;
                     output.reserve(as_str.len() + 1);
                     output.push_str(&as_str);
-                    
+
                     if i < vec.len() - 1 {
                         output.push(',');
                     }
@@ -66,11 +66,11 @@ macro_rules! impl_from_int {
     };
 }
 
-impl_from_int!{ i8 u8 i16 u16 i32 u32 i64 u64 i128 u128 }
+impl_from_int! { i8 u8 i16 u16 i32 u32 i64 u64 i128 u128 }
 
 impl<T> From<T> for Value
 where
-    T: BlackboardValue + 'static
+    T: BlackboardValue + 'static,
 {
     fn from(value: T) -> Self {
         Value::Dynamic(Box::new(value))

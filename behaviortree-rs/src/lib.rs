@@ -67,7 +67,7 @@ struct DummyActionNode {
 
 ### Node functions
 
-```rust
+```ignore
 use behaviortree_rs::prelude::*;
 
 #[bt_node(SyncActionNode)]

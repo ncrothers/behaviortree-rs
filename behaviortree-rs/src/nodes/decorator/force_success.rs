@@ -1,20 +1,22 @@
-use behaviortree_rs_derive::bt_node;
+use crate::{
+    basic_types::NodeStatus,
+    nodes::{NodeData, NodeResult},
+};
 
-use crate::{basic_types::NodeStatus, nodes::NodeResult};
+use super::DecoratorNode;
 
 /// The ForceSuccessNode returns always Success or Running
-#[bt_node(DecoratorNode)]
-pub struct ForceSuccessNode {}
+#[derive(Debug, Default)]
+pub struct ForceSuccessNode;
 
-#[bt_node(DecoratorNode)]
-impl ForceSuccessNode {
-    async fn tick(&mut self) -> NodeResult {
-        node_.set_status(NodeStatus::Running);
+impl DecoratorNode for ForceSuccessNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        ctx.set_status(NodeStatus::Running);
 
-        let child_status = node_.child().unwrap().execute_tick().await?;
+        let child_status = ctx.child().unwrap().execute_tick()?;
 
         if child_status.is_completed() {
-            node_.reset_child().await;
+            ctx.reset_child()?;
 
             return Ok(NodeStatus::Success);
         }
@@ -22,7 +24,7 @@ impl ForceSuccessNode {
         Ok(child_status)
     }
 
-    async fn halt(&mut self) {
-        node_.reset_child().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_child()
     }
 }

@@ -1,9 +1,9 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// The ReactiveFallback is similar to a ParallelNode.
 /// All the children are ticked from first to last:
@@ -16,37 +16,36 @@ use crate::{
 ///
 /// IMPORTANT: to work properly, this node should not have more than
 ///            a single asynchronous child.
-#[bt_node(ControlNode)]
-pub struct ReactiveFallbackNode {}
+#[derive(Debug)]
+pub struct ReactiveFallbackNode;
 
-#[bt_node(ControlNode)]
-impl ReactiveFallbackNode {
-    async fn tick(&mut self) -> NodeResult {
+impl ControlNode for ReactiveFallbackNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
         let mut all_skipped = true;
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
-        for index in 0..node_.children.len() {
-            let cur_child = &mut node_.children[index];
+        for index in 0..ctx.children.len() {
+            let cur_child = &mut ctx.children[index];
 
-            let child_status = cur_child.execute_tick().await?;
+            let child_status = cur_child.execute_tick()?;
 
             all_skipped &= child_status == NodeStatus::Skipped;
 
             match &child_status {
                 NodeStatus::Running => {
                     for i in 0..index {
-                        node_.halt_child_idx(i).await?;
+                        ctx.halt_child_idx(i)?;
                     }
 
                     return Ok(NodeStatus::Running);
                 }
                 NodeStatus::Failure => {}
                 NodeStatus::Success => {
-                    node_.reset_children().await;
+                    ctx.reset_children()?;
                     return Ok(NodeStatus::Success);
                 }
                 NodeStatus::Skipped => {
-                    node_.halt_child_idx(index).await?;
+                    ctx.halt_child_idx(index)?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
@@ -57,7 +56,7 @@ impl ReactiveFallbackNode {
             };
         }
 
-        node_.reset_children().await;
+        ctx.reset_children()?;
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),
@@ -65,7 +64,7 @@ impl ReactiveFallbackNode {
         }
     }
 
-    async fn halt(&mut self) {
-        node_.reset_children().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_children()
     }
 }
