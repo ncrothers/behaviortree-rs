@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Cursor, string::FromUtf8Error, sync::Arc};
+use std::{collections::HashMap, io::Cursor, ops::Deref, string::FromUtf8Error, sync::Arc};
 
 use evalexpr::{DefaultNumericTypes, EvalexprError};
 use futures::future::BoxFuture;
@@ -17,7 +17,7 @@ use crate::{
     },
     blackboard::{Blackboard, BlackboardString},
     nodes::{
-        self, control::Control, NodeBase, NodeConfig, NodeData, NodeResult, NodeType, ToBoxed,
+        self, NodeBase, NodeConfig, NodeData, NodeResult, ToBoxed,
         TreeNode,
     },
 };
@@ -266,7 +266,7 @@ impl Factory {
         &self,
         name: String,
         node_category: NodeCategory,
-        node_fn: &Arc<NodeCreateFnDyn>,
+        node_fn: &NodeCreateFnDyn,
         config: NodeConfig,
         children: Vec<TreeNode>,
     ) -> TreeNode {
@@ -426,7 +426,7 @@ impl Factory {
             return Err(ParseError::NodeTypeMismatch(String::from("Action")));
         }
 
-        let mut node = self.create_node(node_name.clone(), *node_type, node_fn, config, Vec::new());
+        let mut node = self.create_node(node_name.clone(), *node_type, node_fn.deref(), config, Vec::new());
 
         self.add_ports_to_node(&mut node, node_name, attributes)
             .await?;
@@ -583,7 +583,7 @@ impl Factory {
                             let mut node = self.create_node(
                                 node_name.clone(),
                                 *node_type,
-                                node_fn,
+                                node_fn.deref(),
                                 config,
                                 children,
                             );
@@ -594,8 +594,6 @@ impl Factory {
                             node
                         }
                         NodeCategory::Decorator => {
-                            // Make checkpoint to rewind to if necessary
-                            let checkpoint = reader.buffer_position();
                             // Loop until either an end tag or the child is found
                             let child = loop {
                                 match self
@@ -648,7 +646,7 @@ impl Factory {
                             let mut node = self.create_node(
                                 node_name.clone(),
                                 *node_type,
-                                node_fn,
+                                node_fn.deref(),
                                 config,
                                 vec![child],
                             );
