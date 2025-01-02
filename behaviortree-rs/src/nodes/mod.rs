@@ -59,6 +59,8 @@ pub struct NodeData {
     pub status: NodeStatus,
     /// Vector of child nodes
     pub children: Vec<TreeNode>,
+    #[cfg(feature = "async-tokio")]
+    pub(crate) handle: tokio::runtime::Handle,
 }
 
 #[derive(Debug)]

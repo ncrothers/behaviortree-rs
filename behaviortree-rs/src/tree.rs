@@ -231,6 +231,8 @@ pub struct Factory {
     main_tree_id: Option<String>,
     // TODO: temporary solution, potentially replace later
     tree_uid: std::sync::Mutex<u32>,
+    #[cfg(feature = "async")]
+    async_handle: crate::r#async::AsyncRuntime,
 }
 
 impl Factory {
@@ -243,6 +245,8 @@ impl Factory {
             tree_roots: HashMap::new(),
             main_tree_id: None,
             tree_uid: std::sync::Mutex::new(0),
+            #[cfg(feature = "async")]
+            async_handle: crate::r#async::AsyncRuntime::default(),
         }
     }
 
@@ -290,6 +294,8 @@ impl Factory {
                 config,
                 status: NodeStatus::Idle,
                 children,
+                #[cfg(feature = "async")]
+                handle: crate::r#async::AsyncRuntime,
             },
         }
     }
@@ -352,11 +358,15 @@ impl Factory {
         }
     }
 
+    #[cfg(feature = "async")]
     pub async fn create_async_tree_from_text(
         &mut self,
         text: String,
         blackboard: &Blackboard,
+        runtime: crate::r#async::AsyncRuntime,
     ) -> Result<AsyncTree, ParseError> {
+        self.async_handle = runtime;
+
         self.register_bt_from_text(text)?;
 
         if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
