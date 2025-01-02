@@ -1,9 +1,9 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// WhileDoElse must have exactly 2 or 3 children.
 /// It is a REACTIVE node of IfThenElseNode.
@@ -16,13 +16,12 @@ use crate::{
 ///
 /// If the 2nd or 3d child is RUNNING and the statement changes,
 /// the RUNNING child will be stopped before starting the sibling.
-#[bt_node(ControlNode)]
-pub struct WhileDoElseNode {}
+#[derive(Debug)]
+pub struct WhileDoElseNode;
 
-#[bt_node(ControlNode)]
-impl WhileDoElseNode {
-    async fn tick(&mut self) -> NodeResult {
-        let children_count = node_.children.len();
+impl ControlNode for WhileDoElseNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let children_count = ctx.children.len();
         // Node should only have 2 or 3 children
         if !(2..=3).contains(&children_count) {
             return Err(NodeError::NodeStructureError(
@@ -30,9 +29,9 @@ impl WhileDoElseNode {
             ));
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
-        let condition_status = node_.children[0].execute_tick().await?;
+        let condition_status = ctx.children[0].execute_tick()?;
 
         if matches!(condition_status, NodeStatus::Running) {
             return Ok(NodeStatus::Running);
@@ -43,15 +42,15 @@ impl WhileDoElseNode {
         match condition_status {
             NodeStatus::Success => {
                 if children_count == 3 {
-                    node_.halt_child_idx(2).await?;
+                    ctx.halt_child_idx(2)?;
                 }
 
-                status = node_.children[1].execute_tick().await?;
+                status = ctx.children[1].execute_tick()?;
             }
             NodeStatus::Failure => match children_count {
                 3 => {
-                    node_.halt_child_idx(1).await?;
-                    status = node_.children[2].execute_tick().await?;
+                    ctx.halt_child_idx(1)?;
+                    status = ctx.children[2].execute_tick()?;
                 }
                 2 => {
                     status = NodeStatus::Failure;
@@ -64,13 +63,13 @@ impl WhileDoElseNode {
         match status {
             NodeStatus::Running => Ok(NodeStatus::Running),
             status => {
-                node_.reset_children().await;
+                ctx.reset_children()?;
                 Ok(status)
             }
         }
     }
 
-    async fn halt(&mut self) {
-        node_.reset_children().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_children()
     }
 }

@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// The ParallelAllNode execute all its children
 /// __concurrently__, but not in separate threads!
@@ -19,17 +19,26 @@ use crate::{
 /// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
 ///
 /// Therefore -1 is equivalent to the number of children.
-#[bt_node(ControlNode)]
+#[derive(Debug)]
 pub struct ParallelAllNode {
-    #[bt(default = "-1")]
+    /// Default: -1
     failure_threshold: i32,
-    #[bt(default)]
+    /// Default: empty
     completed_list: HashSet<usize>,
-    #[bt(default = "0")]
+    /// Default: 0
     failure_count: usize,
 }
 
-#[bt_node(ControlNode)]
+impl Default for ParallelAllNode {
+    fn default() -> Self {
+        Self {
+            failure_threshold: -1,
+            completed_list: HashSet::default(),
+            failure_count: 0,
+        }
+    }
+}
+
 impl ParallelAllNode {
     fn failure_threshold(&self, n_children: i32) -> usize {
         if self.failure_threshold < 0 {
@@ -38,11 +47,17 @@ impl ParallelAllNode {
             self.failure_threshold as usize
         }
     }
+}
 
-    async fn tick(&mut self) -> NodeResult {
-        self.failure_threshold = node_.config.get_input("max_failures")?;
+impl ControlNode for ParallelAllNode {
+    fn ports(&self) -> crate::basic_types::PortsList {
+        define_ports!(input_port!("max_failures", 1))
+    }
 
-        let children_count = node_.children.len();
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        self.failure_threshold = ctx.config.get_input("max_failures")?;
+
+        let children_count = ctx.children.len();
 
         if (children_count as i32) < self.failure_threshold {
             return Err(NodeError::NodeStructureError(
@@ -58,7 +73,7 @@ impl ParallelAllNode {
                 continue;
             }
 
-            let status = node_.children[i].execute_tick().await?;
+            let status = ctx.children[i].execute_tick()?;
             match status {
                 NodeStatus::Success => {
                     self.completed_list.insert(i);
@@ -85,15 +100,15 @@ impl ParallelAllNode {
 
         if skipped_count + self.completed_list.len() >= children_count {
             // Done!
-            node_.reset_children().await;
+            ctx.reset_children();
             self.completed_list.clear();
 
-            let status =
-                if self.failure_count >= self.failure_threshold(node_.children.len() as i32) {
-                    NodeStatus::Failure
-                } else {
-                    NodeStatus::Success
-                };
+            let status = if self.failure_count >= self.failure_threshold(ctx.children.len() as i32)
+            {
+                NodeStatus::Failure
+            } else {
+                NodeStatus::Success
+            };
 
             // Reset failure_count after using it
             self.failure_count = 0;
@@ -104,11 +119,7 @@ impl ParallelAllNode {
         Ok(NodeStatus::Running)
     }
 
-    fn ports() -> crate::basic_types::PortsList {
-        define_ports!(input_port!("max_failures", 1))
-    }
-
-    async fn halt(&mut self) {
-        node_.reset_children().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_children()
     }
 }

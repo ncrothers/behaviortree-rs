@@ -1,28 +1,27 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
 
+use super::DecoratorNode;
+
 /// The InverterNode returns Failure on Success, and Success on Failure
-#[bt_node(DecoratorNode)]
-pub struct InverterNode {}
+#[derive(Debug, Default)]
+pub struct InverterNode;
 
-#[bt_node(DecoratorNode)]
-impl InverterNode {
-    async fn tick(&mut self) -> NodeResult {
-        node_.set_status(NodeStatus::Running);
+impl DecoratorNode for InverterNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        ctx.set_status(NodeStatus::Running);
 
-        let child_status = node_.child().unwrap().execute_tick().await?;
+        let child_status = ctx.child().unwrap().execute_tick()?;
 
         match child_status {
             NodeStatus::Success => {
-                node_.reset_child().await;
+                ctx.reset_child()?;
                 Ok(NodeStatus::Failure)
             }
             NodeStatus::Failure => {
-                node_.reset_child().await;
+                ctx.reset_child()?;
                 Ok(NodeStatus::Success)
             }
             status @ (NodeStatus::Running | NodeStatus::Skipped) => Ok(status),
@@ -33,7 +32,7 @@ impl InverterNode {
         }
     }
 
-    async fn halt(&mut self) {
-        node_.reset_child().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_child()
     }
 }

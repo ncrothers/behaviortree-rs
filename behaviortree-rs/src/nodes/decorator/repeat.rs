@@ -1,10 +1,10 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::DecoratorNode;
 
 /// /// The RetryNode is used to execute a child several times, as long
 /// as it succeed.
@@ -21,32 +21,45 @@ use crate::{
 ///   <ClapYourHandsOnce/>
 /// </Repeat>
 /// ```
-#[bt_node(DecoratorNode)]
+#[derive(Debug)]
 pub struct RepeatNode {
-    #[bt(default = "-1")]
+    /// Default: -1
     num_cycles: i32,
-    #[bt(default = "0")]
+    /// Default: 0
     repeat_count: usize,
-    #[bt(default = "true")]
+    /// Default: true
     all_skipped: bool,
 }
 
-#[bt_node(DecoratorNode)]
-impl RepeatNode {
-    async fn tick(&mut self) -> NodeResult {
+impl Default for RepeatNode {
+    fn default() -> Self {
+        Self {
+            num_cycles: -1,
+            repeat_count: 0,
+            all_skipped: true,
+        }
+    }
+}
+
+impl DecoratorNode for RepeatNode {
+    fn ports(&self) -> crate::basic_types::PortsList {
+        define_ports!(input_port!("num_cycles"))
+    }
+
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
         // Load num_cycles from the port value
-        self.num_cycles = node_.config.get_input("num_cycles")?;
+        self.num_cycles = ctx.config.get_input("num_cycles")?;
 
         let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 
-        if matches!(node_.status, NodeStatus::Idle) {
+        if matches!(ctx.status, NodeStatus::Idle) {
             self.all_skipped = true;
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
         while do_loop {
-            let child_status = node_.child().unwrap().execute_tick().await?;
+            let child_status = ctx.child().unwrap().execute_tick()?;
 
             self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
 
@@ -55,17 +68,17 @@ impl RepeatNode {
                     self.repeat_count += 1;
                     do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 
-                    node_.reset_child().await;
+                    ctx.reset_child()?;
                 }
                 NodeStatus::Failure => {
                     self.repeat_count = 0;
-                    node_.reset_child().await;
+                    ctx.reset_child()?;
 
                     return Ok(NodeStatus::Failure);
                 }
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Skipped => {
-                    node_.reset_child().await;
+                    ctx.reset_child()?;
 
                     return Ok(NodeStatus::Skipped);
                 }
@@ -86,12 +99,8 @@ impl RepeatNode {
         }
     }
 
-    fn ports() -> crate::basic_types::PortsList {
-        define_ports!(input_port!("num_cycles"))
-    }
-
-    async fn halt(&mut self) {
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
         self.repeat_count = 0;
-        node_.reset_child().await;
+        ctx.reset_child()
     }
 }

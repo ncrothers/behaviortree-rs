@@ -25,11 +25,10 @@ pub mod decorator;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 type TickFn = for<'a> fn(
-    &'a mut TreeNodeData,
+    &'a mut NodeData,
     &'a mut Box<dyn Any + Send + Sync>,
 ) -> BoxFuture<'a, Result<NodeStatus, NodeError>>;
-type HaltFn =
-    for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
+type HaltFn = for<'a> fn(&'a mut NodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
 type PortsFn = fn() -> PortsList;
 
 #[derive(Clone, Copy, Debug)]
@@ -40,30 +39,32 @@ pub enum NodeType {
     SyncAction,
 }
 
+pub trait NodeBase: std::fmt::Debug + Send + Sync {
+    fn node_type(&self) -> NodeType;
+    fn ports(&self) -> PortsList;
+    fn execute_tick(&mut self, ctx: &mut NodeData) -> NodeResult;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()>;
+}
+
+pub trait ToBoxed<T> {
+    fn to_boxed(self) -> Box<dyn NodeBase>;
+}
+
 #[derive(Debug)]
-pub struct TreeNodeData {
+pub struct NodeData {
     pub name: String,
-    pub type_str: String,
     pub node_type: NodeType,
     pub node_category: NodeCategory,
     pub config: NodeConfig,
     pub status: NodeStatus,
     /// Vector of child nodes
     pub children: Vec<TreeNode>,
-    pub ports_fn: PortsFn,
 }
 
 #[derive(Debug)]
 pub struct TreeNode {
-    pub data: TreeNodeData,
-    pub context: Box<dyn Any + Send + Sync>,
-    /// Function pointer to tick
-    pub tick_fn: TickFn,
-    /// Function pointer to on_start function (if StatefulActionNode)
-    /// Otherwise points to tick_fn
-    pub start_fn: TickFn,
-    /// Function pointer to halt
-    pub halt_fn: HaltFn,
+    pub data: NodeData,
+    pub node: Box<dyn NodeBase>,
 }
 
 impl TreeNode {
@@ -82,77 +83,14 @@ impl TreeNode {
         self.data.status = status;
     }
 
-    /// Internal-only, calls the action-type-specific tick
-    async fn action_tick(&mut self) -> NodeResult {
-        match self.data.node_type {
-            NodeType::StatefulAction => {
-                let prev_status = self.data.status;
-
-                let new_status = match prev_status {
-                    NodeStatus::Idle => {
-                        ::log::debug!("[behaviortree_rs]: {}::on_start()", &self.data.config.path);
-                        // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
-                        let new_status = (self.start_fn)(&mut self.data, &mut self.context).await?;
-                        // drop(wrapper);
-                        if matches!(new_status, NodeStatus::Idle) {
-                            return Err(NodeError::StatusError(
-                                format!("{}::on_start()", self.data.config.path),
-                                "Idle".to_string(),
-                            ));
-                        }
-                        new_status
-                    }
-                    NodeStatus::Running => {
-                        ::log::debug!(
-                            "[behaviortree_rs]: {}::on_running()",
-                            &self.data.config.path
-                        );
-                        let new_status = (self.tick_fn)(&mut self.data, &mut self.context).await?;
-                        if matches!(new_status, NodeStatus::Idle) {
-                            return Err(NodeError::StatusError(
-                                format!("{}::on_running()", self.data.config.path),
-                                "Idle".to_string(),
-                            ));
-                        }
-                        new_status
-                    }
-                    prev_status => prev_status,
-                };
-
-                self.set_status(new_status);
-
-                Ok(new_status)
-            }
-            NodeType::SyncAction => {
-                match (self.tick_fn)(&mut self.data, &mut self.context).await? {
-                    status @ (NodeStatus::Running | NodeStatus::Idle) => {
-                        Err(::behaviortree_rs::nodes::NodeError::StatusError(
-                            self.data.config.path.clone(),
-                            status.to_string(),
-                        ))
-                    }
-                    status => Ok(status),
-                }
-            }
-            _ => panic!(
-                "This should not be possible, action_tick() was called for a non-action node"
-            ),
-        }
-    }
-
     /// Tick the node
-    pub async fn execute_tick(&mut self) -> NodeResult {
-        match self.data.node_type {
-            NodeType::Control | NodeType::Decorator => {
-                (self.tick_fn)(&mut self.data, &mut self.context).await
-            }
-            NodeType::StatefulAction | NodeType::SyncAction => self.action_tick().await,
-        }
+    pub fn execute_tick(&mut self) -> NodeResult {
+        self.node.execute_tick(&mut self.data)
     }
 
     /// Halt the node
-    pub async fn halt(&mut self) {
-        (self.halt_fn)(&mut self.data, &mut self.context).await;
+    pub fn halt(&mut self) -> NodeResult<()> {
+        self.node.halt(&mut self.data)
     }
 
     /// Get the name of the node
@@ -170,11 +108,7 @@ impl TreeNode {
         &self.data.config
     }
 
-    /// Get the node's `NodeType`, which is only:
-    /// * `NodeType::Control`
-    /// * `NodeType::Decorator`
-    /// * `NodeType::SyncAction`
-    /// * `NodeType::StatefulAction`
+    /// Get the node's [`NodeType`], which is only:
     pub fn node_type(&self) -> NodeType {
         self.data.node_type
     }
@@ -187,7 +121,7 @@ impl TreeNode {
     /// Call the node's `ports()` function if it has one, returning the
     /// `PortsList` object
     pub fn provided_ports(&self) -> PortsList {
-        (self.data.ports_fn)()
+        self.node.ports()
     }
 
     /// Return an iterator over the children. Returns `None` if this node
@@ -211,13 +145,13 @@ impl TreeNode {
     }
 }
 
-impl TreeNodeData {
+impl NodeData {
     /// Halt children from this index to the end.
     ///
     /// # Errors
     ///
     /// Returns `NodeError::IndexError` if `start` is out of bounds.
-    pub async fn halt_children(&mut self, start: usize) -> NodeResult<()> {
+    pub fn halt_children(&mut self, start: usize) -> NodeResult<()> {
         if start >= self.children.len() {
             return Err(NodeError::IndexError);
         }
@@ -225,25 +159,23 @@ impl TreeNodeData {
         let end = self.children.len();
 
         for i in start..end {
-            self.halt_child_idx(i).await?;
+            self.halt_child_idx(i)?;
         }
 
         Ok(())
     }
 
     /// Halts and resets all children
-    pub async fn reset_children(&mut self) {
+    pub fn reset_children(&mut self) -> NodeResult<()> {
         self.halt_children(0)
-            .await
-            .expect("reset_children failed, shouldn't be possible. Report this")
     }
 
     /// Halt child at the `index`. Not to be confused with `halt_child()`, which is
     /// a helper that calls `halt_child_idx(0)`, primarily used for `Decorator` nodes.
-    pub async fn halt_child_idx(&mut self, index: usize) -> NodeResult<()> {
+    pub fn halt_child_idx(&mut self, index: usize) -> NodeResult<()> {
         let child = self.children.get_mut(index).ok_or(NodeError::IndexError)?;
         if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
-            child.halt().await;
+            child.halt()?;
         }
         child.reset_status();
         Ok(())
@@ -256,20 +188,22 @@ impl TreeNodeData {
 
     /// Calls `halt_child_idx(0)`. This should only be used in
     /// `Decorator` nodes
-    pub async fn halt_child(&mut self) {
-        self.reset_child().await
+    pub fn halt_child(&mut self) -> NodeResult<()> {
+        self.reset_child()
     }
 
     /// Halts and resets the first child. This should only be used in
     /// `Decorator` nodes
-    pub async fn reset_child(&mut self) {
+    pub fn reset_child(&mut self) -> NodeResult<()> {
         if let Some(child) = self.children.get_mut(0) {
             if matches!(child.status(), NodeStatus::Running) {
-                child.halt().await;
+                child.halt()?;
             }
 
             child.reset_status();
         }
+
+        Ok(())
     }
 
     /// Gets a mutable reference to the first child. Helper for
@@ -356,9 +290,9 @@ pub struct NodeConfig {
     /// TODO: doesn't show actual path yet
     pub path: String,
     /// TODO: not used
-    _pre_conditions: HashMap<PreCond, String>,
+    pub(crate) _pre_conditions: HashMap<PreCond, String>,
     /// TODO: not used
-    _post_conditions: HashMap<PostCond, String>,
+    pub(crate) _post_conditions: HashMap<PostCond, String>,
 }
 
 impl NodeConfig {

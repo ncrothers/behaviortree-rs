@@ -1,10 +1,10 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::DecoratorNode;
 
 /// The RetryNode is used to execute a child several times if it fails.
 ///
@@ -21,39 +21,52 @@ use crate::{
 ///     <OpenDoor/>
 /// </RetryUntilSuccessful>
 /// ```
-#[bt_node(DecoratorNode)]
+#[derive(Debug)]
 pub struct RetryNode {
-    #[bt(default = "-1")]
+    /// Default: -1
     max_attempts: i32,
-    #[bt(default = "0")]
+    /// Default: 0
     try_count: usize,
-    #[bt(default = "true")]
+    /// Default: true
     all_skipped: bool,
 }
 
-#[bt_node(DecoratorNode)]
-impl RetryNode {
-    async fn tick(&mut self) -> NodeResult {
+impl Default for RetryNode {
+    fn default() -> Self {
+        Self {
+            max_attempts: -1,
+            try_count: 0,
+            all_skipped: true,
+        }
+    }
+}
+
+impl DecoratorNode for RetryNode {
+    fn ports(&self) -> crate::basic_types::PortsList {
+        define_ports!(input_port!("num_attempts"))
+    }
+
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
         // Load num_cycles from the port value
-        self.max_attempts = node_.config.get_input("num_attempts")?;
+        self.max_attempts = ctx.config.get_input("num_attempts")?;
 
         let mut do_loop = (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-        if matches!(node_.status, NodeStatus::Idle) {
+        if matches!(ctx.status, NodeStatus::Idle) {
             self.all_skipped = true;
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
         while do_loop {
-            let child_status = node_.child().unwrap().execute_tick().await?;
+            let child_status = ctx.child().unwrap().execute_tick()?;
 
             self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
 
             match child_status {
                 NodeStatus::Success => {
                     self.try_count = 0;
-                    node_.reset_child().await;
+                    ctx.reset_child()?;
 
                     return Ok(NodeStatus::Success);
                 }
@@ -62,11 +75,11 @@ impl RetryNode {
                     do_loop =
                         (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-                    node_.reset_child().await;
+                    ctx.reset_child()?;
                 }
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Skipped => {
-                    node_.reset_child().await;
+                    ctx.reset_child()?;
 
                     return Ok(NodeStatus::Skipped);
                 }
@@ -87,12 +100,8 @@ impl RetryNode {
         }
     }
 
-    fn ports() -> crate::basic_types::PortsList {
-        define_ports!(input_port!("num_attempts"))
-    }
-
-    async fn halt(&mut self) {
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
         self.try_count = 0;
-        node_.reset_child().await;
+        ctx.reset_child()
     }
 }

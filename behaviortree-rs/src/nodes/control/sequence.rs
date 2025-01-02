@@ -1,9 +1,9 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
-    nodes::{NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
+
+use super::ControlNode;
 
 /// The SequenceNode is used to tick children in an ordered sequence.
 /// If any child returns RUNNING, previous children will NOT be ticked again.
@@ -14,35 +14,43 @@ use crate::{
 ///   Loop is NOT restarted, the same running child will be ticked again.
 ///
 /// - If a child returns FAILURE, stop the loop and return FAILURE.
-#[bt_node(ControlNode)]
+#[derive(Debug)]
 pub struct SequenceNode {
-    #[bt(default = "0")]
+    /// Default = 0
     child_idx: usize,
-    #[bt(default = "false")]
+    /// Default: false
     all_skipped: bool,
 }
 
-#[bt_node(ControlNode)]
-impl SequenceNode {
-    async fn tick(&mut self) -> NodeResult {
-        if node_.status == NodeStatus::Idle {
+impl Default for SequenceNode {
+    fn default() -> Self {
+        Self {
+            child_idx: 0,
+            all_skipped: false,
+        }
+    }
+}
+
+impl ControlNode for SequenceNode {
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        if ctx.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
-        while self.child_idx < node_.children.len() {
-            let cur_child = &mut node_.children[self.child_idx];
+        while self.child_idx < ctx.children.len() {
+            let cur_child = &mut ctx.children[self.child_idx];
 
             let _prev_status = cur_child.status();
-            let child_status = cur_child.execute_tick().await?;
+            let child_status = cur_child.execute_tick()?;
 
             self.all_skipped &= child_status == NodeStatus::Skipped;
 
             match &child_status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Failure => {
-                    node_.reset_children().await;
+                    ctx.reset_children()?;
                     self.child_idx = 0;
                     return Ok(NodeStatus::Failure);
                 }
@@ -58,16 +66,16 @@ impl SequenceNode {
             };
         }
 
-        if self.child_idx == node_.children.len() {
-            node_.reset_children().await;
+        if self.child_idx == ctx.children.len() {
+            ctx.reset_children()?;
             self.child_idx = 0;
         }
 
         Ok(NodeStatus::Success)
     }
 
-    async fn halt(&mut self) {
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
         self.child_idx = 0;
-        node_.reset_children().await;
+        ctx.reset_children()
     }
 }

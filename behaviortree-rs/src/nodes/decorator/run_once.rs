@@ -1,10 +1,10 @@
-use behaviortree_rs_derive::bt_node;
-
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::NodeResult,
+    nodes::{NodeData, NodeResult},
 };
+
+use super::DecoratorNode;
 
 /// The RunOnceNode is used when you want to execute the child
 /// only once.
@@ -15,45 +15,53 @@ use crate::{
 ///
 /// - if TRUE (default), the node will be skipped in the future.
 /// - if FALSE, return synchronously the same status returned by the child, forever.
-#[bt_node(DecoratorNode)]
+#[derive(Debug)]
 pub struct RunOnceNode {
-    #[bt(default = "false")]
+    /// Default: false
     already_ticked: bool,
-    #[bt(default = "NodeStatus::Idle")]
+    /// Default: NodeStatus::Idle
     returned_status: NodeStatus,
 }
 
-#[bt_node(DecoratorNode)]
-impl RunOnceNode {
-    async fn tick(&mut self) -> NodeResult {
-        let skip = node_.config.get_input("then_skip")?;
+impl Default for RunOnceNode {
+    fn default() -> Self {
+        Self {
+            already_ticked: false,
+            returned_status: NodeStatus::Idle,
+        }
+    }
+}
+
+impl DecoratorNode for RunOnceNode {
+    fn ports(&self) -> crate::basic_types::PortsList {
+        define_ports!(input_port!("then_skip", true))
+    }
+
+    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+        let skip = ctx.config.get_input("then_skip")?;
 
         if self.already_ticked {
             return if skip {
                 Ok(NodeStatus::Skipped)
             } else {
-                Ok(self.returned_status.clone())
+                Ok(self.returned_status)
             };
         }
 
-        node_.status = NodeStatus::Running;
+        ctx.status = NodeStatus::Running;
 
-        let status = node_.child().unwrap().execute_tick().await?;
+        let status = ctx.child().unwrap().execute_tick()?;
 
         if status.is_completed() {
             self.already_ticked = true;
             self.returned_status = status;
-            node_.reset_child().await;
+            ctx.reset_child()?;
         }
 
         Ok(status)
     }
 
-    fn ports() -> crate::basic_types::PortsList {
-        define_ports!(input_port!("then_skip", true))
-    }
-
-    async fn halt(&mut self) {
-        node_.reset_child().await;
+    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+        ctx.reset_child()
     }
 }
