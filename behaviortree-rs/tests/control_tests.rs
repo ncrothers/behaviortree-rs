@@ -2,7 +2,6 @@ use behaviortree_rs::{
     basic_types::NodeCategory, blackboard::Blackboard, macros::register_action_node,
     nodes::ToBoxed, tree::Factory,
 };
-use log::{error, info};
 
 mod nodes;
 
@@ -38,8 +37,8 @@ fn fallback() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("{status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("{status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -72,8 +71,8 @@ fn if_then_else() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -107,8 +106,8 @@ fn parallel_all() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -144,8 +143,8 @@ fn parallel() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -178,8 +177,8 @@ fn reactive_fallback() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -218,8 +217,8 @@ fn reactive_sequence() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -258,8 +257,8 @@ fn sequence_star() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -298,8 +297,8 @@ fn sequence_vanilla() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -337,7 +336,7 @@ fn while_do_else() {
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
-        Ok(status) => info!("Final status: {status:?}"),
-        Err(e) => error!("{e}"),
+        Ok(status) => log::info!("Final status: {status:?}"),
+        Err(e) => log::error!("{e}"),
     }
 }

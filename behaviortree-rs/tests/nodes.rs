@@ -7,7 +7,6 @@ use behaviortree_rs::{
     },
 };
 use behaviortree_rs_derive::{bt_node, BTToString, FromString};
-use log::info;
 
 #[derive(BTToString)]
 struct Test {}
@@ -32,7 +31,7 @@ impl SyncActionNode for StatusNode {
     fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         let status: NodeStatus = ctx.config.get_input("status")?;
 
-        info!("I am a node that returns {}!", status.bt_to_string());
+        log::info!("I am a node that returns {}!", status.bt_to_string());
 
         Ok(status)
     }
@@ -51,7 +50,7 @@ impl SyncActionNode for SuccessThenFailure {
     fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         let max_iters: usize = ctx.config.get_input("iters")?;
 
-        info!("SuccessThenFailure!");
+        log::info!("SuccessThenFailure!");
 
         if self.iter < max_iters {
             self.iter += 1;
@@ -73,7 +72,7 @@ impl SyncActionNode for EchoNode {
     fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         let msg: String = ctx.config.get_input("msg")?;
 
-        info!("{msg}");
+        log::info!("{msg}");
 
         Ok(NodeStatus::Success)
     }
@@ -97,7 +96,7 @@ impl StatefulActionNode for RunForNode {
     }
 
     fn on_start(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult {
-        info!("on_start()");
+        log::info!("on_start()");
 
         Ok(NodeStatus::Running)
     }
@@ -106,7 +105,7 @@ impl StatefulActionNode for RunForNode {
         let limit: usize = ctx.config.get_input("iters")?;
 
         if self.counter < limit {
-            info!("RunFor {}", self.counter);
+            log::info!("RunFor {}", self.counter);
             self.counter += 1;
             Ok(NodeStatus::Running)
         } else {

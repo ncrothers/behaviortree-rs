@@ -5,7 +5,6 @@ use behaviortree_rs::{
     nodes::ToBoxed,
     tree::Factory,
 };
-use log::{error, info};
 
 mod nodes;
 
@@ -40,11 +39,11 @@ fn force_failure() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
 
             assert!(matches!(status, NodeStatus::Failure));
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -75,11 +74,11 @@ fn force_success() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
 
             assert!(matches!(status, NodeStatus::Success));
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -110,11 +109,11 @@ fn inverter() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
 
             assert!(matches!(status, NodeStatus::Failure));
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -152,9 +151,9 @@ fn keep_running_until_failure() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -195,11 +194,11 @@ fn repeat() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
 
             assert!(matches!(status, NodeStatus::Failure));
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -242,11 +241,11 @@ fn retry() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
 
             assert!(matches!(status, NodeStatus::Success));
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }
 
@@ -287,10 +286,10 @@ fn run_once() {
 
     match tree.tick_while_running() {
         Ok(status) => {
-            info!("{status:?}");
+            log::info!("{status:?}");
 
             assert!(matches!(status, NodeStatus::Success));
         }
-        Err(e) => error!("{e}"),
+        Err(e) => log::error!("{e}"),
     }
 }

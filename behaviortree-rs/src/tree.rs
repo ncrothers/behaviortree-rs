@@ -1,7 +1,6 @@
 use std::{collections::HashMap, io::Cursor, ops::Deref, string::FromUtf8Error, sync::Arc};
 
 use evalexpr::{DefaultNumericTypes, EvalexprError};
-use log::{debug, info};
 use quick_xml::{
     events::{attributes::Attributes, Event},
     name::QName,
@@ -489,7 +488,7 @@ impl Factory {
         let node = match reader.read_event_into(&mut buf)? {
             // exits the loop when reaching end of file
             Event::Eof => {
-                debug!("EOF");
+                log::debug!("EOF");
                 return Err(ParseError::UnexpectedEof);
             }
             // Node with Children
@@ -497,7 +496,7 @@ impl Factory {
                 let node_name = String::from_utf8(e.name().0.into())?;
                 let attributes = e.attributes();
 
-                debug!("build_child Start: {node_name}");
+                log::debug!("build_child Start: {node_name}");
 
                 let mut config = NodeConfig::new(blackboard.clone());
                 config.path = path_prefix.to_owned() + &node_name;
@@ -594,7 +593,7 @@ impl Factory {
             // Leaf Node
             Event::Empty(e) => {
                 let node_name = String::from_utf8(e.name().0.into())?;
-                debug!("[Leaf node]: {node_name}");
+                log::debug!("[Leaf node]: {node_name}");
                 let attributes = e.attributes();
 
                 let mut config = NodeConfig::new(blackboard.clone());
@@ -658,12 +657,12 @@ impl Factory {
             }
             Event::End(_e) => CreateNodeResult::End,
             Event::Comment(content) => {
-                debug!("Comment - \"{content:?}\"");
+                log::debug!("Comment - \"{content:?}\"");
                 CreateNodeResult::Continue
             }
             e => {
-                debug!("Other - SHOULDN'T BE HERE");
-                debug!("{e:?}");
+                log::debug!("Other - SHOULDN'T BE HERE");
+                log::debug!("{e:?}");
 
                 return Err(ParseError::InternalError(
                     "Didn't match one of the expected XML tag types.".to_string(),
@@ -699,7 +698,7 @@ impl Factory {
                     }
 
                     if let Some(tree_id) = attributes.get("main_tree_to_execute") {
-                        info!("Found main tree ID: {tree_id}");
+                        log::debug!("Found main tree ID: {tree_id}");
                         self.main_tree_id = Some(tree_id.clone());
                     }
 

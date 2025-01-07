@@ -1,5 +1,3 @@
-use log::warn;
-
 use crate::{
     basic_types::NodeStatus,
     nodes::{NodeData, NodeError, NodeResult},
@@ -55,7 +53,7 @@ impl ControlNode for IfThenElseNode {
                         "Idle".to_string(),
                     ))
                 }
-                _ => warn!("Condition node of IfThenElseNode returned Skipped"),
+                _ => log::warn!("Condition node of IfThenElseNode returned Skipped"),
             }
         }
 
