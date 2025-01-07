@@ -6,7 +6,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// The ParallelNode execute all its children
 /// __concurrently__, but not in separate threads!
@@ -83,7 +83,7 @@ impl ControlNode for ParallelNode {
         )
     }
 
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         self.success_threshold = ctx.config.get_input("success_count").unwrap();
         self.failure_threshold = ctx.config.get_input("failure_count").unwrap();
 
@@ -130,7 +130,7 @@ impl ControlNode for ParallelNode {
                     && (self.success_count + skipped_count) >= required_success_count)
             {
                 self.clear();
-                ctx.reset_children()?;
+                ctx.reset_children();
                 return Ok(NodeStatus::Success);
             }
 
@@ -138,7 +138,7 @@ impl ControlNode for ParallelNode {
                 || self.failure_count == self.failure_threshold(ctx.children.len() as i32)
             {
                 self.clear();
-                ctx.reset_children()?;
+                ctx.reset_children();
                 return Ok(NodeStatus::Failure);
             }
         }
@@ -151,7 +151,8 @@ impl ControlNode for ParallelNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        ctx.reset_children()
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+        ctx.reset_children();
+        Ok(())
     }
 }

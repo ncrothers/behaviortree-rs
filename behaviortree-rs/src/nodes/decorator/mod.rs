@@ -14,8 +14,41 @@ mod retry;
 pub use retry::*;
 mod run_once;
 pub use run_once::*;
+mod subtree;
+pub(crate) use subtree::*;
 
-use super::{NodeBase, NodeData, NodeResult, NodeType, PortsList, ToBoxed};
+use super::{
+    NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, NodeType, PortsList, ToBoxed,
+    TreeNode,
+};
+
+impl<'a> NodeData<'a, Decorator> {
+    /// Calls `halt_child_idx(0)`. This should only be used in
+    /// `Decorator` nodes
+    pub fn halt_child(&mut self) -> NodeResult<()> {
+        self.reset_child()
+    }
+
+    /// Halts and resets the first child. This should only be used in
+    /// `Decorator` nodes
+    pub fn reset_child(&mut self) -> NodeResult<()> {
+        if let Some(child) = self.children.get_mut(0) {
+            if matches!(child.status(), NodeStatus::Running) {
+                child.halt()?;
+            }
+
+            child.reset_status();
+        }
+
+        Ok(())
+    }
+
+    /// Gets a mutable reference to the first child. Helper for
+    /// `Decorator` nodes to get their child.
+    pub fn child(&mut self) -> Option<&mut TreeNode> {
+        self.children.get_mut(0)
+    }
+}
 
 #[derive(Debug)]
 pub struct Decorator(Box<dyn DecoratorNode>);
@@ -25,10 +58,10 @@ pub trait DecoratorNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult<()> {
         Ok(())
     }
 }
@@ -56,12 +89,12 @@ impl NodeBase for Decorator {
         DecoratorNode::ports(&*self.0)
     }
 
-    fn execute_tick(&mut self, ctx: &mut NodeData) -> NodeResult {
-        self.tick(ctx)
+    fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
+        self.tick(&mut NodeData::new(ctx))
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        DecoratorNode::halt(&mut *self.0, ctx)
+    fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
+        DecoratorNode::halt(&mut *self.0, &mut NodeData::new(ctx))
     }
 }
 

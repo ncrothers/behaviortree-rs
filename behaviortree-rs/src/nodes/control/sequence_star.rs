@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 /// The SequenceStarNode is used to tick children in an ordered sequence.
 /// If any child returns RUNNING, previous children are not ticked again.
 ///
@@ -22,6 +22,7 @@ pub struct SequenceWithMemoryNode {
     all_skipped: bool,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for SequenceWithMemoryNode {
     fn default() -> Self {
         Self {
@@ -32,7 +33,7 @@ impl Default for SequenceWithMemoryNode {
 }
 
 impl ControlNode for SequenceWithMemoryNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         if ctx.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
@@ -70,7 +71,7 @@ impl ControlNode for SequenceWithMemoryNode {
 
         // All children returned Success
         if self.child_idx == ctx.children.len() {
-            ctx.reset_children()?;
+            ctx.reset_children();
             self.child_idx = 0;
         }
 
@@ -80,8 +81,9 @@ impl ControlNode for SequenceWithMemoryNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
         self.child_idx = 0;
-        ctx.reset_children()
+        ctx.reset_children();
+        Ok(())
     }
 }

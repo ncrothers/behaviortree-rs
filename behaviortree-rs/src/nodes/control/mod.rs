@@ -19,7 +19,47 @@ pub use while_do_else::*;
 
 use std::ops::{Deref, DerefMut};
 
-use super::{NodeBase, NodeData, NodeResult, NodeType, PortsList, ToBoxed};
+use super::{
+    NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeType, PortsList, ToBoxed,
+};
+
+impl<'a> NodeData<'a, Control> {
+    /// Halt children from this index to the end.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NodeError::IndexError` if `start` is out of bounds.
+    pub fn halt_children(&mut self, start: usize) -> NodeResult<()> {
+        if start >= self.children.len() {
+            return Err(NodeError::IndexError);
+        }
+
+        let end = self.children.len();
+
+        for i in start..end {
+            self.halt_child(i)?;
+        }
+
+        Ok(())
+    }
+
+    /// Halts and resets all children
+    pub fn reset_children(&mut self) {
+        // Don't care if this returns an error
+        let _ = self.halt_children(0);
+    }
+
+    /// Halt child at the `index`. Not to be confused with `halt_child()`, which is
+    /// a helper that calls `halt_child_idx(0)`, primarily used for `Decorator` nodes.
+    pub fn halt_child(&mut self, index: usize) -> NodeResult<()> {
+        let child = self.children.get_mut(index).ok_or(NodeError::IndexError)?;
+        if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
+            child.halt()?;
+        }
+        child.reset_status();
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub struct Control(Box<dyn ControlNode>);
@@ -29,10 +69,10 @@ pub trait ControlNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
         Ok(())
     }
 }
@@ -60,12 +100,12 @@ impl NodeBase for Control {
         ControlNode::ports(&*self.0)
     }
 
-    fn execute_tick(&mut self, ctx: &mut NodeData) -> NodeResult {
-        self.tick(ctx)
+    fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
+        self.tick(&mut NodeData::new(ctx))
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        ControlNode::halt(&mut *self.0, ctx)
+    fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
+        ControlNode::halt(&mut *self.0, &mut NodeData::new(ctx))
     }
 }
 

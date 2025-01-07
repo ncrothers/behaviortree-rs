@@ -30,7 +30,7 @@ fn visitor() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
     assert!(tree.is_ok());
     let tree = tree.unwrap();
 

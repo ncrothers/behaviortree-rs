@@ -3,14 +3,14 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::DecoratorNode;
+use super::{Decorator, DecoratorNode};
 
 /// The InverterNode returns Failure on Success, and Success on Failure
 #[derive(Debug, Default)]
 pub struct InverterNode;
 
 impl DecoratorNode for InverterNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult {
         ctx.set_status(NodeStatus::Running);
 
         let child_status = ctx.child().unwrap().execute_tick()?;
@@ -32,7 +32,7 @@ impl DecoratorNode for InverterNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult<()> {
         ctx.reset_child()
     }
 }

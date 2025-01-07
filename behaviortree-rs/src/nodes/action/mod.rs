@@ -5,7 +5,9 @@ pub use condition::*;
 
 use crate::nodes::NodeError;
 
-use super::{NodeBase, NodeData, NodeResult, NodeStatus, NodeType, PortsList, ToBoxed};
+use super::{
+    NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, NodeType, PortsList, ToBoxed,
+};
 
 /// Wrapper struct around a boxed [`SyncActionNode`] implementer.
 #[derive(Debug)]
@@ -18,10 +20,10 @@ pub trait SyncActionNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult<()> {
         Ok(())
     }
 }
@@ -49,8 +51,8 @@ impl NodeBase for SyncAction {
         SyncActionNode::ports(&*self.0)
     }
 
-    fn execute_tick(&mut self, ctx: &mut NodeData) -> NodeResult {
-        match self.tick(ctx)? {
+    fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
+        match self.tick(&mut NodeData::new(ctx))? {
             status @ (NodeStatus::Running | NodeStatus::Idle) => {
                 Err(::behaviortree_rs::nodes::NodeError::StatusError(
                     ctx.config.path.clone(),
@@ -61,8 +63,8 @@ impl NodeBase for SyncAction {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        SyncActionNode::halt(&mut *self.0, ctx)
+    fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
+        SyncActionNode::halt(&mut *self.0, &mut NodeData::new(ctx))
     }
 }
 
@@ -97,12 +99,12 @@ pub trait StatefulActionNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn on_start(&mut self, ctx: &mut NodeData) -> NodeResult;
+    fn on_start(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult;
 
-    fn on_running(&mut self, ctx: &mut NodeData) -> NodeResult;
+    fn on_running(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn on_halted(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn on_halted(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult<()> {
         Ok(())
     }
 }
@@ -130,14 +132,14 @@ impl NodeBase for StatefulAction {
         StatefulActionNode::ports(&*self.0)
     }
 
-    fn execute_tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
         let prev_status = ctx.status;
 
         let new_status = match prev_status {
             NodeStatus::Idle => {
                 ::log::debug!("[behaviortree_rs]: {}::on_start()", &ctx.config.path);
                 // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
-                let new_status = self.on_start(ctx)?;
+                let new_status = self.on_start(&mut NodeData::new(ctx))?;
                 // drop(wrapper);
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
@@ -149,7 +151,7 @@ impl NodeBase for StatefulAction {
             }
             NodeStatus::Running => {
                 ::log::debug!("[behaviortree_rs]: {}::on_running()", &ctx.config.path);
-                let new_status = self.on_running(ctx)?;
+                let new_status = self.on_running(&mut NodeData::new(ctx))?;
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
                         format!("{}::on_running()", ctx.config.path),
@@ -166,8 +168,8 @@ impl NodeBase for StatefulAction {
         Ok(new_status)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        StatefulActionNode::on_halted(&mut *self.0, ctx)
+    fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
+        StatefulActionNode::on_halted(&mut *self.0, &mut NodeData::new(ctx))
     }
 }
 

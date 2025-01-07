@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// The ReactiveSequence is similar to a ParallelNode.
 /// All the children are ticked from first to last:
@@ -29,7 +29,7 @@ impl Default for ReactiveSequenceNode {
 }
 
 impl ControlNode for ReactiveSequenceNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         let mut all_skipped = true;
 
         ctx.status = NodeStatus::Running;
@@ -43,8 +43,7 @@ impl ControlNode for ReactiveSequenceNode {
             match child_status {
                 NodeStatus::Running => {
                     for i in 0..counter {
-                        ctx.children[i].halt();
-                        // ctx.halt_child(i)?;
+                        ctx.halt_child(i)?;
                     }
                     if self.running_child == -1 {
                         self.running_child = counter as i32;
@@ -65,8 +64,7 @@ impl ControlNode for ReactiveSequenceNode {
                 NodeStatus::Success => {}
                 NodeStatus::Skipped => {
                     // Halt current child
-                    ctx.children[counter].halt()?;
-                    // ctx.halt_child(counter)?;
+                    ctx.halt_child(counter)?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
@@ -77,7 +75,7 @@ impl ControlNode for ReactiveSequenceNode {
             }
         }
 
-        ctx.reset_children()?;
+        ctx.reset_children();
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),
@@ -85,7 +83,8 @@ impl ControlNode for ReactiveSequenceNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        ctx.reset_children()
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+        ctx.reset_children();
+        Ok(())
     }
 }

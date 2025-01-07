@@ -36,7 +36,7 @@ fn force_failure() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -71,7 +71,7 @@ fn force_success() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -106,7 +106,7 @@ fn inverter() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -148,7 +148,7 @@ fn keep_running_until_failure() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -191,7 +191,7 @@ fn repeat() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -238,7 +238,7 @@ fn retry() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -283,7 +283,7 @@ fn run_once() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory.instantiate_sync_tree(&blackboard, "main").unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {

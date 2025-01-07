@@ -8,8 +8,8 @@ mod nodes;
 
 use nodes::{EchoNode, RunForNode, StatusNode};
 
-#[tokio::test]
-async fn fallback() {
+#[test]
+fn fallback() {
     nodes::test_setup();
 
     let xml = r#"
@@ -35,19 +35,16 @@ async fn fallback() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("{status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn if_then_else() {
+#[test]
+fn if_then_else() {
     nodes::test_setup();
 
     let xml = r#"
@@ -72,19 +69,16 @@ async fn if_then_else() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn parallel_all() {
+#[test]
+fn parallel_all() {
     nodes::test_setup();
 
     let xml = r#"
@@ -110,19 +104,16 @@ async fn parallel_all() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn parallel() {
+#[test]
+fn parallel() {
     nodes::test_setup();
 
     let xml = r#"
@@ -150,19 +141,16 @@ async fn parallel() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn reactive_fallback() {
+#[test]
+fn reactive_fallback() {
     nodes::test_setup();
 
     let xml = r#"
@@ -187,19 +175,16 @@ async fn reactive_fallback() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn reactive_sequence() {
+#[test]
+fn reactive_sequence() {
     nodes::test_setup();
 
     let xml = r#"
@@ -230,19 +215,16 @@ async fn reactive_sequence() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn sequence_star() {
+#[test]
+fn sequence_star() {
     nodes::test_setup();
 
     let xml = r#"
@@ -273,19 +255,16 @@ async fn sequence_star() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn sequence_vanilla() {
+#[test]
+fn sequence_vanilla() {
     nodes::test_setup();
 
     let xml = r#"
@@ -316,19 +295,16 @@ async fn sequence_vanilla() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }
 }
 
-#[tokio::test]
-async fn while_do_else() {
+#[test]
+fn while_do_else() {
     nodes::test_setup();
 
     let xml = r#"
@@ -358,12 +334,9 @@ async fn while_do_else() {
 
     factory.register_bt_from_text(xml).unwrap();
 
-    let mut tree = factory
-        .instantiate_async_tree(&blackboard, "main")
-        .await
-        .unwrap();
+    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
-    match tree.tick_while_running().await {
+    match tree.tick_while_running() {
         Ok(status) => info!("Final status: {status:?}"),
         Err(e) => error!("{e}"),
     }

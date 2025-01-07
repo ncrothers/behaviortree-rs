@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// The ReactiveFallback is similar to a ParallelNode.
 /// All the children are ticked from first to last:
@@ -20,7 +20,7 @@ use super::ControlNode;
 pub struct ReactiveFallbackNode;
 
 impl ControlNode for ReactiveFallbackNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         let mut all_skipped = true;
         ctx.status = NodeStatus::Running;
 
@@ -34,18 +34,18 @@ impl ControlNode for ReactiveFallbackNode {
             match &child_status {
                 NodeStatus::Running => {
                     for i in 0..index {
-                        ctx.halt_child_idx(i)?;
+                        ctx.halt_child(i)?;
                     }
 
                     return Ok(NodeStatus::Running);
                 }
                 NodeStatus::Failure => {}
                 NodeStatus::Success => {
-                    ctx.reset_children()?;
+                    ctx.reset_children();
                     return Ok(NodeStatus::Success);
                 }
                 NodeStatus::Skipped => {
-                    ctx.halt_child_idx(index)?;
+                    ctx.halt_child(index)?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
@@ -56,7 +56,7 @@ impl ControlNode for ReactiveFallbackNode {
             };
         }
 
-        ctx.reset_children()?;
+        ctx.reset_children();
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),
@@ -64,7 +64,8 @@ impl ControlNode for ReactiveFallbackNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        ctx.reset_children()
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+        ctx.reset_children();
+        Ok(())
     }
 }

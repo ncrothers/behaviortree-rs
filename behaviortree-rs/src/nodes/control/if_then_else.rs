@@ -5,7 +5,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// IfThenElseNode must have exactly 2 or 3 children. This node is NOT reactive.
 ///
@@ -26,7 +26,7 @@ pub struct IfThenElseNode {
 }
 
 impl ControlNode for IfThenElseNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         let children_count = ctx.children.len();
         // Node should only have 2 or 3 children
         if !(2..=3).contains(&children_count) {
@@ -76,8 +76,10 @@ impl ControlNode for IfThenElseNode {
         ))
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
         self.child_idx = 0;
-        ctx.reset_children()
+        ctx.reset_children();
+
+        Ok(())
     }
 }

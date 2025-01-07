@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// The SequenceNode is used to tick children in an ordered sequence.
 /// If any child returns RUNNING, previous children will NOT be ticked again.
@@ -22,6 +22,7 @@ pub struct SequenceNode {
     all_skipped: bool,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for SequenceNode {
     fn default() -> Self {
         Self {
@@ -32,7 +33,7 @@ impl Default for SequenceNode {
 }
 
 impl ControlNode for SequenceNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         if ctx.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
@@ -50,7 +51,7 @@ impl ControlNode for SequenceNode {
             match &child_status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 NodeStatus::Failure => {
-                    ctx.reset_children()?;
+                    ctx.reset_children();
                     self.child_idx = 0;
                     return Ok(NodeStatus::Failure);
                 }
@@ -67,15 +68,16 @@ impl ControlNode for SequenceNode {
         }
 
         if self.child_idx == ctx.children.len() {
-            ctx.reset_children()?;
+            ctx.reset_children();
             self.child_idx = 0;
         }
 
         Ok(NodeStatus::Success)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
         self.child_idx = 0;
-        ctx.reset_children()
+        ctx.reset_children();
+        Ok(())
     }
 }

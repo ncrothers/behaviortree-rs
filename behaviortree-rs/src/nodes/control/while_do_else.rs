@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// WhileDoElse must have exactly 2 or 3 children.
 /// It is a REACTIVE node of IfThenElseNode.
@@ -20,7 +20,7 @@ use super::ControlNode;
 pub struct WhileDoElseNode;
 
 impl ControlNode for WhileDoElseNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         let children_count = ctx.children.len();
         // Node should only have 2 or 3 children
         if !(2..=3).contains(&children_count) {
@@ -42,14 +42,14 @@ impl ControlNode for WhileDoElseNode {
         match condition_status {
             NodeStatus::Success => {
                 if children_count == 3 {
-                    ctx.halt_child_idx(2)?;
+                    ctx.halt_child(2)?;
                 }
 
                 status = ctx.children[1].execute_tick()?;
             }
             NodeStatus::Failure => match children_count {
                 3 => {
-                    ctx.halt_child_idx(1)?;
+                    ctx.halt_child(1)?;
                     status = ctx.children[2].execute_tick()?;
                 }
                 2 => {
@@ -63,13 +63,14 @@ impl ControlNode for WhileDoElseNode {
         match status {
             NodeStatus::Running => Ok(NodeStatus::Running),
             status => {
-                ctx.reset_children()?;
+                ctx.reset_children();
                 Ok(status)
             }
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        ctx.reset_children()
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+        ctx.reset_children();
+        Ok(())
     }
 }

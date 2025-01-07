@@ -434,38 +434,6 @@ impl PortInfo {
     }
 }
 
-pub struct Port(String, PortInfo);
-
-impl Port {
-    fn create_port(direction: PortDirection, name: &str, description: &str) -> Port {
-        let mut port_info = PortInfo::new(direction);
-        port_info.set_description(description.to_string());
-
-        Port(name.to_string(), port_info)
-    }
-
-    pub fn default(mut self, default: impl BTToString) -> Port {
-        self.1.set_default(default);
-        self
-    }
-
-    pub fn input(name: &str) -> Port {
-        Self::input_description(name, "")
-    }
-
-    pub fn input_description(name: &str, description: &str) -> Port {
-        Self::create_port(PortDirection::Input, name, description)
-    }
-
-    pub fn output(name: &str) -> Port {
-        Self::output_description(name, "")
-    }
-
-    pub fn output_description(name: &str, description: &str) -> Port {
-        Self::create_port(PortDirection::Output, name, description)
-    }
-}
-
 pub fn get_remapped_key(
     port_name: impl AsRef<str>,
     remapped_port: impl AsRef<str>,

@@ -50,7 +50,7 @@ fn registering() {
     );
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 
@@ -72,7 +72,7 @@ fn registering() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 
@@ -90,7 +90,7 @@ fn registering() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 }
@@ -117,7 +117,7 @@ fn main_tree_attr() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 
@@ -139,7 +139,7 @@ fn main_tree_attr() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 
@@ -157,7 +157,7 @@ fn main_tree_attr() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 }
@@ -188,7 +188,7 @@ fn subtrees() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();
@@ -219,7 +219,7 @@ fn node_not_registered() {
     // Don't register StatusNode
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_err());
 }
@@ -246,7 +246,7 @@ fn ignore_treenodesmodel() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -286,7 +286,7 @@ fn load_adjacent_controls() {
     factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -302,54 +302,42 @@ fn async_test() {
         .is_test(false)
         .try_init();
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .build()
-        .unwrap();
+    let xml = r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="main">
+                <Sequence>
+                    <Fallback>
+                        <Fallback>
+                            <StatusNode status="Failure" />
+                        </Fallback>
+                    </Fallback>
+                    <Fallback>
+                        <EchoNode msg="hello"/>
+                    </Fallback>
+                </Sequence>
+            </BehaviorTree>
+        </root>
+    "#
+    .to_string();
 
-    rt.block_on(async move {
-        let task = tokio::spawn(async move {
-            let xml = r#"
-                <root main_tree_to_execute="main">
-                    <BehaviorTree ID="main">
-                        <Sequence>
-                            <Fallback>
-                                <Fallback>
-                                    <StatusNode status="Failure" />
-                                </Fallback>
-                            </Fallback>
-                            <Fallback>
-                                <EchoNode msg="hello"/>
-                            </Fallback>
-                        </Sequence>
-                    </BehaviorTree>
-                </root>
-            "#
-            .to_string();
+    let mut factory = Factory::new();
 
-            let mut factory = Factory::new();
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
 
-            factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-            factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    let blackboard = Blackboard::create();
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
-            let blackboard = Blackboard::create();
-            let tree = factory.create_async_tree_from_text(xml, &blackboard).await;
+    if tree.is_err() {
+        log::error!("{}", tree.as_ref().err().unwrap());
+    }
 
-            if tree.is_err() {
-                log::error!("{}", tree.as_ref().err().unwrap());
-            }
+    assert!(tree.is_ok());
 
-            assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
-            let mut tree = tree.unwrap();
-
-            let res = tree.tick_once().await;
-            assert!(res.is_ok());
-        });
-
-        let res = task.await;
-
-        assert!(res.is_ok());
-    });
+    let res = tree.tick_once();
+    assert!(res.is_ok());
 }
 
 #[test]
@@ -373,7 +361,7 @@ fn condition() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
     let mut blackboard = Blackboard::create();
 
-    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(xml, &blackboard);
 
     assert!(tree.is_ok());
 

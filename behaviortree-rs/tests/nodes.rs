@@ -2,8 +2,8 @@ use behaviortree_rs::{
     basic_types::{BTToString, NodeStatus, PortsList},
     macros::{define_ports, input_port},
     nodes::{
-        action::{StatefulActionNode, SyncActionNode},
-        NodeData, NodeResult,
+        action::{StatefulAction, StatefulActionNode, SyncAction, SyncActionNode},
+        NodeData, NodeDataGeneric, NodeResult,
     },
 };
 use behaviortree_rs_derive::{bt_node, BTToString, FromString};
@@ -29,7 +29,7 @@ pub fn test_setup() {
 pub struct StatusNode;
 
 impl SyncActionNode for StatusNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         let status: NodeStatus = ctx.config.get_input("status")?;
 
         info!("I am a node that returns {}!", status.bt_to_string());
@@ -48,7 +48,7 @@ pub struct SuccessThenFailure {
 }
 
 impl SyncActionNode for SuccessThenFailure {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         let max_iters: usize = ctx.config.get_input("iters")?;
 
         info!("SuccessThenFailure!");
@@ -70,7 +70,7 @@ impl SyncActionNode for SuccessThenFailure {
 pub struct EchoNode;
 
 impl SyncActionNode for EchoNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         let msg: String = ctx.config.get_input("msg")?;
 
         info!("{msg}");
@@ -96,13 +96,13 @@ impl StatefulActionNode for RunForNode {
         )
     }
 
-    fn on_start(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn on_start(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult {
         info!("on_start()");
 
         Ok(NodeStatus::Running)
     }
 
-    fn on_running(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn on_running(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult {
         let limit: usize = ctx.config.get_input("iters")?;
 
         if self.counter < limit {
@@ -129,7 +129,7 @@ impl DataNode {
 }
 
 impl SyncActionNode for DataNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
         Ok(NodeStatus::Success)
     }
 }

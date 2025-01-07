@@ -3,14 +3,14 @@ use crate::{
     nodes::{NodeData, NodeResult},
 };
 
-use super::DecoratorNode;
+use super::{Decorator, DecoratorNode};
 
 /// The ForceFailureNode returns always Failure or Running
 #[derive(Debug, Default)]
 pub struct ForceFailureNode;
 
 impl DecoratorNode for ForceFailureNode {
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult {
         ctx.set_status(NodeStatus::Running);
 
         let child_status = ctx.child().unwrap().execute_tick()?;
@@ -24,7 +24,7 @@ impl DecoratorNode for ForceFailureNode {
         Ok(child_status)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult<()> {
         ctx.reset_child()
     }
 }

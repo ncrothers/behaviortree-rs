@@ -1,10 +1,11 @@
 use std::{
-    any::{Any, TypeId},
+    any::TypeId,
     collections::HashMap,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
     sync::Arc,
 };
 
-use futures::future::BoxFuture;
 use thiserror::Error;
 
 use crate::{
@@ -24,12 +25,6 @@ pub mod control;
 pub mod decorator;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
-type TickFn = for<'a> fn(
-    &'a mut NodeData,
-    &'a mut Box<dyn Any + Send + Sync>,
-) -> BoxFuture<'a, Result<NodeStatus, NodeError>>;
-type HaltFn = for<'a> fn(&'a mut NodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
-type PortsFn = fn() -> PortsList;
 
 #[derive(Clone, Copy, Debug)]
 pub enum NodeType {
@@ -42,8 +37,8 @@ pub enum NodeType {
 pub trait NodeBase: std::fmt::Debug + Send + Sync {
     fn node_type(&self) -> NodeType;
     fn ports(&self) -> PortsList;
-    fn execute_tick(&mut self, ctx: &mut NodeData) -> NodeResult;
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()>;
+    fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult;
+    fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()>;
 }
 
 pub trait ToBoxed<T> {
@@ -51,7 +46,7 @@ pub trait ToBoxed<T> {
 }
 
 #[derive(Debug)]
-pub struct NodeData {
+pub struct NodeDataGeneric {
     pub name: String,
     pub node_type: NodeType,
     pub node_category: NodeCategory,
@@ -59,30 +54,56 @@ pub struct NodeData {
     pub status: NodeStatus,
     /// Vector of child nodes
     pub children: Vec<TreeNode>,
-    #[cfg(feature = "async-tokio")]
-    pub(crate) handle: tokio::runtime::Handle,
+}
+
+pub struct NodeData<'a, T> {
+    data: &'a mut NodeDataGeneric,
+    _pd: PhantomData<T>,
+}
+
+impl<'a, T> Deref for NodeData<'a, T> {
+    type Target = NodeDataGeneric;
+
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
+impl<'a, T> DerefMut for NodeData<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.data
+    }
+}
+
+impl<'a, T> NodeData<'a, T> {
+    pub fn new(data: &'a mut NodeDataGeneric) -> Self {
+        Self {
+            data,
+            _pd: PhantomData,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct TreeNode {
-    pub data: NodeData,
+    pub data: NodeDataGeneric,
     pub node: Box<dyn NodeBase>,
 }
 
 impl TreeNode {
     /// Returns the current node's status
     pub fn status(&self) -> NodeStatus {
-        self.data.status
+        self.data.status()
     }
 
     /// Resets the status back to `NodeStatus::Idle`
     pub fn reset_status(&mut self) {
-        self.data.status = NodeStatus::Idle;
+        self.data.reset_status();
     }
 
     /// Update the node's status
     pub fn set_status(&mut self, status: NodeStatus) {
-        self.data.status = status;
+        self.data.set_status(status);
     }
 
     /// Tick the node
@@ -97,27 +118,27 @@ impl TreeNode {
 
     /// Get the name of the node
     pub fn name(&self) -> &str {
-        &self.data.name
+        self.data.name()
     }
 
     /// Get a mutable reference to the `NodeConfig`
     pub fn config_mut(&mut self) -> &mut NodeConfig {
-        &mut self.data.config
+        self.data.config_mut()
     }
 
     /// Get a reference to the `NodeConfig`
     pub fn config(&self) -> &NodeConfig {
-        &self.data.config
+        self.data.config()
     }
 
     /// Get the node's [`NodeType`], which is only:
     pub fn node_type(&self) -> NodeType {
-        self.data.node_type
+        self.data.node_type()
     }
 
     /// Get the node's `NodeCategory`, which is more general than `NodeType`
     pub fn node_category(&self) -> NodeCategory {
-        self.data.node_category
+        self.data.node_category()
     }
 
     /// Call the node's `ports()` function if it has one, returning the
@@ -147,40 +168,10 @@ impl TreeNode {
     }
 }
 
-impl NodeData {
-    /// Halt children from this index to the end.
-    ///
-    /// # Errors
-    ///
-    /// Returns `NodeError::IndexError` if `start` is out of bounds.
-    pub fn halt_children(&mut self, start: usize) -> NodeResult<()> {
-        if start >= self.children.len() {
-            return Err(NodeError::IndexError);
-        }
-
-        let end = self.children.len();
-
-        for i in start..end {
-            self.halt_child_idx(i)?;
-        }
-
-        Ok(())
-    }
-
-    /// Halts and resets all children
-    pub fn reset_children(&mut self) -> NodeResult<()> {
-        self.halt_children(0)
-    }
-
-    /// Halt child at the `index`. Not to be confused with `halt_child()`, which is
-    /// a helper that calls `halt_child_idx(0)`, primarily used for `Decorator` nodes.
-    pub fn halt_child_idx(&mut self, index: usize) -> NodeResult<()> {
-        let child = self.children.get_mut(index).ok_or(NodeError::IndexError)?;
-        if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
-            child.halt()?;
-        }
-        child.reset_status();
-        Ok(())
+impl NodeDataGeneric {
+    /// Returns the current node's status
+    pub fn status(&self) -> NodeStatus {
+        self.status
     }
 
     /// Sets the status of this node
@@ -188,30 +179,34 @@ impl NodeData {
         self.status = status;
     }
 
-    /// Calls `halt_child_idx(0)`. This should only be used in
-    /// `Decorator` nodes
-    pub fn halt_child(&mut self) -> NodeResult<()> {
-        self.reset_child()
+    /// Resets the status back to `NodeStatus::Idle`
+    pub fn reset_status(&mut self) {
+        self.status = NodeStatus::Idle;
     }
 
-    /// Halts and resets the first child. This should only be used in
-    /// `Decorator` nodes
-    pub fn reset_child(&mut self) -> NodeResult<()> {
-        if let Some(child) = self.children.get_mut(0) {
-            if matches!(child.status(), NodeStatus::Running) {
-                child.halt()?;
-            }
-
-            child.reset_status();
-        }
-
-        Ok(())
+    /// Get the name of the node
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
-    /// Gets a mutable reference to the first child. Helper for
-    /// `Decorator` nodes to get their child.
-    pub fn child(&mut self) -> Option<&mut TreeNode> {
-        self.children.get_mut(0)
+    /// Get a mutable reference to the `NodeConfig`
+    pub fn config_mut(&mut self) -> &mut NodeConfig {
+        &mut self.config
+    }
+
+    /// Get a reference to the `NodeConfig`
+    pub fn config(&self) -> &NodeConfig {
+        &self.config
+    }
+
+    /// Get the node's [`NodeType`], which is only:
+    pub fn node_type(&self) -> NodeType {
+        self.node_type
+    }
+
+    /// Get the node's `NodeCategory`, which is more general than `NodeType`
+    pub fn node_category(&self) -> NodeCategory {
+        self.node_category
     }
 }
 
@@ -413,7 +408,7 @@ impl NodeConfig {
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub async fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
+    pub fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
     where
         T: Clone + Send + 'static,
     {
@@ -433,23 +428,6 @@ impl NodeConfig {
             }
             None => Err(NodeError::PortError(port.to_string())),
         }
-    }
-
-    /// Sync version of `set_output<T>`
-    ///
-    /// Sets `value` into the blackboard. The key is based on the value provided
-    /// to the port at `port`.
-    ///
-    /// # Examples
-    ///
-    /// - Port value: `"="`: uses the port name as the blackboard key
-    /// - `"foo"` uses `"foo"` as the blackboard key
-    /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub async fn set_output_sync<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
-    where
-        T: Clone + Send + 'static,
-    {
-        futures::executor::block_on(self.set_output(port, value))
     }
 }
 

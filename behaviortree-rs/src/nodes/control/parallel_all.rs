@@ -6,7 +6,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::ControlNode;
+use super::{Control, ControlNode};
 
 /// The ParallelAllNode execute all its children
 /// __concurrently__, but not in separate threads!
@@ -54,7 +54,7 @@ impl ControlNode for ParallelAllNode {
         define_ports!(input_port!("max_failures", 1))
     }
 
-    fn tick(&mut self, ctx: &mut NodeData) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
         self.failure_threshold = ctx.config.get_input("max_failures")?;
 
         let children_count = ctx.children.len();
@@ -119,7 +119,8 @@ impl ControlNode for ParallelAllNode {
         Ok(NodeStatus::Running)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData) -> NodeResult<()> {
-        ctx.reset_children()
+    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+        ctx.reset_children();
+        Ok(())
     }
 }
