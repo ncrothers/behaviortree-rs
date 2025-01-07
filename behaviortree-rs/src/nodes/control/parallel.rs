@@ -6,7 +6,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::{Control, ControlNode};
+use super::{ControlContext, ControlNode};
 
 /// The ParallelNode execute all its children
 /// __concurrently__, but not in separate threads!
@@ -76,6 +76,8 @@ impl ParallelNode {
 }
 
 impl ControlNode for ParallelNode {
+    type Context = ControlContext;
+
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(
             input_port!("success_count", -1),
@@ -83,7 +85,7 @@ impl ControlNode for ParallelNode {
         )
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         self.success_threshold = ctx.config.get_input("success_count").unwrap();
         self.failure_threshold = ctx.config.get_input("failure_count").unwrap();
 
@@ -151,7 +153,7 @@ impl ControlNode for ParallelNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         ctx.reset_children();
         Ok(())
     }

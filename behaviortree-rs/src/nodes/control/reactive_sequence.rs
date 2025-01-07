@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::{Control, ControlNode};
+use super::{ControlContext, ControlNode};
 
 /// The ReactiveSequence is similar to a ParallelNode.
 /// All the children are ticked from first to last:
@@ -29,7 +29,9 @@ impl Default for ReactiveSequenceNode {
 }
 
 impl ControlNode for ReactiveSequenceNode {
-    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
+    type Context = ControlContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let mut all_skipped = true;
 
         ctx.status = NodeStatus::Running;
@@ -83,7 +85,7 @@ impl ControlNode for ReactiveSequenceNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         ctx.reset_children();
         Ok(())
     }

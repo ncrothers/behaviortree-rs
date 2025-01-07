@@ -58,7 +58,7 @@ pub struct NodeDataGeneric {
 
 pub struct NodeData<'a, T> {
     data: &'a mut NodeDataGeneric,
-    _pd: PhantomData<T>,
+    pub context: &'a mut T,
 }
 
 impl<'a, T> Deref for NodeData<'a, T> {
@@ -76,11 +76,8 @@ impl<'a, T> DerefMut for NodeData<'a, T> {
 }
 
 impl<'a, T> NodeData<'a, T> {
-    pub fn new(data: &'a mut NodeDataGeneric) -> Self {
-        Self {
-            data,
-            _pd: PhantomData,
-        }
+    pub fn new(data: &'a mut NodeDataGeneric, context: &'a mut T) -> Self {
+        Self { data, context }
     }
 }
 

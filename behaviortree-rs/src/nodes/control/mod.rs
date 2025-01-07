@@ -23,7 +23,9 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeType, PortsList, ToBoxed,
 };
 
-impl<'a> NodeData<'a, Control> {
+pub struct ControlContext;
+
+impl<'a> NodeData<'a, ControlContext> {
     /// Halt children from this index to the end.
     ///
     /// # Errors
@@ -62,23 +64,25 @@ impl<'a> NodeData<'a, Control> {
 }
 
 #[derive(Debug)]
-pub struct Control(Box<dyn ControlNode>);
+pub struct Control(Box<dyn ControlNode<Context = ControlContext>>);
 
 pub trait ControlNode: std::fmt::Debug + Send + Sync {
+    type Context;
+
     fn ports(&self) -> PortsList {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for Control {
-    type Target = Box<dyn ControlNode>;
+    type Target = Box<dyn ControlNode<Context = ControlContext>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -101,17 +105,17 @@ impl NodeBase for Control {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx))
+        self.tick(&mut NodeData::new(ctx, &mut ControlContext))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        ControlNode::halt(&mut *self.0, &mut NodeData::new(ctx))
+        ControlNode::halt(&mut *self.0, &mut NodeData::new(ctx, &mut ControlContext))
     }
 }
 
 impl<T> From<T> for Control
 where
-    T: ControlNode + 'static,
+    T: ControlNode<Context = ControlContext> + 'static,
 {
     fn from(value: T) -> Control {
         Control(Box::new(value))
@@ -120,7 +124,7 @@ where
 
 impl<T> ToBoxed<Control> for T
 where
-    T: ControlNode + 'static,
+    T: ControlNode<Context = ControlContext> + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: Control = self.into();

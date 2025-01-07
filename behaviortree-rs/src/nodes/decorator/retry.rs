@@ -4,7 +4,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::{Decorator, DecoratorNode};
+use super::{DecoratorContext, DecoratorNode};
 
 /// The RetryNode is used to execute a child several times if it fails.
 ///
@@ -42,11 +42,13 @@ impl Default for RetryNode {
 }
 
 impl DecoratorNode for RetryNode {
+    type Context = DecoratorContext;
+
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_attempts"))
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         // Load num_cycles from the port value
         self.max_attempts = ctx.config.get_input("num_attempts")?;
 
@@ -100,7 +102,7 @@ impl DecoratorNode for RetryNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
         self.try_count = 0;
         ctx.reset_child()
     }

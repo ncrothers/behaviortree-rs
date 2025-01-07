@@ -5,10 +5,10 @@ use evalexpr::{
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
-    nodes::{NodeData, NodeDataGeneric, NodeError, NodeResult},
+    nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::{SyncAction, SyncActionNode};
+use super::{SyncActionContext, SyncActionNode};
 
 /// The InverterNode returns Failure on Success, and Success on Failure
 #[derive(Debug, Default)]
@@ -17,7 +17,7 @@ pub struct ConditionNode {
 }
 
 impl ConditionNode {
-    fn run_condition(&mut self, node: &mut NodeDataGeneric) -> NodeResult<bool> {
+    fn run_condition(&mut self, node: &mut NodeData<SyncActionContext>) -> NodeResult<bool> {
         if self.expr.is_none() {
             let expr_str = node
                 .config
@@ -97,11 +97,13 @@ impl ConditionNode {
 }
 
 impl SyncActionNode for ConditionNode {
+    type Context = SyncActionContext;
+
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("expr", expr))
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         if self.run_condition(ctx)? {
             Ok(NodeStatus::Success)
         } else {
@@ -109,7 +111,7 @@ impl SyncActionNode for ConditionNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult<()> {
         ctx.reset_status();
 
         Ok(())

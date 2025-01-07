@@ -4,7 +4,7 @@ use crate::{
     nodes::{NodeData, NodeResult},
 };
 
-use super::{Decorator, DecoratorNode};
+use super::{DecoratorContext, DecoratorNode};
 
 /// The RunOnceNode is used when you want to execute the child
 /// only once.
@@ -33,11 +33,13 @@ impl Default for RunOnceNode {
 }
 
 impl DecoratorNode for RunOnceNode {
+    type Context = DecoratorContext;
+
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("then_skip", true))
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         let skip = ctx.config.get_input("then_skip")?;
 
         if self.already_ticked {
@@ -61,7 +63,7 @@ impl DecoratorNode for RunOnceNode {
         Ok(status)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
         ctx.reset_child()
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::{Control, ControlNode};
+use super::{ControlContext, ControlNode};
 
 /// The FallbackNode is used to try different strategies,
 /// until one succeeds.
@@ -32,7 +32,9 @@ impl Default for FallbackNode {
 }
 
 impl ControlNode for FallbackNode {
-    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
+    type Context = ControlContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         if ctx.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
@@ -82,7 +84,7 @@ impl ControlNode for FallbackNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.child_idx = 0;
         ctx.reset_children();
 

@@ -22,7 +22,9 @@ use super::{
     TreeNode,
 };
 
-impl<'a> NodeData<'a, Decorator> {
+pub struct DecoratorContext;
+
+impl<'a> NodeData<'a, DecoratorContext> {
     /// Calls `halt_child_idx(0)`. This should only be used in
     /// `Decorator` nodes
     pub fn halt_child(&mut self) -> NodeResult<()> {
@@ -51,23 +53,25 @@ impl<'a> NodeData<'a, Decorator> {
 }
 
 #[derive(Debug)]
-pub struct Decorator(Box<dyn DecoratorNode>);
+pub struct Decorator(Box<dyn DecoratorNode<Context = DecoratorContext>>);
 
 pub trait DecoratorNode: std::fmt::Debug + Send + Sync {
+    type Context;
+
     fn ports(&self) -> PortsList {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<Decorator>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for Decorator {
-    type Target = Box<dyn DecoratorNode>;
+    type Target = Box<dyn DecoratorNode<Context = DecoratorContext>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -90,17 +94,17 @@ impl NodeBase for Decorator {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx))
+        self.tick(&mut NodeData::new(ctx, &mut DecoratorContext))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        DecoratorNode::halt(&mut *self.0, &mut NodeData::new(ctx))
+        DecoratorNode::halt(&mut *self.0, &mut NodeData::new(ctx, &mut DecoratorContext))
     }
 }
 
 impl<T> From<T> for Decorator
 where
-    T: DecoratorNode + 'static,
+    T: DecoratorNode<Context = DecoratorContext> + 'static,
 {
     fn from(value: T) -> Decorator {
         Decorator(Box::new(value))
@@ -109,7 +113,7 @@ where
 
 impl<T> ToBoxed<Decorator> for T
 where
-    T: DecoratorNode + 'static,
+    T: DecoratorNode<Context = DecoratorContext> + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: Decorator = self.into();

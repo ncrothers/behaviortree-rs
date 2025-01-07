@@ -3,7 +3,7 @@ use crate::{
     nodes::{NodeData, NodeError, NodeResult},
 };
 
-use super::{Control, ControlNode};
+use super::{ControlContext, ControlNode};
 
 /// The SequenceNode is used to tick children in an ordered sequence.
 /// If any child returns RUNNING, previous children will NOT be ticked again.
@@ -33,7 +33,9 @@ impl Default for SequenceNode {
 }
 
 impl ControlNode for SequenceNode {
-    fn tick(&mut self, ctx: &mut NodeData<Control>) -> NodeResult {
+    type Context = ControlContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         if ctx.status == NodeStatus::Idle {
             self.all_skipped = true;
         }
@@ -75,7 +77,7 @@ impl ControlNode for SequenceNode {
         Ok(NodeStatus::Success)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<Control>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.child_idx = 0;
         ctx.reset_children();
         Ok(())

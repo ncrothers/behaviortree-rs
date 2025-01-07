@@ -2,8 +2,11 @@ use behaviortree_rs::{
     basic_types::{BTToString, NodeStatus, PortsList},
     macros::{define_ports, input_port},
     nodes::{
-        action::{StatefulAction, StatefulActionNode, SyncAction, SyncActionNode},
-        NodeData, NodeDataGeneric, NodeResult,
+        action::{
+            StatefulAction, StatefulActionContext, StatefulActionNode, SyncAction,
+            SyncActionContext, SyncActionNode,
+        },
+        NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeType, ToBoxed,
     },
 };
 use behaviortree_rs_derive::{bt_node, BTToString, FromString};
@@ -28,7 +31,9 @@ pub fn test_setup() {
 pub struct StatusNode;
 
 impl SyncActionNode for StatusNode {
-    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
+    type Context = SyncActionContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let status: NodeStatus = ctx.config.get_input("status")?;
 
         log::info!("I am a node that returns {}!", status.bt_to_string());
@@ -47,7 +52,9 @@ pub struct SuccessThenFailure {
 }
 
 impl SyncActionNode for SuccessThenFailure {
-    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
+    type Context = SyncActionContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let max_iters: usize = ctx.config.get_input("iters")?;
 
         log::info!("SuccessThenFailure!");
@@ -69,7 +76,9 @@ impl SyncActionNode for SuccessThenFailure {
 pub struct EchoNode;
 
 impl SyncActionNode for EchoNode {
-    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
+    type Context = SyncActionContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let msg: String = ctx.config.get_input("msg")?;
 
         log::info!("{msg}");
@@ -88,6 +97,8 @@ pub struct RunForNode {
 }
 
 impl StatefulActionNode for RunForNode {
+    type Context = StatefulActionContext;
+
     fn ports(&self) -> PortsList {
         define_ports!(
             input_port!("iters"),
@@ -95,13 +106,13 @@ impl StatefulActionNode for RunForNode {
         )
     }
 
-    fn on_start(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult {
+    fn on_start(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult {
         log::info!("on_start()");
 
         Ok(NodeStatus::Running)
     }
 
-    fn on_running(&mut self, ctx: &mut NodeData<StatefulAction>) -> NodeResult {
+    fn on_running(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult {
         let limit: usize = ctx.config.get_input("iters")?;
 
         if self.counter < limit {
@@ -128,7 +139,9 @@ impl DataNode {
 }
 
 impl SyncActionNode for DataNode {
-    fn tick(&mut self, ctx: &mut NodeData<SyncAction>) -> NodeResult {
+    type Context = SyncActionContext;
+
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         Ok(NodeStatus::Success)
     }
 }
