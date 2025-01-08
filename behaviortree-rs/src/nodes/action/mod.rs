@@ -9,7 +9,21 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, NodeType, PortsList, ToBoxed,
 };
 
-pub struct SyncActionContext;
+pub struct SyncActionContext<T = ()>(pub T);
+
+impl<T> Deref for SyncActionContext<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for SyncActionContext<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// Wrapper struct around a boxed [`SyncActionNode`] implementer.
 #[derive(Debug)]
@@ -56,7 +70,7 @@ impl NodeBase for SyncAction {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        match self.tick(&mut NodeData::new(ctx, &mut SyncActionContext))? {
+        match self.tick(&mut NodeData::new(ctx, &mut SyncActionContext(())))? {
             status @ (NodeStatus::Running | NodeStatus::Idle) => Err(NodeError::StatusError(
                 ctx.config.path.clone(),
                 status.to_string(),
@@ -68,7 +82,7 @@ impl NodeBase for SyncAction {
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
         SyncActionNode::halt(
             &mut *self.0,
-            &mut NodeData::new(ctx, &mut SyncActionContext),
+            &mut NodeData::new(ctx, &mut SyncActionContext(())),
         )
     }
 }
@@ -96,7 +110,21 @@ where
 // Stateful Action Node
 // =====================
 
-pub struct StatefulActionContext;
+pub struct StatefulActionContext<T = ()>(pub T);
+
+impl<T> Deref for StatefulActionContext<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for StatefulActionContext<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct StatefulAction(Box<dyn StatefulActionNode<Context = StatefulActionContext>>);
@@ -149,7 +177,7 @@ impl NodeBase for StatefulAction {
                 ::log::debug!("[behaviortree_rs]: {}::on_start()", &ctx.config.path);
                 // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
                 let new_status =
-                    self.on_start(&mut NodeData::new(ctx, &mut StatefulActionContext))?;
+                    self.on_start(&mut NodeData::new(ctx, &mut StatefulActionContext(())))?;
                 // drop(wrapper);
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
@@ -162,7 +190,7 @@ impl NodeBase for StatefulAction {
             NodeStatus::Running => {
                 ::log::debug!("[behaviortree_rs]: {}::on_running()", &ctx.config.path);
                 let new_status =
-                    self.on_running(&mut NodeData::new(ctx, &mut StatefulActionContext))?;
+                    self.on_running(&mut NodeData::new(ctx, &mut StatefulActionContext(())))?;
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
                         format!("{}::on_running()", ctx.config.path),
@@ -182,7 +210,7 @@ impl NodeBase for StatefulAction {
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
         StatefulActionNode::on_halted(
             &mut *self.0,
-            &mut NodeData::new(ctx, &mut StatefulActionContext),
+            &mut NodeData::new(ctx, &mut StatefulActionContext(())),
         )
     }
 }

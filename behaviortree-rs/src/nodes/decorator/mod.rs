@@ -22,9 +22,23 @@ use super::{
     TreeNode,
 };
 
-pub struct DecoratorContext;
+pub struct DecoratorContext<T = ()>(T);
 
-impl<'a> NodeData<'a, DecoratorContext> {
+impl<T> Deref for DecoratorContext<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for DecoratorContext<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<'a, T> NodeData<'a, DecoratorContext<T>> {
     /// Calls `halt_child_idx(0)`. This should only be used in
     /// `Decorator` nodes
     pub fn halt_child(&mut self) -> NodeResult<()> {
@@ -94,11 +108,14 @@ impl NodeBase for Decorator {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx, &mut DecoratorContext))
+        self.tick(&mut NodeData::new(ctx, &mut DecoratorContext(())))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        DecoratorNode::halt(&mut *self.0, &mut NodeData::new(ctx, &mut DecoratorContext))
+        DecoratorNode::halt(
+            &mut *self.0,
+            &mut NodeData::new(ctx, &mut DecoratorContext(())),
+        )
     }
 }
 

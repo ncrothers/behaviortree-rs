@@ -141,7 +141,7 @@ impl DataNode {
 impl SyncActionNode for DataNode {
     type Context = SyncActionContext;
 
-    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult {
         Ok(NodeStatus::Success)
     }
 }

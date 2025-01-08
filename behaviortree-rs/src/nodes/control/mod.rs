@@ -23,9 +23,23 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeType, PortsList, ToBoxed,
 };
 
-pub struct ControlContext;
+pub struct ControlContext<T = ()>(T);
 
-impl<'a> NodeData<'a, ControlContext> {
+impl<T> Deref for ControlContext<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for ControlContext<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<'a, T> NodeData<'a, ControlContext<T>> {
     /// Halt children from this index to the end.
     ///
     /// # Errors
@@ -105,11 +119,14 @@ impl NodeBase for Control {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx, &mut ControlContext))
+        self.tick(&mut NodeData::new(ctx, &mut ControlContext(())))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        ControlNode::halt(&mut *self.0, &mut NodeData::new(ctx, &mut ControlContext))
+        ControlNode::halt(
+            &mut *self.0,
+            &mut NodeData::new(ctx, &mut ControlContext(())),
+        )
     }
 }
 
