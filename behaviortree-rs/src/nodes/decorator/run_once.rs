@@ -40,7 +40,7 @@ impl DecoratorNode for RunOnceNode {
     }
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
-        let skip = ctx.config.get_input("then_skip")?;
+        let skip = ctx.get_input("then_skip")?;
 
         if self.already_ticked {
             return if skip {
@@ -50,7 +50,7 @@ impl DecoratorNode for RunOnceNode {
             };
         }
 
-        ctx.status = NodeStatus::Running;
+        ctx.set_status(NodeStatus::Running);
 
         let status = ctx.child().unwrap().execute_tick()?;
 

@@ -20,7 +20,7 @@ impl ConditionNode {
     fn run_condition(&mut self, node: &mut NodeData<SyncActionContext>) -> NodeResult<bool> {
         if self.expr.is_none() {
             let expr_str = node
-                .config
+                .meta
                 .input_ports
                 .get("expr")
                 .expect("couldn't get expr port, shouldn't be possible");
@@ -44,34 +44,30 @@ impl ConditionNode {
                     .expect("variable missing : delimiter, shouldn't be possible");
 
                 let value = match var_type {
-                    "int" => {
-                        Value::Int(node.config.blackboard.get::<i64>(name).ok_or_else(|| {
-                            NodeError::BlackboardError(format!(
-                                "Couldn't load blackboard key {name} as an integer"
-                            ))
-                        })?)
-                    }
-                    "float" => {
-                        Value::Float(node.config.blackboard.get::<f64>(name).ok_or_else(|| {
-                            NodeError::BlackboardError(format!(
-                                "Couldn't load blackboard key {name} as a float"
-                            ))
-                        })?)
-                    }
-                    "str" => Value::String(node.config.blackboard.get::<String>(name).ok_or_else(
-                        || {
+                    "int" => Value::Int(node.blackboard.get::<i64>(name).ok_or_else(|| {
+                        NodeError::BlackboardError(format!(
+                            "Couldn't load blackboard key {name} as an integer"
+                        ))
+                    })?),
+                    "float" => Value::Float(node.blackboard.get::<f64>(name).ok_or_else(|| {
+                        NodeError::BlackboardError(format!(
+                            "Couldn't load blackboard key {name} as a float"
+                        ))
+                    })?),
+                    "str" => {
+                        Value::String(node.blackboard.get::<String>(name).ok_or_else(|| {
                             NodeError::BlackboardError(format!(
                                 "Couldn't load blackboard key {name} as a string"
                             ))
-                        },
-                    )?),
-                    "bool" => Value::Boolean(node.config.blackboard.get::<bool>(name).ok_or_else(
-                        || {
+                        })?)
+                    }
+                    "bool" => {
+                        Value::Boolean(node.blackboard.get::<bool>(name).ok_or_else(|| {
                             NodeError::BlackboardError(format!(
                                 "Couldn't load blackboard key {name} as a bool"
                             ))
-                        },
-                    )?),
+                        })?)
+                    }
                     _ => unreachable!(),
                 };
 

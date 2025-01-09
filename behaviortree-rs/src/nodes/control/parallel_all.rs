@@ -57,7 +57,7 @@ impl ControlNode for ParallelAllNode {
     }
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
-        self.failure_threshold = ctx.config.get_input("max_failures")?;
+        self.failure_threshold = ctx.get_input("max_failures")?;
 
         let children_count = ctx.children.len();
 

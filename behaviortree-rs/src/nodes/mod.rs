@@ -6,6 +6,7 @@ use std::{
 };
 
 use thiserror::Error;
+use typed_builder::TypedBuilder;
 
 use crate::{
     basic_types::{
@@ -37,15 +38,12 @@ pub trait ToBoxed<T> {
 
 #[derive(Debug)]
 pub struct NodeDataGeneric {
-    /// Name of the node as registered in the `Factory`
-    pub name: String,
-    /// The type of this node
-    pub node_type: NodeType,
     ///
-    pub config: NodeConfig,
-    pub status: NodeStatus,
+    pub(crate) meta: NodeMetadata,
+    pub(crate) status: NodeStatus,
     /// Vector of child nodes
     pub children: Vec<TreeNode>,
+    pub blackboard: Blackboard,
 }
 
 pub struct NodeData<'a, T> {
@@ -111,13 +109,13 @@ impl TreeNode {
     }
 
     /// Get a mutable reference to the `NodeConfig`
-    pub fn config_mut(&mut self) -> &mut NodeConfig {
+    pub fn config_mut(&mut self) -> &mut NodeMetadata {
         self.data.config_mut()
     }
 
     /// Get a reference to the `NodeConfig`
-    pub fn config(&self) -> &NodeConfig {
-        self.data.config()
+    pub fn config(&self) -> &NodeMetadata {
+        self.data.metadata()
     }
 
     /// Get the node's `NodeType`, which is more general than `NodeType`
@@ -153,6 +151,16 @@ impl TreeNode {
 }
 
 impl NodeDataGeneric {
+    /// Get the name of the node
+    pub fn name(&self) -> &str {
+        &self.meta.name
+    }
+
+    /// Returns a reference to the blackboard.
+    pub fn blackboard(&self) -> &Blackboard {
+        &self.blackboard
+    }
+
     /// Returns the current node's status
     pub fn status(&self) -> NodeStatus {
         self.status
@@ -168,24 +176,117 @@ impl NodeDataGeneric {
         self.status = NodeStatus::Idle;
     }
 
-    /// Get the name of the node
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     /// Get a mutable reference to the `NodeConfig`
-    pub fn config_mut(&mut self) -> &mut NodeConfig {
-        &mut self.config
+    pub fn config_mut(&mut self) -> &mut NodeMetadata {
+        &mut self.meta
     }
 
-    /// Get a reference to the `NodeConfig`
-    pub fn config(&self) -> &NodeConfig {
-        &self.config
+    /// Get a reference to the [`NodeMetadata`]
+    pub fn metadata(&self) -> &NodeMetadata {
+        &self.meta
     }
 
     /// Get the node's `NodeType`, which is more general than `NodeType`
     pub fn node_type(&self) -> NodeType {
-        self.node_type
+        self.meta.node_type
+    }
+
+    /// Returns the value of the input port at the `port` key as a `Result<T, NodeError>`.
+    /// The value is `Err` in the following situations:
+    /// - The port wasn't found at that key
+    /// - `T` doesn't match the type of the stored value
+    /// - If a default value is needed (value is empty), couldn't parse default value
+    /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
+    ///     key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
+    /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
+    pub fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
+    where
+        T: FromString + Clone + Send + 'static,
+    {
+        match self.meta.input_ports.get(port) {
+            Some(val) => {
+                // Check if default is needed
+                if val.is_empty() {
+                    let port_info = self.meta.manifest.ports.get(port).unwrap();
+                    match port_info.default_value() {
+                        Some(default) => match default.parse_str() {
+                            Ok(value) => Ok(value),
+                            Err(_) => Err(NodeError::PortError(String::from(port))),
+                        },
+                        None => Err(NodeError::PortError(String::from(port))),
+                    }
+                } else {
+                    match get_remapped_key(port, val) {
+                        // Value is a Blackboard pointer
+                        Some(key) => match self.blackboard.get::<T>(&key) {
+                            Some(val) => Ok(val),
+                            None => Err(NodeError::BlackboardError(key)),
+                        },
+                        // Value is just a normal string
+                        None => match <T as FromString>::from_string(val) {
+                            Ok(val) => Ok(val),
+                            Err(_) => Err(NodeError::PortValueParseError(
+                                String::from(port),
+                                format!("{:?}", TypeId::of::<T>()),
+                            )),
+                        },
+                    }
+                }
+            }
+            // Port not found
+            None => Err(NodeError::PortError(String::from(port))),
+        }
+    }
+
+    /// Sets `value` into the blackboard. The key is based on the value provided
+    /// to the port at `port`.
+    ///
+    /// # Examples
+    ///
+    /// - Port value: `"="`: uses the port name as the blackboard key
+    /// - `"foo"` uses `"foo"` as the blackboard key
+    /// - `"{foo}"` uses `"foo"` as the blackboard key
+    pub fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
+    where
+        T: Clone + Send + 'static,
+    {
+        match self.meta.output_ports.get(port) {
+            Some(port_value) => {
+                let blackboard_key = match port_value.as_str() {
+                    "=" => port.to_string(),
+                    value => match value.is_bb_pointer() {
+                        true => value.strip_bb_pointer().unwrap(),
+                        false => value.to_string(),
+                    },
+                };
+
+                self.blackboard.set(blackboard_key, value);
+
+                Ok(())
+            }
+            None => Err(NodeError::PortError(port.to_string())),
+        }
+    }
+
+    /// Adds a port to the config based on the direction. Used during XML parsing.
+    pub fn add_port(&mut self, direction: PortDirection, name: String, value: String) {
+        match direction {
+            PortDirection::Input => {
+                self.meta.input_ports.insert(name, value);
+            }
+            PortDirection::Output => {
+                self.meta.output_ports.insert(name, value);
+            }
+            _ => {}
+        };
+    }
+
+    pub fn has_port(&self, direction: &PortDirection, name: &String) -> bool {
+        match direction {
+            PortDirection::Input => self.meta.input_ports.contains_key(name),
+            PortDirection::Output => self.meta.output_ports.contains_key(name),
+            _ => false,
+        }
     }
 }
 
@@ -244,170 +345,32 @@ pub enum PostCond {
     Count,
 }
 
-#[derive(Clone, Debug)]
-pub enum NodeRuntime {
-    Async,
-    Sync,
-    All,
-}
-
 // =========================================
 // Struct Definitions and Implementations
 // =========================================
 
 /// Contains all common configuration that all types of nodes use.
-#[derive(Clone, Debug)]
-pub struct NodeConfig {
-    pub blackboard: Blackboard,
-    pub input_ports: PortsRemapping,
-    pub output_ports: PortsRemapping,
-    pub manifest: Option<Arc<TreeNodeManifest>>,
-    pub uid: u16,
+#[derive(Clone, Debug, TypedBuilder)]
+pub struct NodeMetadata {
+    #[builder(default)]
+    pub(crate) uid: u16,
+    /// Name of the node as registered in the `Factory`
+    pub(crate) name: String,
     /// TODO: doesn't show actual path yet
-    pub path: String,
+    pub(crate) path: String,
+    /// The type of this node
+    pub(crate) node_type: NodeType,
+    #[builder(default)]
+    pub(crate) input_ports: PortsRemapping,
+    #[builder(default)]
+    pub(crate) output_ports: PortsRemapping,
+    pub(crate) manifest: Arc<TreeNodeManifest>,
     /// TODO: not used
+    #[builder(default)]
     pub(crate) _pre_conditions: HashMap<PreCond, String>,
     /// TODO: not used
+    #[builder(default)]
     pub(crate) _post_conditions: HashMap<PostCond, String>,
-}
-
-impl NodeConfig {
-    pub fn new(blackboard: Blackboard) -> NodeConfig {
-        Self {
-            blackboard,
-            input_ports: HashMap::new(),
-            output_ports: HashMap::new(),
-            manifest: None,
-            uid: 1,
-            path: String::from("TODO"),
-            _pre_conditions: HashMap::new(),
-            _post_conditions: HashMap::new(),
-        }
-    }
-
-    /// Returns a reference to the blackboard.
-    pub fn blackboard(&self) -> &Blackboard {
-        &self.blackboard
-    }
-
-    /// Adds a port to the config based on the direction. Used during XML parsing.
-    pub fn add_port(&mut self, direction: PortDirection, name: String, value: String) {
-        match direction {
-            PortDirection::Input => {
-                self.input_ports.insert(name, value);
-            }
-            PortDirection::Output => {
-                self.output_ports.insert(name, value);
-            }
-            _ => {}
-        };
-    }
-
-    pub fn has_port(&self, direction: &PortDirection, name: &String) -> bool {
-        match direction {
-            PortDirection::Input => self.input_ports.contains_key(name),
-            PortDirection::Output => self.output_ports.contains_key(name),
-            _ => false,
-        }
-    }
-
-    /// Returns a pointer to the `TreeNodeManifest` for this node.
-    /// Only used during XML parsing.
-    pub fn manifest(&self) -> Result<Arc<TreeNodeManifest>, ParseError> {
-        match self.manifest.as_ref() {
-            Some(manifest) => Ok(Arc::clone(manifest)),
-            None => Err(ParseError::InternalError(
-                "Missing manifest. This shouldn't happen; please report this.".to_string(),
-            )),
-        }
-    }
-
-    /// Replace the inner manifest.
-    pub fn set_manifest(&mut self, manifest: Arc<TreeNodeManifest>) {
-        let _ = self.manifest.insert(manifest);
-    }
-
-    /// Returns the value of the input port at the `port` key as a `Result<T, NodeError>`.
-    /// The value is `Err` in the following situations:
-    /// - The port wasn't found at that key
-    /// - `T` doesn't match the type of the stored value
-    /// - If a default value is needed (value is empty), couldn't parse default value
-    /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
-    ///     key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
-    /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
-    where
-        T: FromString + Clone + Send + 'static,
-    {
-        match self.input_ports.get(port) {
-            Some(val) => {
-                // Check if default is needed
-                if val.is_empty() {
-                    match self.manifest() {
-                        Ok(manifest) => {
-                            let port_info = manifest.ports.get(port).unwrap();
-                            match port_info.default_value() {
-                                Some(default) => match default.parse_str() {
-                                    Ok(value) => Ok(value),
-                                    Err(_) => Err(NodeError::PortError(String::from(port))),
-                                },
-                                None => Err(NodeError::PortError(String::from(port))),
-                            }
-                        }
-                        Err(_) => Err(NodeError::PortError(String::from(port))),
-                    }
-                } else {
-                    match get_remapped_key(port, val) {
-                        // Value is a Blackboard pointer
-                        Some(key) => match self.blackboard.get::<T>(&key) {
-                            Some(val) => Ok(val),
-                            None => Err(NodeError::BlackboardError(key)),
-                        },
-                        // Value is just a normal string
-                        None => match <T as FromString>::from_string(val) {
-                            Ok(val) => Ok(val),
-                            Err(_) => Err(NodeError::PortValueParseError(
-                                String::from(port),
-                                format!("{:?}", TypeId::of::<T>()),
-                            )),
-                        },
-                    }
-                }
-            }
-            // Port not found
-            None => Err(NodeError::PortError(String::from(port))),
-        }
-    }
-
-    /// Sets `value` into the blackboard. The key is based on the value provided
-    /// to the port at `port`.
-    ///
-    /// # Examples
-    ///
-    /// - Port value: `"="`: uses the port name as the blackboard key
-    /// - `"foo"` uses `"foo"` as the blackboard key
-    /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
-    where
-        T: Clone + Send + 'static,
-    {
-        match self.output_ports.get(port) {
-            Some(port_value) => {
-                let blackboard_key = match port_value.as_str() {
-                    "=" => port.to_string(),
-                    value => match value.is_bb_pointer() {
-                        true => value.strip_bb_pointer().unwrap(),
-                        false => value.to_string(),
-                    },
-                };
-
-                self.blackboard.set(blackboard_key, value);
-
-                Ok(())
-            }
-            None => Err(NodeError::PortError(port.to_string())),
-        }
-    }
 }
 
 impl Clone for Box<dyn PortValue> {

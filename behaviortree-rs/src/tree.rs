@@ -14,7 +14,7 @@ use crate::{
         PortsRemapping, TreeNodeManifest,
     },
     blackboard::{Blackboard, BlackboardString},
-    nodes::{self, NodeBase, NodeConfig, NodeDataGeneric, NodeResult, ToBoxed, TreeNode},
+    nodes::{self, NodeBase, NodeDataGeneric, NodeMetadata, NodeResult, ToBoxed, TreeNode},
 };
 
 #[derive(Debug, Error)]
@@ -119,7 +119,7 @@ impl Tree {
     }
 
     pub fn root_blackboard(&self) -> Blackboard {
-        self.root.config().blackboard.clone()
+        self.root.data.blackboard().clone()
     }
 
     pub fn halt_tree(&mut self) -> NodeResult<()> {
@@ -220,35 +220,6 @@ impl Factory {
             .insert(name.as_ref().into(), (node_type, Arc::new(node_fn)));
     }
 
-    fn create_node(
-        &self,
-        name: String,
-        node_type: NodeType,
-        node_fn: &NodeCreateFnDyn,
-        config: NodeConfig,
-        children: Vec<TreeNode>,
-    ) -> TreeNode {
-        let node = node_fn();
-
-        // Create and set the manifest
-        let manifest = TreeNodeManifest::new(node_type, &name, node.ports(), "");
-        let config = NodeConfig {
-            manifest: Some(Arc::new(manifest)),
-            ..config
-        };
-
-        TreeNode {
-            node,
-            data: NodeDataGeneric {
-                name,
-                node_type,
-                config,
-                status: NodeStatus::Idle,
-                children,
-            },
-        }
-    }
-
     fn get_uid(&self) -> u32 {
         let uid = *self.tree_uid.lock().unwrap();
         *self.tree_uid.lock().unwrap() += 1;
@@ -344,34 +315,6 @@ impl Factory {
         Ok(Tree::new(root_node))
     }
 
-    fn build_leaf_node(
-        &self,
-        node_name: &String,
-        attributes: Attributes,
-        config: NodeConfig,
-    ) -> Result<TreeNode, ParseError> {
-        // Get clone of node from node_map based on tag name
-        let (node_type, node_fn) = self
-            .node_map
-            .get(node_name)
-            .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
-        if !matches!(node_type, NodeType::Action) {
-            return Err(ParseError::NodeTypeMismatch(String::from("Action")));
-        }
-
-        let mut node = self.create_node(
-            node_name.clone(),
-            *node_type,
-            node_fn.deref(),
-            config,
-            Vec::new(),
-        );
-
-        self.add_ports_to_node(&mut node, node_name, attributes)?;
-
-        Ok(node)
-    }
-
     fn build_children(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
@@ -400,8 +343,7 @@ impl Factory {
         node_name: &str,
         attributes: Attributes,
     ) -> Result<(), ParseError> {
-        let config = node_ptr.config_mut();
-        let manifest = config.manifest()?;
+        let manifest = Arc::clone(&node_ptr.data.meta.manifest);
 
         let mut remap = PortsRemapping::new();
 
@@ -450,7 +392,9 @@ impl Factory {
                     }
                 }
 
-                config.add_port(port.direction().clone(), remap_name, remap_val);
+                node_ptr
+                    .data
+                    .add_port(port.direction().clone(), remap_name, remap_val);
             }
         }
 
@@ -459,10 +403,10 @@ impl Factory {
             let direction = port_info.direction();
 
             if !matches!(direction, PortDirection::Output)
-                && !config.has_port(direction, port_name)
+                && !node_ptr.data.has_port(direction, port_name)
                 && port_info.default_value().is_some()
             {
-                config.add_port(
+                node_ptr.data.add_port(
                     PortDirection::Input,
                     port_name.clone(),
                     port_info.default_value_str().unwrap(),
@@ -495,30 +439,43 @@ impl Factory {
 
                 log::debug!("build_child Start: {node_name}");
 
-                let mut config = NodeConfig::new(blackboard.clone());
-                config.path = path_prefix.to_owned() + &node_name;
+                let path = path_prefix.to_owned() + &node_name;
 
                 let (node_type, node_fn) = self
                     .node_map
                     .get(&node_name)
                     .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
 
+                let node = node_fn();
+
+                let node_meta = NodeMetadata::builder()
+                    .name(node_name.clone())
+                    .node_type(*node_type)
+                    .path(path.clone())
+                    .manifest(Arc::new(TreeNodeManifest::new(
+                        *node_type,
+                        &node_name,
+                        node.ports(),
+                        "",
+                    )))
+                    .build();
+
                 let node = match node_type {
                     NodeType::Control => {
-                        let children = self.build_children(
-                            reader,
-                            blackboard,
-                            tree_name,
-                            &(config.path.to_owned() + "/"),
-                        )?;
+                        let children =
+                            self.build_children(reader, blackboard, tree_name, &(path + "/"))?;
 
-                        let mut node = self.create_node(
-                            node_name.clone(),
-                            *node_type,
-                            node_fn.deref(),
-                            config,
+                        let node_data = NodeDataGeneric {
+                            meta: node_meta,
+                            status: NodeStatus::Idle,
                             children,
-                        );
+                            blackboard: blackboard.clone(),
+                        };
+
+                        let mut node = TreeNode {
+                            data: node_data,
+                            node,
+                        };
 
                         self.add_ports_to_node(&mut node, &node_name, attributes)?;
 
@@ -531,7 +488,7 @@ impl Factory {
                                 reader,
                                 blackboard,
                                 tree_name,
-                                &(config.path.to_owned() + "/"),
+                                &(path.clone() + "/"),
                             )? {
                                 CreateNodeResult::Node(node) => break node,
                                 CreateNodeResult::Continue => (),
@@ -569,13 +526,17 @@ impl Factory {
                             }
                         }
 
-                        let mut node = self.create_node(
-                            node_name.clone(),
-                            *node_type,
-                            node_fn.deref(),
-                            config,
-                            vec![child],
-                        );
+                        let node_data = NodeDataGeneric {
+                            meta: node_meta,
+                            status: NodeStatus::Idle,
+                            children: vec![child],
+                            blackboard: blackboard.clone(),
+                        };
+
+                        let mut node = TreeNode {
+                            data: node_data,
+                            node,
+                        };
 
                         self.add_ports_to_node(&mut node, &node_name, attributes)?;
 
@@ -592,9 +553,6 @@ impl Factory {
                 let node_name = String::from_utf8(e.name().0.into())?;
                 log::debug!("[Leaf node]: {node_name}");
                 let attributes = e.attributes();
-
-                let mut config = NodeConfig::new(blackboard.clone());
-                config.path = path_prefix.to_owned() + &node_name;
 
                 let node = match node_name.as_str() {
                     "SubTree" => {
@@ -647,7 +605,48 @@ impl Factory {
                             child_blackboard,
                         )?
                     }
-                    _ => self.build_leaf_node(&node_name, attributes, config)?,
+                    _ => {
+                        // Get clone of node from node_map based on tag name
+                        let (node_type, node_fn) = self
+                            .node_map
+                            .get(&node_name)
+                            .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
+                        if !matches!(node_type, NodeType::Action) {
+                            return Err(ParseError::NodeTypeMismatch(String::from("Action")));
+                        }
+
+                        let path = path_prefix.to_owned() + &node_name;
+
+                        let node = node_fn();
+
+                        let node_meta = NodeMetadata::builder()
+                            .name(node_name.clone())
+                            .node_type(*node_type)
+                            .path(path)
+                            .manifest(Arc::new(TreeNodeManifest::new(
+                                *node_type,
+                                &node_name,
+                                node.ports(),
+                                "",
+                            )))
+                            .build();
+
+                        let node_data = NodeDataGeneric {
+                            meta: node_meta,
+                            status: NodeStatus::Idle,
+                            children: Vec::new(),
+                            blackboard: blackboard.clone(),
+                        };
+
+                        let mut node = TreeNode {
+                            data: node_data,
+                            node,
+                        };
+
+                        self.add_ports_to_node(&mut node, &node_name, attributes)?;
+
+                        node
+                    }
                 };
 
                 CreateNodeResult::Node(node)

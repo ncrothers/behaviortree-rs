@@ -24,7 +24,7 @@ impl ControlNode for ReactiveFallbackNode {
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let mut all_skipped = true;
-        ctx.status = NodeStatus::Running;
+        ctx.set_status(NodeStatus::Running);
 
         for index in 0..ctx.children.len() {
             let cur_child = &mut ctx.children[index];

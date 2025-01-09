@@ -35,7 +35,7 @@ impl ControlNode for IfThenElseNode {
             ));
         }
 
-        ctx.status = NodeStatus::Running;
+        ctx.set_status(NodeStatus::Running);
 
         if self.child_idx == 0 {
             let status = ctx.children[0].execute_tick()?;

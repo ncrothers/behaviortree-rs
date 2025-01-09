@@ -19,6 +19,7 @@ log = "0.4.22"
 parking_lot = "0.12.3"
 quick-xml = { version = "0.30.0", features = ["serde", "serialize"] }
 thiserror = "1.0.47"
+typed-builder = "0.20.0"
 
 [dev-dependencies]
 pretty_env_logger = "0.5.0"

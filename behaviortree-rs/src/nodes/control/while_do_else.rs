@@ -31,7 +31,7 @@ impl ControlNode for WhileDoElseNode {
             ));
         }
 
-        ctx.status = NodeStatus::Running;
+        ctx.set_status(NodeStatus::Running);
 
         let condition_status = ctx.children[0].execute_tick()?;
 

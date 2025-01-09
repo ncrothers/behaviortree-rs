@@ -36,11 +36,11 @@ impl ControlNode for SequenceWithMemoryNode {
     type Context = ControlContext;
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
-        if ctx.status == NodeStatus::Idle {
+        if ctx.status() == NodeStatus::Idle {
             self.all_skipped = true;
         }
 
-        ctx.status = NodeStatus::Running;
+        ctx.set_status(NodeStatus::Running);
 
         while self.child_idx < ctx.children.len() {
             let cur_child = &mut ctx.children[self.child_idx];

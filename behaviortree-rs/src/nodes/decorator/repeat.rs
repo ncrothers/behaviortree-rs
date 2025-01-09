@@ -50,7 +50,7 @@ impl DecoratorNode for RepeatNode {
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         // Load num_cycles from the port value
-        self.num_cycles = ctx.config.get_input("num_cycles")?;
+        self.num_cycles = ctx.get_input("num_cycles")?;
 
         let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 
@@ -58,7 +58,7 @@ impl DecoratorNode for RepeatNode {
             self.all_skipped = true;
         }
 
-        ctx.status = NodeStatus::Running;
+        ctx.set_status(NodeStatus::Running);
 
         while do_loop {
             let child_status = ctx.child().unwrap().execute_tick()?;

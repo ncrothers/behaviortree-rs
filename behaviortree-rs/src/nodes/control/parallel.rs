@@ -86,8 +86,8 @@ impl ControlNode for ParallelNode {
     }
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
-        self.success_threshold = ctx.config.get_input("success_count").unwrap();
-        self.failure_threshold = ctx.config.get_input("failure_count").unwrap();
+        self.success_threshold = ctx.get_input("success_count").unwrap();
+        self.failure_threshold = ctx.get_input("failure_count").unwrap();
 
         let children_count = ctx.children.len();
 

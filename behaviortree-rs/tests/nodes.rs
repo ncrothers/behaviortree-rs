@@ -34,7 +34,7 @@ impl SyncActionNode for StatusNode {
     type Context = SyncActionContext;
 
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
-        let status: NodeStatus = ctx.config.get_input("status")?;
+        let status: NodeStatus = ctx.get_input("status")?;
 
         log::info!("I am a node that returns {}!", status.bt_to_string());
 
@@ -55,7 +55,7 @@ impl SyncActionNode for SuccessThenFailure {
     type Context = SyncActionContext;
 
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
-        let max_iters: usize = ctx.config.get_input("iters")?;
+        let max_iters: usize = ctx.get_input("iters")?;
 
         log::info!("SuccessThenFailure!");
 
@@ -79,7 +79,7 @@ impl SyncActionNode for EchoNode {
     type Context = SyncActionContext;
 
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
-        let msg: String = ctx.config.get_input("msg")?;
+        let msg: String = ctx.get_input("msg")?;
 
         log::info!("{msg}");
 
@@ -113,14 +113,14 @@ impl StatefulActionNode for RunForNode {
     }
 
     fn on_running(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult {
-        let limit: usize = ctx.config.get_input("iters")?;
+        let limit: usize = ctx.get_input("iters")?;
 
         if self.counter < limit {
             log::info!("RunFor {}", self.counter);
             self.counter += 1;
             Ok(NodeStatus::Running)
         } else {
-            Ok(ctx.config.get_input("status")?)
+            Ok(ctx.get_input("status")?)
         }
     }
 }

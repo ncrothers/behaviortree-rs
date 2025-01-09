@@ -66,7 +66,7 @@ impl NodeBase for SyncAction {
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
         match self.tick(&mut NodeData::new(ctx, &mut SyncActionContext(())))? {
             status @ (NodeStatus::Running | NodeStatus::Idle) => Err(NodeError::StatusError(
-                ctx.config.path.clone(),
+                ctx.meta.path.clone(),
                 status.to_string(),
             )),
             status => Ok(status),
@@ -164,26 +164,26 @@ impl NodeBase for StatefulAction {
 
         let new_status = match prev_status {
             NodeStatus::Idle => {
-                ::log::debug!("[behaviortree_rs]: {}::on_start()", &ctx.config.path);
+                ::log::debug!("[behaviortree_rs]: {}::on_start()", &ctx.meta.path);
                 // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
                 let new_status =
                     self.on_start(&mut NodeData::new(ctx, &mut StatefulActionContext(())))?;
                 // drop(wrapper);
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
-                        format!("{}::on_start()", ctx.config.path),
+                        format!("{}::on_start()", ctx.meta.path),
                         "Idle".to_string(),
                     ));
                 }
                 new_status
             }
             NodeStatus::Running => {
-                ::log::debug!("[behaviortree_rs]: {}::on_running()", &ctx.config.path);
+                ::log::debug!("[behaviortree_rs]: {}::on_running()", &ctx.meta.path);
                 let new_status =
                     self.on_running(&mut NodeData::new(ctx, &mut StatefulActionContext(())))?;
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
-                        format!("{}::on_running()", ctx.config.path),
+                        format!("{}::on_running()", ctx.meta.path),
                         "Idle".to_string(),
                     ));
                 }
