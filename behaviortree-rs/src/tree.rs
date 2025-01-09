@@ -10,8 +10,8 @@ use thiserror::Error;
 
 use crate::{
     basic_types::{
-        AttrsToMap, FromString, NodeCategory, NodeStatus, ParseBoolError, PortChecks,
-        PortDirection, PortsRemapping, TreeNodeManifest,
+        AttrsToMap, FromString, NodeStatus, NodeType, ParseBoolError, PortChecks, PortDirection,
+        PortsRemapping, TreeNodeManifest,
     },
     blackboard::{Blackboard, BlackboardString},
     nodes::{self, NodeBase, NodeConfig, NodeDataGeneric, NodeResult, ToBoxed, TreeNode},
@@ -183,7 +183,7 @@ impl<'a> Iterator for NodeIter<'a> {
 }
 
 pub struct Factory {
-    node_map: HashMap<String, (NodeCategory, Arc<NodeCreateFnDyn>)>,
+    node_map: HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)>,
     blackboard: Blackboard,
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
     main_tree_id: Option<String>,
@@ -212,7 +212,7 @@ impl Factory {
         self.blackboard = blackboard;
     }
 
-    pub fn register_node<F>(&mut self, name: impl AsRef<str>, node_fn: F, node_type: NodeCategory)
+    pub fn register_node<F>(&mut self, name: impl AsRef<str>, node_fn: F, node_type: NodeType)
     where
         F: Fn() -> Box<dyn NodeBase> + Send + Sync + 'static,
     {
@@ -223,7 +223,7 @@ impl Factory {
     fn create_node(
         &self,
         name: String,
-        node_category: NodeCategory,
+        node_type: NodeType,
         node_fn: &NodeCreateFnDyn,
         config: NodeConfig,
         children: Vec<TreeNode>,
@@ -231,20 +231,17 @@ impl Factory {
         let node = node_fn();
 
         // Create and set the manifest
-        let manifest = TreeNodeManifest::new(node_category, &name, node.ports(), "");
+        let manifest = TreeNodeManifest::new(node_type, &name, node.ports(), "");
         let config = NodeConfig {
             manifest: Some(Arc::new(manifest)),
             ..config
         };
-
-        let node_type = node.node_type();
 
         TreeNode {
             node,
             data: NodeDataGeneric {
                 name,
                 node_type,
-                node_category,
                 config,
                 status: NodeStatus::Idle,
                 children,
@@ -358,7 +355,7 @@ impl Factory {
             .node_map
             .get(node_name)
             .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
-        if !matches!(node_type, NodeCategory::Action) {
+        if !matches!(node_type, NodeType::Action) {
             return Err(ParseError::NodeTypeMismatch(String::from("Action")));
         }
 
@@ -507,7 +504,7 @@ impl Factory {
                     .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
 
                 let node = match node_type {
-                    NodeCategory::Control => {
+                    NodeType::Control => {
                         let children = self.build_children(
                             reader,
                             blackboard,
@@ -527,7 +524,7 @@ impl Factory {
 
                         node
                     }
-                    NodeCategory::Decorator => {
+                    NodeType::Decorator => {
                         // Loop until either an end tag or the child is found
                         let child = loop {
                             match self.build_child(
@@ -823,94 +820,82 @@ impl Default for Factory {
     }
 }
 
-fn builtin_nodes() -> HashMap<String, (NodeCategory, Arc<NodeCreateFnDyn>)> {
+fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
     let mut node_map = HashMap::new();
 
     // Control nodes
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::SequenceNode::default().to_boxed() })
             as Arc<NodeCreateFnDyn>;
-    node_map.insert(String::from("Sequence"), (NodeCategory::Control, node));
+    node_map.insert(String::from("Sequence"), (NodeType::Control, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> {
         nodes::control::ReactiveSequenceNode::default().to_boxed()
     });
-    node_map.insert(
-        String::from("ReactiveSequence"),
-        (NodeCategory::Control, node),
-    );
+    node_map.insert(String::from("ReactiveSequence"), (NodeType::Control, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> {
         nodes::control::SequenceWithMemoryNode::default().to_boxed()
     });
-    node_map.insert(String::from("SequenceStar"), (NodeCategory::Control, node));
+    node_map.insert(String::from("SequenceStar"), (NodeType::Control, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ParallelNode::default().to_boxed() });
-    node_map.insert(String::from("Parallel"), (NodeCategory::Control, node));
+    node_map.insert(String::from("Parallel"), (NodeType::Control, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ParallelAllNode::default().to_boxed() });
-    node_map.insert(String::from("ParallelAll"), (NodeCategory::Control, node));
+    node_map.insert(String::from("ParallelAll"), (NodeType::Control, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::FallbackNode::default().to_boxed() });
-    node_map.insert(String::from("Fallback"), (NodeCategory::Control, node));
+    node_map.insert(String::from("Fallback"), (NodeType::Control, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ReactiveFallbackNode.to_boxed() });
-    node_map.insert(
-        String::from("ReactiveFallback"),
-        (NodeCategory::Control, node),
-    );
+    node_map.insert(String::from("ReactiveFallback"), (NodeType::Control, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::IfThenElseNode::default().to_boxed() });
-    node_map.insert(String::from("IfThenElse"), (NodeCategory::Control, node));
+    node_map.insert(String::from("IfThenElse"), (NodeType::Control, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::control::WhileDoElseNode.to_boxed() });
-    node_map.insert(String::from("WhileDoElse"), (NodeCategory::Control, node));
+    node_map.insert(String::from("WhileDoElse"), (NodeType::Control, node));
 
     // Decorator nodes
     // Condition node
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::action::ConditionNode::default().to_boxed() });
-    node_map.insert(String::from("Condition"), (NodeCategory::Action, node));
+    node_map.insert(String::from("Condition"), (NodeType::Action, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::ForceFailureNode.to_boxed() });
-    node_map.insert(
-        String::from("ForceFailure"),
-        (NodeCategory::Decorator, node),
-    );
+    node_map.insert(String::from("ForceFailure"), (NodeType::Decorator, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::ForceSuccessNode.to_boxed() });
-    node_map.insert(
-        String::from("ForceSuccess"),
-        (NodeCategory::Decorator, node),
-    );
+    node_map.insert(String::from("ForceSuccess"), (NodeType::Decorator, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::InverterNode.to_boxed() });
-    node_map.insert(String::from("Inverter"), (NodeCategory::Decorator, node));
+    node_map.insert(String::from("Inverter"), (NodeType::Decorator, node));
 
     let node = Arc::new(|| -> Box<dyn NodeBase> {
         nodes::decorator::KeepRunningUntilFailureNode.to_boxed()
     });
     node_map.insert(
         String::from("KeepRunningUntilFailure"),
-        (NodeCategory::Decorator, node),
+        (NodeType::Decorator, node),
     );
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::RepeatNode::default().to_boxed() });
-    node_map.insert(String::from("Repeat"), (NodeCategory::Decorator, node));
+    node_map.insert(String::from("Repeat"), (NodeType::Decorator, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::RetryNode::default().to_boxed() });
-    node_map.insert(String::from("Retry"), (NodeCategory::Decorator, node));
+    node_map.insert(String::from("Retry"), (NodeType::Decorator, node));
 
     let node =
         Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::RunOnceNode::default().to_boxed() });
-    node_map.insert(String::from("RunOnce"), (NodeCategory::Decorator, node));
+    node_map.insert(String::from("RunOnce"), (NodeType::Decorator, node));
 
     node_map
 }

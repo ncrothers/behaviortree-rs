@@ -6,7 +6,7 @@ use behaviortree_rs::{
             StatefulAction, StatefulActionContext, StatefulActionNode, SyncAction,
             SyncActionContext, SyncActionNode,
         },
-        NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeType, ToBoxed,
+        NodeBase, NodeData, NodeDataGeneric, NodeResult, ToBoxed,
     },
 };
 use behaviortree_rs_derive::{bt_node, BTToString, FromString};

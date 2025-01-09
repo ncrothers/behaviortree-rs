@@ -1,6 +1,6 @@
 use behaviortree_rs::{
-    basic_types::NodeCategory, blackboard::Blackboard, macros::register_action_node,
-    nodes::ToBoxed, tree::Factory,
+    basic_types::NodeType, blackboard::Blackboard, macros::register_action_node, nodes::ToBoxed,
+    tree::Factory,
 };
 
 mod nodes;
@@ -28,7 +28,7 @@ fn fallback() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -61,8 +61,8 @@ fn if_then_else() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -96,8 +96,8 @@ fn parallel_all() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -133,8 +133,8 @@ fn parallel() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -167,8 +167,8 @@ fn reactive_fallback() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -202,12 +202,12 @@ fn reactive_sequence() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
@@ -242,12 +242,12 @@ fn sequence_star() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
@@ -282,12 +282,12 @@ fn sequence_vanilla() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
@@ -321,12 +321,12 @@ fn while_do_else() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();

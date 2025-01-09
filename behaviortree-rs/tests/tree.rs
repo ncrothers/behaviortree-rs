@@ -1,5 +1,5 @@
 use behaviortree_rs::{
-    basic_types::NodeCategory,
+    basic_types::NodeType,
     nodes::{ToBoxed, TreeNode},
     Blackboard, Factory,
 };
@@ -27,7 +27,7 @@ fn visitor() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);

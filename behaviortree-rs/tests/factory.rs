@@ -1,5 +1,5 @@
 use behaviortree_rs::{
-    basic_types::{NodeCategory, NodeStatus},
+    basic_types::{NodeStatus, NodeType},
     blackboard::Blackboard,
     macros::register_action_node,
     nodes::ToBoxed,
@@ -34,19 +34,19 @@ fn registering() {
     factory.register_node(
         "DataNode",
         || DataNode::new("").to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
     let field_clone = field.clone();
     factory.register_node(
         "DataNode2",
         move || DataNode::new(field_clone.clone()).to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
     let field_clone = field.clone();
     factory.register_node(
         "DataNode3",
         move || DataNode::new(field_clone.clone()).to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
     let blackboard = Blackboard::create();
 
@@ -69,7 +69,7 @@ fn registering() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -87,7 +87,7 @@ fn registering() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -114,7 +114,7 @@ fn main_tree_attr() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -136,7 +136,7 @@ fn main_tree_attr() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -154,7 +154,7 @@ fn main_tree_attr() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -185,7 +185,7 @@ fn subtrees() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -243,7 +243,7 @@ fn ignore_treenodesmodel() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -282,8 +282,8 @@ fn load_adjacent_controls() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -322,8 +322,8 @@ fn async_test() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
     let tree = factory.create_tree_from_text(xml, &blackboard);
@@ -358,7 +358,7 @@ fn condition() {
     .to_string();
 
     let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let mut blackboard = Blackboard::create();
 
     let tree = factory.create_tree_from_text(xml, &blackboard);

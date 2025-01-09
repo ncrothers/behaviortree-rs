@@ -11,7 +11,7 @@ use crate::{
 
 /// Specifies all types of nodes that can be used in a behavior tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NodeCategory {
+pub enum NodeType {
     Undefined,
     /// Leaf node that executes an action
     Action,
@@ -26,7 +26,7 @@ pub enum NodeCategory {
     SubTree,
 }
 
-impl std::fmt::Display for NodeCategory {
+impl std::fmt::Display for NodeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let text = match self {
             Self::Undefined => "Undefined",
@@ -247,17 +247,17 @@ impl FromString for NodeStatus {
     }
 }
 
-impl FromString for NodeCategory {
+impl FromString for NodeType {
     type Err = ParseNodeTypeError;
 
-    fn from_string(value: impl AsRef<str>) -> Result<NodeCategory, Self::Err> {
+    fn from_string(value: impl AsRef<str>) -> Result<NodeType, Self::Err> {
         match value.as_ref() {
-            "Undefined" => Ok(NodeCategory::Undefined),
-            "Action" => Ok(NodeCategory::Action),
-            "Condition" => Ok(NodeCategory::Condition),
-            "Control" => Ok(NodeCategory::Control),
-            "Decorator" => Ok(NodeCategory::Decorator),
-            "SubTree" => Ok(NodeCategory::SubTree),
+            "Undefined" => Ok(NodeType::Undefined),
+            "Action" => Ok(NodeType::Action),
+            "Condition" => Ok(NodeType::Condition),
+            "Control" => Ok(NodeType::Control),
+            "Decorator" => Ok(NodeType::Decorator),
+            "SubTree" => Ok(NodeType::SubTree),
             _ => Err(ParseNodeTypeError::NoMatch),
         }
     }
@@ -303,7 +303,7 @@ impl_into_string!(
     f64,
     bool,
     NodeStatus,
-    NodeCategory,
+    NodeType,
     PortDirection,
     &str
 );
@@ -316,7 +316,7 @@ pub type PortsList = HashMap<String, PortInfo>;
 
 #[derive(Clone, Debug)]
 pub struct TreeNodeManifest {
-    pub node_type: NodeCategory,
+    pub node_type: NodeType,
     pub registration_id: String,
     pub ports: PortsList,
     pub description: String,
@@ -324,7 +324,7 @@ pub struct TreeNodeManifest {
 
 impl TreeNodeManifest {
     pub fn new(
-        node_type: NodeCategory,
+        node_type: NodeType,
         registration_id: impl AsRef<str>,
         ports: PortsList,
         description: impl AsRef<str>,

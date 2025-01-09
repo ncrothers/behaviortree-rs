@@ -19,9 +19,7 @@ pub use while_do_else::*;
 
 use std::ops::{Deref, DerefMut};
 
-use super::{
-    NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeType, PortsList, ToBoxed,
-};
+use super::{NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, PortsList, ToBoxed};
 
 pub struct ControlContext<T = ()>(T);
 
@@ -110,10 +108,6 @@ impl DerefMut for Control {
 }
 
 impl NodeBase for Control {
-    fn node_type(&self) -> NodeType {
-        NodeType::Control
-    }
-
     fn ports(&self) -> PortsList {
         ControlNode::ports(&*self.0)
     }

@@ -1,7 +1,6 @@
 use std::{
     any::TypeId,
     collections::HashMap,
-    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -10,8 +9,8 @@ use thiserror::Error;
 
 use crate::{
     basic_types::{
-        get_remapped_key, FromString, NodeCategory, ParseStr, PortDirection, PortValue,
-        PortsRemapping, TreeNodeManifest,
+        get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortValue, PortsRemapping,
+        TreeNodeManifest,
     },
     blackboard::BlackboardString,
     tree::ParseError,
@@ -26,16 +25,7 @@ pub mod decorator;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 
-#[derive(Clone, Copy, Debug)]
-pub enum NodeType {
-    Control,
-    Decorator,
-    StatefulAction,
-    SyncAction,
-}
-
 pub trait NodeBase: std::fmt::Debug + Send + Sync {
-    fn node_type(&self) -> NodeType;
     fn ports(&self) -> PortsList;
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult;
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()>;
@@ -47,9 +37,11 @@ pub trait ToBoxed<T> {
 
 #[derive(Debug)]
 pub struct NodeDataGeneric {
+    /// Name of the node as registered in the `Factory`
     pub name: String,
+    /// The type of this node
     pub node_type: NodeType,
-    pub node_category: NodeCategory,
+    ///
     pub config: NodeConfig,
     pub status: NodeStatus,
     /// Vector of child nodes
@@ -128,14 +120,9 @@ impl TreeNode {
         self.data.config()
     }
 
-    /// Get the node's [`NodeType`], which is only:
+    /// Get the node's `NodeType`, which is more general than `NodeType`
     pub fn node_type(&self) -> NodeType {
         self.data.node_type()
-    }
-
-    /// Get the node's `NodeCategory`, which is more general than `NodeType`
-    pub fn node_category(&self) -> NodeCategory {
-        self.data.node_category()
     }
 
     /// Call the node's `ports()` function if it has one, returning the
@@ -196,14 +183,9 @@ impl NodeDataGeneric {
         &self.config
     }
 
-    /// Get the node's [`NodeType`], which is only:
+    /// Get the node's `NodeType`, which is more general than `NodeType`
     pub fn node_type(&self) -> NodeType {
         self.node_type
-    }
-
-    /// Get the node's `NodeCategory`, which is more general than `NodeType`
-    pub fn node_category(&self) -> NodeCategory {
-        self.node_category
     }
 }
 

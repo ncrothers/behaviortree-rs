@@ -18,8 +18,7 @@ mod subtree;
 pub(crate) use subtree::*;
 
 use super::{
-    NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, NodeType, PortsList, ToBoxed,
-    TreeNode,
+    NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed, TreeNode,
 };
 
 pub struct DecoratorContext<T = ()>(T);
@@ -99,10 +98,6 @@ impl DerefMut for Decorator {
 }
 
 impl NodeBase for Decorator {
-    fn node_type(&self) -> NodeType {
-        NodeType::Decorator
-    }
-
     fn ports(&self) -> PortsList {
         DecoratorNode::ports(&*self.0)
     }

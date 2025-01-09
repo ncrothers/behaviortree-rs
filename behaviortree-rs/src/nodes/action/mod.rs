@@ -5,9 +5,7 @@ pub use condition::*;
 
 use crate::nodes::NodeError;
 
-use super::{
-    NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, NodeType, PortsList, ToBoxed,
-};
+use super::{NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed};
 
 pub struct SyncActionContext<T = ()>(pub T);
 
@@ -61,10 +59,6 @@ impl DerefMut for SyncAction {
 }
 
 impl NodeBase for SyncAction {
-    fn node_type(&self) -> NodeType {
-        NodeType::SyncAction
-    }
-
     fn ports(&self) -> PortsList {
         SyncActionNode::ports(&*self.0)
     }
@@ -161,10 +155,6 @@ impl DerefMut for StatefulAction {
 }
 
 impl NodeBase for StatefulAction {
-    fn node_type(&self) -> NodeType {
-        NodeType::StatefulAction
-    }
-
     fn ports(&self) -> PortsList {
         StatefulActionNode::ports(&*self.0)
     }

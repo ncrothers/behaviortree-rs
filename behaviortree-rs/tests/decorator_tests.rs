@@ -1,5 +1,5 @@
 use behaviortree_rs::{
-    basic_types::{NodeCategory, NodeStatus},
+    basic_types::{NodeStatus, NodeType},
     blackboard::Blackboard,
     macros::register_action_node,
     nodes::ToBoxed,
@@ -29,7 +29,7 @@ fn force_failure() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -64,7 +64,7 @@ fn force_success() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -99,7 +99,7 @@ fn inverter() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
@@ -140,7 +140,7 @@ fn keep_running_until_failure() {
     factory.register_node(
         "RunFor",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
@@ -174,16 +174,16 @@ fn repeat() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
     factory.register_node(
         "SuccessThenFailure",
         || SuccessThenFailure::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
@@ -221,16 +221,16 @@ fn retry() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
     factory.register_node(
         "SuccessThenFailure",
         || SuccessThenFailure::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
@@ -266,16 +266,16 @@ fn run_once() {
 
     let mut factory = Factory::new();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeCategory::Action);
+    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     factory.register_node(
         "RunForNode",
         || RunForNode::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
     factory.register_node(
         "SuccessThenFailure",
         || SuccessThenFailure::default().to_boxed(),
-        NodeCategory::Action,
+        NodeType::Action,
     );
 
     let blackboard = Blackboard::create();
