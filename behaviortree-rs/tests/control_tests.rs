@@ -1,6 +1,6 @@
 use behaviortree_rs::{
     basic_types::NodeType, blackboard::Blackboard, macros::register_action_node, nodes::ToBoxed,
-    tree::Factory,
+    Factory,
 };
 
 mod nodes;

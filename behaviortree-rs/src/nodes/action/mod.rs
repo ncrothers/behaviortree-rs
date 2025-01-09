@@ -160,7 +160,7 @@ impl NodeBase for StatefulAction {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        let prev_status = ctx.status;
+        let prev_status = ctx.status();
 
         let new_status = match prev_status {
             NodeStatus::Idle => {

@@ -3,7 +3,7 @@ use behaviortree_rs::{
     blackboard::Blackboard,
     macros::register_action_node,
     nodes::ToBoxed,
-    tree::Factory,
+    Factory,
 };
 
 use crate::nodes::{DataNode, EchoNode, StatusNode};
