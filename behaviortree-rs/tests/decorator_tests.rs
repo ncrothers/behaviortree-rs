@@ -1,7 +1,6 @@
 use behaviortree_rs::{
     basic_types::{NodeStatus, NodeType},
     blackboard::Blackboard,
-    macros::register_action_node,
     nodes::ToBoxed,
     Factory,
 };

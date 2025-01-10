@@ -14,7 +14,6 @@ use crate::{
         TreeNodeManifest,
     },
     blackboard::BlackboardString,
-    tree::ParseError,
     Blackboard,
 };
 
@@ -38,7 +37,6 @@ pub trait ToBoxed<T> {
 
 #[derive(Debug)]
 pub struct NodeDataGeneric {
-    ///
     pub(crate) meta: NodeMetadata,
     pub(crate) status: NodeStatus,
     /// Vector of child nodes

@@ -1,18 +1,15 @@
 use std::{collections::HashMap, io::Cursor, sync::Arc};
 
-use quick_xml::{
-    events::{attributes::Attributes, Event},
-    name::QName,
-    Reader,
-};
+use quick_xml::{events::Event, name::QName, Reader};
 
 use crate::{
     basic_types::{
-        AttrsToMap, FromString, NodeStatus, NodeType, PortChecks, PortDirection, PortsRemapping,
-        TreeNodeManifest,
+        AttrsToMap, FromString, NodeStatus, NodeType, PortChecks, PortDirection, TreeNodeManifest,
     },
     blackboard::{Blackboard, BlackboardString},
-    nodes::{self, NodeBase, NodeDataGeneric, NodeMetadata, ToBoxed, TreeNode},
+    nodes::{
+        self, decorator::SubTreeNode, NodeBase, NodeDataGeneric, NodeMetadata, ToBoxed, TreeNode,
+    },
     tree::{ParseError, Tree},
 };
 
@@ -184,15 +181,11 @@ impl Factory {
         &self,
         node_ptr: &mut TreeNode,
         node_name: &str,
-        attributes: Attributes,
+        attributes: HashMap<String, String>,
     ) -> Result<(), ParseError> {
         let manifest = Arc::clone(&node_ptr.data.meta.manifest);
 
-        let mut remap = PortsRemapping::new();
-
-        for (port_name, port_value) in attributes.to_map()? {
-            remap.insert(port_name, port_value);
-        }
+        let remap = attributes;
 
         // Check if all ports from XML match ports in manifest
         for port_name in remap.keys() {
@@ -278,7 +271,7 @@ impl Factory {
             // Node with Children
             Event::Start(e) => {
                 let node_name = String::from_utf8(e.name().0.into())?;
-                let attributes = e.attributes();
+                let attributes = e.attributes().to_map()?;
 
                 log::debug!("build_child Start: {node_name}");
 
@@ -320,7 +313,7 @@ impl Factory {
                             node,
                         };
 
-                        self.add_ports_to_node(&mut node, &node_name, attributes)?;
+                        self.add_ports_to_node(&mut node, &node_name, attributes.clone())?;
 
                         node
                     }
@@ -395,11 +388,10 @@ impl Factory {
             Event::Empty(e) => {
                 let node_name = String::from_utf8(e.name().0.into())?;
                 log::debug!("[Leaf node]: {node_name}");
-                let attributes = e.attributes();
+                let attributes = e.attributes().to_map()?;
 
                 let node = match node_name.as_str() {
                     "SubTree" => {
-                        let attributes = attributes.to_map()?;
                         let mut child_blackboard = Blackboard::with_parent(blackboard);
 
                         // Process attributes (Ports, special fields, etc)
@@ -441,12 +433,40 @@ impl Factory {
 
                         let new_prefix = format!("{subtree_name}/");
 
-                        self.recursively_build_subtree(
+                        let path = path_prefix.to_owned() + id;
+
+                        let child = self.recursively_build_subtree(
                             id,
                             &subtree_name,
                             &new_prefix,
                             child_blackboard,
-                        )?
+                        )?;
+
+                        let node = SubTreeNode.to_boxed();
+
+                        let node_meta = NodeMetadata::builder()
+                            .name(id.clone())
+                            .node_type(NodeType::SubTree)
+                            .path(path)
+                            .manifest(Arc::new(TreeNodeManifest::new(
+                                NodeType::Control,
+                                &node_name,
+                                node.ports(),
+                                "",
+                            )))
+                            .build();
+
+                        let node_data = NodeDataGeneric {
+                            meta: node_meta,
+                            status: NodeStatus::Idle,
+                            children: vec![child],
+                            blackboard: blackboard.clone(),
+                        };
+
+                        TreeNode {
+                            data: node_data,
+                            node,
+                        }
                     }
                     _ => {
                         // Get clone of node from node_map based on tag name

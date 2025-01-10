@@ -118,14 +118,12 @@ pub mod derive {
 
 // Re-exports for convenience
 pub use blackboard::Blackboard;
-pub use derive::bt_node;
 pub use factory::Factory;
 pub use nodes::NodeResult;
 
 pub mod prelude {
     pub use crate::basic_types::{NodeStatus, PortsList};
     pub use crate::blackboard::Blackboard;
-    pub use crate::derive::bt_node;
     pub use crate::factory::Factory;
     pub use crate::macros::*;
     pub use crate::nodes::NodeResult;

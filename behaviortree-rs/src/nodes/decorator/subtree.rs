@@ -4,9 +4,9 @@ use super::{DecoratorContext, DecoratorNode};
 
 /// The KeepRunningUntilFailureNode returns always Failure or Running
 #[derive(Debug, Default)]
-pub struct SubTree;
+pub struct SubTreeNode;
 
-impl DecoratorNode for SubTree {
+impl DecoratorNode for SubTreeNode {
     type Context = DecoratorContext;
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {

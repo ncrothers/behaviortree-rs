@@ -11,7 +11,11 @@ mod nodes;
 #[test]
 fn visitor() {
     let xml = r#"
-        <root>
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="subtree">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+
             <BehaviorTree ID="main">
                 <Sequence>
                     <Sequence>
@@ -19,6 +23,7 @@ fn visitor() {
                             <StatusNode status="Success" />
                         </Inverter>
                         <StatusNode status = "Failure" />
+                        <SubTree ID="subtree" />
                     </Sequence>
                 </Sequence>
             </BehaviorTree>
@@ -43,7 +48,9 @@ fn visitor() {
             "Sequence",
             "Inverter",
             "StatusNode",
-            "StatusNode"
+            "StatusNode",
+            "subtree",
+            "StatusNode",
         ]
     );
 }

@@ -9,7 +9,7 @@ use behaviortree_rs::{
         NodeBase, NodeData, NodeDataGeneric, NodeResult, ToBoxed,
     },
 };
-use behaviortree_rs_derive::{bt_node, BTToString, FromString};
+use behaviortree_rs_derive::{BTToString, FromString};
 
 #[derive(BTToString)]
 struct Test {}

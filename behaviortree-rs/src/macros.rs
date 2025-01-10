@@ -1,6 +1,6 @@
-pub use behaviortree_rs_derive::{
-    register_action_node, register_control_node, register_decorator_node,
-};
+// pub use behaviortree_rs_derive::{
+//     register_action_node, register_control_node, register_decorator_node,
+// };
 
 /// Macro for simplifying implementation of `FromString` for any type that implements `FromStr`.
 ///
