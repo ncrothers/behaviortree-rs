@@ -49,7 +49,7 @@ fn registering() {
     );
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_ok());
 
@@ -71,7 +71,7 @@ fn registering() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_err());
 
@@ -89,7 +89,7 @@ fn registering() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_ok());
 }
@@ -116,7 +116,7 @@ fn main_tree_attr() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_ok());
 
@@ -138,7 +138,7 @@ fn main_tree_attr() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_err());
 
@@ -156,7 +156,7 @@ fn main_tree_attr() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_ok());
 }
@@ -187,7 +187,7 @@ fn subtrees() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();
@@ -218,7 +218,7 @@ fn node_not_registered() {
     // Don't register StatusNode
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_err());
 }
@@ -245,7 +245,7 @@ fn ignore_treenodesmodel() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -285,7 +285,7 @@ fn load_adjacent_controls() {
     factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -325,7 +325,7 @@ fn async_test() {
     factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -360,7 +360,7 @@ fn condition() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let mut blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
 
     assert!(tree.is_ok());
 

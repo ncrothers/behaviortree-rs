@@ -32,7 +32,7 @@ fn force_failure() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -67,7 +67,7 @@ fn force_success() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -102,7 +102,7 @@ fn inverter() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -144,7 +144,7 @@ fn keep_running_until_failure() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -187,7 +187,7 @@ fn repeat() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -234,7 +234,7 @@ fn retry() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -279,7 +279,7 @@ fn run_once() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 

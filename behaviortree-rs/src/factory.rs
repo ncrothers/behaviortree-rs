@@ -23,41 +23,49 @@ enum CreateNodeResult {
 }
 
 pub struct Factory {
+    /// Mapping from a node's registered name to its type and the builder function
     node_map: HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)>,
-    blackboard: Blackboard,
+    /// Mapping from each `<BehaviorTree>`'s `ID` to a copy of the `Reader`
+    /// at the start of the tree, which can then be parsed and loaded.
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
+    /// After registering an XML, if it finds a tree that can be the "entrypoint",
+    /// it sets it here.
+    ///
+    /// This value will be set in two situations:
+    ///
+    /// * The `main_tree_to_execute` attribute is set on the `<root>` tag
+    /// * There is only one `<BehaviorTree` element in the text.
     main_tree_id: Option<String>,
     // TODO: temporary solution, potentially replace later
     tree_uid: std::sync::Mutex<u32>,
 }
 
 impl Factory {
+    /// Creates a new [`Factory`] which has all of the built-in nodes already
+    /// registered.
     pub fn new() -> Factory {
-        let blackboard = Blackboard::create();
-
         Self {
             node_map: builtin_nodes(),
-            blackboard,
             tree_roots: HashMap::new(),
             main_tree_id: None,
             tree_uid: std::sync::Mutex::new(0),
         }
     }
 
-    pub fn blackboard(&mut self) -> &Blackboard {
-        &self.blackboard
-    }
-
-    pub fn set_blackboard(&mut self, blackboard: Blackboard) {
-        self.blackboard = blackboard;
-    }
-
-    pub fn register_node<F>(&mut self, name: impl AsRef<str>, node_fn: F, node_type: NodeType)
-    where
+    /// Registers a custom node with this [`Factory`]. `node_fn` is the function
+    /// that builds your node and returns it as a `Box<dyn NodeBase>` which will
+    /// be called for every instance of that node defined in the XML behavior
+    /// tree definition.
+    pub fn register_node<F>(
+        &mut self,
+        name: impl AsRef<str>,
+        node_builder_fn: F,
+        node_type: NodeType,
+    ) where
         F: Fn() -> Box<dyn NodeBase> + Send + Sync + 'static,
     {
         self.node_map
-            .insert(name.as_ref().into(), (node_type, Arc::new(node_fn)));
+            .insert(name.as_ref().into(), (node_type, Arc::new(node_builder_fn)));
     }
 
     fn get_uid(&self) -> u32 {
@@ -69,15 +77,15 @@ impl Factory {
 
     fn recursively_build_subtree(
         &self,
-        tree_id: &String,
-        tree_name: &String,
-        path_prefix: &String,
+        tree_id: &str,
+        tree_name: &str,
+        path_prefix: &str,
         blackboard: Blackboard,
     ) -> Result<TreeNode, ParseError> {
         let mut reader = match self.tree_roots.get(tree_id) {
             Some(root) => root.clone(),
             None => {
-                return Err(ParseError::UnknownTree(tree_id.clone()));
+                return Err(ParseError::UnknownTree(tree_id.to_owned()));
             }
         };
 
@@ -93,9 +101,16 @@ impl Factory {
         }
     }
 
+    /// Builds and returns a [`Tree`], parsing the `text` as XML. Will return
+    /// a [`ParseError`] if it's unable to build the tree.
+    ///
+    /// For this method to work, one of the following must be true:
+    ///
+    /// * The `main_tree_to_execute` attribute is set on the `<root>` tag
+    /// * There is only one `<BehaviorTree` element in the text.
     pub fn create_tree_from_text(
         &mut self,
-        text: String,
+        text: &str,
         blackboard: &Blackboard,
     ) -> Result<Tree, ParseError> {
         self.register_bt_from_text(text)?;
@@ -115,6 +130,9 @@ impl Factory {
         }
     }
 
+    /// Builds and returns the [`Tree`] with the name `main_tree_id`. This method
+    /// can only be called after calling [`Factory::register_bt_from_text`], which
+    /// loads all of the `<BehaviorTree>` definitions in the XML.
     pub fn instantiate_tree(
         &mut self,
         blackboard: &Blackboard,
@@ -123,44 +141,62 @@ impl Factory {
         // Clone ptr to Blackboard
         let blackboard = blackboard.clone();
 
-        let main_tree_id = String::from(main_tree_id);
-
-        let root_node = self.recursively_build_subtree(
-            &main_tree_id,
-            &String::new(),
-            &String::new(),
-            blackboard,
-        )?;
+        let root_node = self.recursively_build_subtree(main_tree_id, "", "", blackboard)?;
 
         Ok(Tree::new(root_node))
     }
 
-    pub async fn instantiate_async_tree(
-        &mut self,
-        blackboard: &Blackboard,
-        main_tree_id: &str,
-    ) -> Result<Tree, ParseError> {
-        // Clone ptr to Blackboard
-        let blackboard = blackboard.clone();
+    /// Parses `xml` as XML and loads all of the `<BehaviorTree>` elements in
+    /// preparation for building [`Tree`]s. This must be called before
+    /// [`Factory::instantiate_tree`], but is called automatically by
+    /// [`Factory::create_tree_from_text`].
+    pub fn register_bt_from_text(&mut self, xml: &str) -> Result<(), ParseError> {
+        let mut reader = Reader::from_reader(Cursor::new(xml.as_bytes().to_vec()));
+        reader.trim_text(true);
 
-        let main_tree_id = String::from(main_tree_id);
+        let mut buf = Vec::new();
 
-        let root_node = self.recursively_build_subtree(
-            &main_tree_id,
-            &String::new(),
-            &String::new(),
-            blackboard,
-        )?;
+        // TODO: Check includes
 
-        Ok(Tree::new(root_node))
+        // TODO: Parse for correctness
+
+        loop {
+            // Try to match root tag
+            match reader.read_event_into(&mut buf)? {
+                // Ignore XML declaration tag <?xml ...
+                Event::Decl(_) => buf.clear(),
+                Event::Start(e) => {
+                    let name = String::from_utf8(e.name().0.into())?;
+                    let attributes = e.attributes().to_map()?;
+
+                    if name.as_str() != "root" {
+                        buf.clear();
+                        continue;
+                    }
+
+                    if let Some(tree_id) = attributes.get("main_tree_to_execute") {
+                        log::debug!("Found main tree ID: {tree_id}");
+                        self.main_tree_id = Some(tree_id.clone());
+                    }
+
+                    buf.clear();
+                    break;
+                }
+                _ => return Err(ParseError::MissingRoot),
+            }
+        }
+
+        self.register_trees(&mut reader, &mut buf)?;
+
+        Ok(())
     }
 
     fn build_children(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
         blackboard: &Blackboard,
-        tree_name: &String,
-        path_prefix: &String,
+        tree_name: &str,
+        path_prefix: &str,
     ) -> Result<Vec<TreeNode>, ParseError> {
         let mut nodes = Vec::new();
 
@@ -257,8 +293,8 @@ impl Factory {
         &'a self,
         reader: &'a mut Reader<Cursor<Vec<u8>>>,
         blackboard: &'a Blackboard,
-        tree_name: &'a String,
-        path_prefix: &'a String,
+        tree_name: &'a str,
+        path_prefix: &'a str,
     ) -> Result<CreateNodeResult, ParseError> {
         let mut buf = Vec::new();
 
@@ -420,7 +456,7 @@ impl Factory {
                             None => return Err(ParseError::MissingAttribute("ID".to_string())),
                         };
 
-                        let mut subtree_name = tree_name.clone();
+                        let mut subtree_name = tree_name.to_owned();
                         if !subtree_name.is_empty() {
                             subtree_name += "/";
                         }
@@ -532,45 +568,14 @@ impl Factory {
         Ok(node)
     }
 
-    pub fn register_bt_from_text(&mut self, xml: String) -> Result<(), ParseError> {
-        let mut reader = Reader::from_reader(Cursor::new(xml.as_bytes().to_vec()));
-        reader.trim_text(true);
-
-        let mut buf = Vec::new();
-
-        // TODO: Check includes
-
-        // TODO: Parse for correctness
-
-        loop {
-            // Try to match root tag
-            match reader.read_event_into(&mut buf)? {
-                // Ignore XML declaration tag <?xml ...
-                Event::Decl(_) => buf.clear(),
-                Event::Start(e) => {
-                    let name = String::from_utf8(e.name().0.into())?;
-                    let attributes = e.attributes().to_map()?;
-
-                    if name.as_str() != "root" {
-                        buf.clear();
-                        continue;
-                    }
-
-                    if let Some(tree_id) = attributes.get("main_tree_to_execute") {
-                        log::debug!("Found main tree ID: {tree_id}");
-                        self.main_tree_id = Some(tree_id.clone());
-                    }
-
-                    buf.clear();
-                    break;
-                }
-                _ => return Err(ParseError::MissingRoot),
-            }
-        }
-
+    fn register_trees(
+        &mut self,
+        reader: &mut Reader<Cursor<Vec<u8>>>,
+        buf: &mut Vec<u8>,
+    ) -> Result<(), ParseError> {
         // Register each BehaviorTree in the XML
         loop {
-            let event = reader.read_event_into(&mut buf)?;
+            let event = reader.read_event_into(buf)?;
 
             match event {
                 Event::Start(e) => {
@@ -586,7 +591,7 @@ impl Factory {
                     // TODO: Maybe do something with TreeNodesModel?
                     // For now, just ignore it
                     if name.as_str() == "TreeNodesModel" {
-                        reader.read_to_end_into(end_name, &mut buf)?;
+                        reader.read_to_end_into(end_name, buf)?;
                     } else {
                         // Add error for missing BT
                         if name.as_str() != "BehaviorTree" {
@@ -669,8 +674,6 @@ impl Factory {
                 }
             };
         }
-
-        buf.clear();
 
         Ok(())
     }

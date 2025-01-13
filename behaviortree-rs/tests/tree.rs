@@ -1,9 +1,4 @@
-use behaviortree_rs::{
-    basic_types::NodeType,
-    nodes::{ToBoxed, TreeNode},
-    Blackboard, Factory,
-};
-use behaviortree_rs_derive::register_action_node;
+use behaviortree_rs::{basic_types::NodeType, nodes::ToBoxed, Blackboard, Factory};
 use nodes::StatusNode;
 
 mod nodes;
@@ -35,7 +30,7 @@ fn visitor() {
     factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(xml, &blackboard);
+    let tree = factory.create_tree_from_text(&xml, &blackboard);
     assert!(tree.is_ok());
     let tree = tree.unwrap();
 

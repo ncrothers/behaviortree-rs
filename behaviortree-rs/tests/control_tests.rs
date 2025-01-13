@@ -29,7 +29,7 @@ fn fallback() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -63,7 +63,7 @@ fn if_then_else() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -98,7 +98,7 @@ fn parallel_all() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -135,7 +135,7 @@ fn parallel() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -169,7 +169,7 @@ fn reactive_fallback() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -209,7 +209,7 @@ fn reactive_sequence() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -249,7 +249,7 @@ fn sequence_star() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -289,7 +289,7 @@ fn sequence_vanilla() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
@@ -328,7 +328,7 @@ fn while_do_else() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(xml).unwrap();
+    factory.register_bt_from_text(&xml).unwrap();
 
     let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
 
