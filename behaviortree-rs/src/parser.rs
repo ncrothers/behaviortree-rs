@@ -7,24 +7,25 @@ use crate::{
         AttrsToMap, FromString, NodeStatus, NodeType, PortChecks, PortDirection, TreeNodeManifest,
     },
     blackboard::{Blackboard, BlackboardString},
-    nodes::{
-        self, decorator::SubTreeNode, NodeBase, NodeDataGeneric, NodeMetadata, ToBoxed, TreeNode,
-    },
-    tree::{ParseError, Tree},
+    nodes::{decorator::SubTreeNode, NodeDataGeneric, NodeMetadata, ToBoxed, TreeNode},
+    tree::{ParseError, Tree, TreeConfig},
 };
 
-type NodeCreateFnDyn = dyn Fn() -> Box<dyn NodeBase> + Send + Sync;
-
 #[derive(Debug)]
-enum CreateNodeResult {
+enum CreateNodeControl {
     Node(TreeNode),
     Continue,
     End,
 }
 
-pub struct Factory {
-    /// Mapping from a node's registered name to its type and the builder function
-    node_map: HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)>,
+/// Factory used to create [`Tree`]s from XML text, building both built-in and
+/// user-created custom nodes that have been registered with the `Factory`.
+///
+/// To register custom nodes, use [`Factory::register_node`] which makes them
+/// available when parsing XMLs.
+pub struct Parser<'a> {
+    /// Registry of tree nodes, both built-in and custom-defined
+    tree_config: &'a TreeConfig<'a>,
     /// Mapping from each `<BehaviorTree>`'s `ID` to a copy of the `Reader`
     /// at the start of the tree, which can then be parsed and loaded.
     tree_roots: HashMap<String, Reader<Cursor<Vec<u8>>>>,
@@ -36,36 +37,21 @@ pub struct Factory {
     /// * The `main_tree_to_execute` attribute is set on the `<root>` tag
     /// * There is only one `<BehaviorTree` element in the text.
     main_tree_id: Option<String>,
+
     // TODO: temporary solution, potentially replace later
     tree_uid: std::sync::Mutex<u32>,
 }
 
-impl Factory {
+impl<'a> Parser<'a> {
     /// Creates a new [`Factory`] which has all of the built-in nodes already
     /// registered.
-    pub fn new() -> Factory {
+    pub fn new(tree_config: &'a TreeConfig<'a>) -> Self {
         Self {
-            node_map: builtin_nodes(),
+            tree_config,
             tree_roots: HashMap::new(),
             main_tree_id: None,
             tree_uid: std::sync::Mutex::new(0),
         }
-    }
-
-    /// Registers a custom node with this [`Factory`]. `node_fn` is the function
-    /// that builds your node and returns it as a `Box<dyn NodeBase>` which will
-    /// be called for every instance of that node defined in the XML behavior
-    /// tree definition.
-    pub fn register_node<F>(
-        &mut self,
-        name: impl AsRef<str>,
-        node_builder_fn: F,
-        node_type: NodeType,
-    ) where
-        F: Fn() -> Box<dyn NodeBase> + Send + Sync + 'static,
-    {
-        self.node_map
-            .insert(name.as_ref().into(), (node_type, Arc::new(node_builder_fn)));
     }
 
     fn get_uid(&self) -> u32 {
@@ -92,9 +78,9 @@ impl Factory {
         // Loop until either a child or end tag is found
         loop {
             match self.build_child(&mut reader, &blackboard, tree_name, path_prefix)? {
-                CreateNodeResult::Node(child) => break Ok(child),
-                CreateNodeResult::Continue => (),
-                CreateNodeResult::End => {
+                CreateNodeControl::Node(child) => break Ok(child),
+                CreateNodeControl::Continue => (),
+                CreateNodeControl::End => {
                     break Err(ParseError::NodeTypeMismatch("SubTree".to_string()))
                 }
             }
@@ -108,26 +94,39 @@ impl Factory {
     ///
     /// * The `main_tree_to_execute` attribute is set on the `<root>` tag
     /// * There is only one `<BehaviorTree` element in the text.
-    pub fn create_tree_from_text(
-        &mut self,
-        text: &str,
-        blackboard: &Blackboard,
-    ) -> Result<Tree, ParseError> {
-        self.register_bt_from_text(text)?;
+    pub fn create_tree(&mut self) -> Result<Tree, ParseError> {
+        self.register_bt_from_text(self.tree_config.xml)?;
 
-        if self.tree_roots.len() > 1 && self.main_tree_id.is_none() {
-            Err(ParseError::NoMainTree)
-        } else if self.tree_roots.len() == 1 {
-            // Unwrap is safe because we check that tree_roots.len() == 1
-            let main_tree_id = self.tree_roots.iter().next().unwrap().0.clone();
-
-            self.instantiate_tree(blackboard, &main_tree_id)
-        } else {
-            // Unwrap is safe here because there are more than 1 root and
-            // self.main_tree_id is Some
-            let main_tree_id = self.main_tree_id.clone().unwrap();
-            self.instantiate_tree(blackboard, &main_tree_id)
+        // Get which tree ID to instantiate
+        // If there are multiple trees defined and no name specified, return error
+        let tree_id = if self.tree_roots.len() > 1
+            && self.main_tree_id.is_none()
+            && self.tree_config.tree_name.is_none()
+        {
+            return Err(ParseError::NoMainTree);
         }
+        // If there's exactly one tree, that tree is necessarily _always_ the correct tree
+        // However, handle user-specified tree name separately
+        else if self.tree_roots.len() == 1 && self.tree_config.tree_name.is_none() {
+            // Unwrap is safe because we check that tree_roots.len() == 1
+            self.tree_roots.iter().next().unwrap().0.clone()
+        }
+        // Handle a user-provided tree name separately so we return an error if the specified
+        // tree does not exist
+        else if self.tree_config.tree_name.is_some() {
+            // Unwrap is safe because this is only reachable if tree_name is Some
+            self.tree_config.tree_name.unwrap().to_string()
+        }
+        // Multiple roots and main_tree_id is Some
+        else if self.tree_roots.len() > 1 && self.main_tree_id.is_some() {
+            self.main_tree_id.clone().unwrap()
+        }
+        // Assuming my logic is correct, this is unreachable
+        else {
+            unreachable!()
+        };
+
+        self.instantiate_tree(&self.tree_config.blackboard, &tree_id)
     }
 
     /// Builds and returns the [`Tree`] with the name `main_tree_id`. This method
@@ -202,11 +201,11 @@ impl Factory {
 
         loop {
             match self.build_child(reader, blackboard, tree_name, path_prefix)? {
-                CreateNodeResult::Node(node) => {
+                CreateNodeControl::Node(node) => {
                     nodes.push(node);
                 }
-                CreateNodeResult::Continue => (),
-                CreateNodeResult::End => break,
+                CreateNodeControl::Continue => (),
+                CreateNodeControl::End => break,
             }
         }
 
@@ -289,13 +288,13 @@ impl Factory {
         Ok(())
     }
 
-    fn build_child<'a>(
-        &'a self,
-        reader: &'a mut Reader<Cursor<Vec<u8>>>,
-        blackboard: &'a Blackboard,
-        tree_name: &'a str,
-        path_prefix: &'a str,
-    ) -> Result<CreateNodeResult, ParseError> {
+    fn build_child<'b>(
+        &'b self,
+        reader: &'b mut Reader<Cursor<Vec<u8>>>,
+        blackboard: &'b Blackboard,
+        tree_name: &'b str,
+        path_prefix: &'b str,
+    ) -> Result<CreateNodeControl, ParseError> {
         let mut buf = Vec::new();
 
         let node = match reader.read_event_into(&mut buf)? {
@@ -313,19 +312,18 @@ impl Factory {
 
                 let path = path_prefix.to_owned() + &node_name;
 
-                let (node_type, node_fn) = self
-                    .node_map
-                    .get(&node_name)
+                let (node_type, node) = self
+                    .tree_config
+                    .registry
+                    .build_node(&node_name)
                     .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
-
-                let node = node_fn();
 
                 let node_meta = NodeMetadata::builder()
                     .name(node_name.clone())
-                    .node_type(*node_type)
+                    .node_type(node_type)
                     .path(path.clone())
                     .manifest(Arc::new(TreeNodeManifest::new(
-                        *node_type,
+                        node_type,
                         &node_name,
                         node.ports(),
                         "",
@@ -362,9 +360,9 @@ impl Factory {
                                 tree_name,
                                 &(path.clone() + "/"),
                             )? {
-                                CreateNodeResult::Node(node) => break node,
-                                CreateNodeResult::Continue => (),
-                                CreateNodeResult::End => {
+                                CreateNodeControl::Node(node) => break node,
+                                CreateNodeControl::Continue => (),
+                                CreateNodeControl::End => {
                                     return Err(ParseError::NodeTypeMismatch(
                                         "Decorator".to_string(),
                                     ))
@@ -418,7 +416,7 @@ impl Factory {
                     x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
                 };
 
-                CreateNodeResult::Node(node)
+                CreateNodeControl::Node(node)
             }
             // Leaf Node
             Event::Empty(e) => {
@@ -506,24 +504,24 @@ impl Factory {
                     }
                     _ => {
                         // Get clone of node from node_map based on tag name
-                        let (node_type, node_fn) = self
-                            .node_map
-                            .get(&node_name)
+                        let (node_type, node) = self
+                            .tree_config
+                            .registry
+                            .build_node(&node_name)
                             .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
+
                         if !matches!(node_type, NodeType::Action) {
                             return Err(ParseError::NodeTypeMismatch(String::from("Action")));
                         }
 
                         let path = path_prefix.to_owned() + &node_name;
 
-                        let node = node_fn();
-
                         let node_meta = NodeMetadata::builder()
                             .name(node_name.clone())
-                            .node_type(*node_type)
+                            .node_type(node_type)
                             .path(path)
                             .manifest(Arc::new(TreeNodeManifest::new(
-                                *node_type,
+                                node_type,
                                 &node_name,
                                 node.ports(),
                                 "",
@@ -548,12 +546,12 @@ impl Factory {
                     }
                 };
 
-                CreateNodeResult::Node(node)
+                CreateNodeControl::Node(node)
             }
-            Event::End(_e) => CreateNodeResult::End,
+            Event::End(_e) => CreateNodeControl::End,
             Event::Comment(content) => {
                 log::debug!("Comment - \"{content:?}\"");
-                CreateNodeResult::Continue
+                CreateNodeControl::Continue
             }
             e => {
                 log::debug!("Other - SHOULDN'T BE HERE");
@@ -677,90 +675,4 @@ impl Factory {
 
         Ok(())
     }
-}
-
-impl Default for Factory {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
-    let mut node_map = HashMap::new();
-
-    // Control nodes
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::SequenceNode::default().to_boxed() })
-            as Arc<NodeCreateFnDyn>;
-    node_map.insert(String::from("Sequence"), (NodeType::Control, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> {
-        nodes::control::ReactiveSequenceNode::default().to_boxed()
-    });
-    node_map.insert(String::from("ReactiveSequence"), (NodeType::Control, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> {
-        nodes::control::SequenceWithMemoryNode::default().to_boxed()
-    });
-    node_map.insert(String::from("SequenceStar"), (NodeType::Control, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ParallelNode::default().to_boxed() });
-    node_map.insert(String::from("Parallel"), (NodeType::Control, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ParallelAllNode::default().to_boxed() });
-    node_map.insert(String::from("ParallelAll"), (NodeType::Control, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::FallbackNode::default().to_boxed() });
-    node_map.insert(String::from("Fallback"), (NodeType::Control, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ReactiveFallbackNode.to_boxed() });
-    node_map.insert(String::from("ReactiveFallback"), (NodeType::Control, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::IfThenElseNode::default().to_boxed() });
-    node_map.insert(String::from("IfThenElse"), (NodeType::Control, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::control::WhileDoElseNode.to_boxed() });
-    node_map.insert(String::from("WhileDoElse"), (NodeType::Control, node));
-
-    // Decorator nodes
-    // Condition node
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::action::ConditionNode::default().to_boxed() });
-    node_map.insert(String::from("Condition"), (NodeType::Action, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::ForceFailureNode.to_boxed() });
-    node_map.insert(String::from("ForceFailure"), (NodeType::Decorator, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::ForceSuccessNode.to_boxed() });
-    node_map.insert(String::from("ForceSuccess"), (NodeType::Decorator, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::InverterNode.to_boxed() });
-    node_map.insert(String::from("Inverter"), (NodeType::Decorator, node));
-
-    let node = Arc::new(|| -> Box<dyn NodeBase> {
-        nodes::decorator::KeepRunningUntilFailureNode.to_boxed()
-    });
-    node_map.insert(
-        String::from("KeepRunningUntilFailure"),
-        (NodeType::Decorator, node),
-    );
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::RepeatNode::default().to_boxed() });
-    node_map.insert(String::from("Repeat"), (NodeType::Decorator, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::RetryNode::default().to_boxed() });
-    node_map.insert(String::from("Retry"), (NodeType::Decorator, node));
-
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::RunOnceNode::default().to_boxed() });
-    node_map.insert(String::from("RunOnce"), (NodeType::Decorator, node));
-
-    node_map
 }

@@ -108,8 +108,9 @@ pub mod value;
 
 pub mod nodes;
 
-pub mod factory;
 pub mod macros;
+pub mod node_registry;
+pub(crate) mod parser;
 pub mod tree;
 
 pub mod derive {
@@ -118,13 +119,15 @@ pub mod derive {
 
 // Re-exports for convenience
 pub use blackboard::Blackboard;
-pub use factory::Factory;
 pub use nodes::NodeResult;
+pub use parser::Parser;
 
 pub mod prelude {
     pub use crate::basic_types::{NodeStatus, PortsList};
     pub use crate::blackboard::Blackboard;
-    pub use crate::factory::Factory;
     pub use crate::macros::*;
+    pub use crate::node_registry::NodeRegistry;
     pub use crate::nodes::NodeResult;
+    pub use crate::parser::Parser;
+    pub use crate::tree::{Tree, TreeConfig};
 }

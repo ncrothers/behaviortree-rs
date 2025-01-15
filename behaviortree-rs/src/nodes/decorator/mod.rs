@@ -37,7 +37,7 @@ impl<T> DerefMut for DecoratorContext<T> {
     }
 }
 
-impl<'a, T> NodeData<'a, DecoratorContext<T>> {
+impl<T> NodeData<'_, DecoratorContext<T>> {
     /// Calls `halt_child_idx(0)`. This should only be used in
     /// `Decorator` nodes
     pub fn halt_child(&mut self) -> NodeResult<()> {

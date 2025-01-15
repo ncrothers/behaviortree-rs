@@ -1,8 +1,9 @@
 use behaviortree_rs::{
     basic_types::{NodeStatus, NodeType},
     blackboard::Blackboard,
+    node_registry::NodeRegistry,
     nodes::ToBoxed,
-    Factory,
+    tree::{Tree, TreeConfig},
 };
 
 use crate::nodes::{DataNode, EchoNode, StatusNode};
@@ -29,27 +30,28 @@ fn registering() {
 
     let field = "hello".to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node(
+    let mut registry = NodeRegistry::default();
+    registry.insert(
         "DataNode",
         || DataNode::new("").to_boxed(),
         NodeType::Action,
     );
     let field_clone = field.clone();
-    factory.register_node(
+    registry.insert(
         "DataNode2",
         move || DataNode::new(field_clone.clone()).to_boxed(),
         NodeType::Action,
     );
     let field_clone = field.clone();
-    factory.register_node(
+    registry.insert(
         "DataNode3",
         move || DataNode::new(field_clone.clone()).to_boxed(),
         NodeType::Action,
     );
-    let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder().registry(&registry).xml(&xml).build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 
@@ -67,11 +69,17 @@ fn registering() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_err());
 
@@ -85,11 +93,17 @@ fn registering() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 }
@@ -112,11 +126,17 @@ fn main_tree_attr() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 
@@ -134,11 +154,17 @@ fn main_tree_attr() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_err());
 
@@ -152,11 +178,17 @@ fn main_tree_attr() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 }
@@ -182,12 +214,18 @@ fn subtrees() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();
@@ -213,12 +251,18 @@ fn node_not_registered() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let registry = NodeRegistry::default();
 
     // Don't register StatusNode
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_err());
 }
@@ -240,12 +284,18 @@ fn ignore_treenodesmodel() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -279,13 +329,19 @@ fn load_adjacent_controls() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -319,13 +375,19 @@ fn async_test() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -356,11 +418,17 @@ fn condition() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let mut blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard.clone())
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 

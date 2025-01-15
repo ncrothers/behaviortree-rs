@@ -1,4 +1,10 @@
-use behaviortree_rs::{basic_types::NodeType, blackboard::Blackboard, nodes::ToBoxed, Factory};
+use behaviortree_rs::{
+    basic_types::NodeType,
+    blackboard::Blackboard,
+    node_registry::NodeRegistry,
+    nodes::ToBoxed,
+    tree::{Tree, TreeConfig},
+};
 
 mod nodes;
 
@@ -23,15 +29,20 @@ fn fallback() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("{status:?}"),
@@ -56,16 +67,21 @@ fn if_then_else() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::default();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -91,16 +107,21 @@ fn parallel_all() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -128,16 +149,21 @@ fn parallel() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -162,16 +188,21 @@ fn reactive_fallback() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -197,11 +228,11 @@ fn reactive_sequence() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
-    factory.register_node(
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert(
         "RunForNode",
         || RunForNode::default().to_boxed(),
         NodeType::Action,
@@ -209,9 +240,14 @@ fn reactive_sequence() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -237,11 +273,11 @@ fn sequence_star() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
-    factory.register_node(
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert(
         "RunForNode",
         || RunForNode::default().to_boxed(),
         NodeType::Action,
@@ -249,9 +285,14 @@ fn sequence_star() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -277,11 +318,11 @@ fn sequence_vanilla() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
-    factory.register_node(
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert(
         "RunForNode",
         || RunForNode::default().to_boxed(),
         NodeType::Action,
@@ -289,9 +330,14 @@ fn sequence_vanilla() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -316,11 +362,11 @@ fn while_do_else() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
+    let mut registry = NodeRegistry::default();
 
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    factory.register_node("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
-    factory.register_node(
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
+    registry.insert(
         "RunForNode",
         || RunForNode::default().to_boxed(),
         NodeType::Action,
@@ -328,9 +374,14 @@ fn while_do_else() {
 
     let blackboard = Blackboard::create();
 
-    factory.register_bt_from_text(&xml).unwrap();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .tree_name("main")
+        .build();
 
-    let mut tree = factory.instantiate_tree(&blackboard, "main").unwrap();
+    let mut tree = Tree::from_config(&config).unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),

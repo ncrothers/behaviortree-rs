@@ -37,7 +37,7 @@ impl<T> DerefMut for ControlContext<T> {
     }
 }
 
-impl<'a, T> NodeData<'a, ControlContext<T>> {
+impl<T> NodeData<'_, ControlContext<T>> {
     /// Halt children from this index to the end.
     ///
     /// # Errors

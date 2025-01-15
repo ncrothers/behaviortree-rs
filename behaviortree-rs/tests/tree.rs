@@ -1,4 +1,10 @@
-use behaviortree_rs::{basic_types::NodeType, nodes::ToBoxed, Blackboard, Factory};
+use behaviortree_rs::{
+    basic_types::NodeType,
+    node_registry::NodeRegistry,
+    nodes::ToBoxed,
+    tree::{Tree, TreeConfig},
+    Blackboard,
+};
 use nodes::StatusNode;
 
 mod nodes;
@@ -26,11 +32,18 @@ fn visitor() {
     "#
     .to_string();
 
-    let mut factory = Factory::new();
-    factory.register_node("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+    let mut registry = NodeRegistry::default();
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::create();
 
-    let tree = factory.create_tree_from_text(&xml, &blackboard);
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(&xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
+
     assert!(tree.is_ok());
     let tree = tree.unwrap();
 

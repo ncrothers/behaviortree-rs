@@ -2,11 +2,14 @@ use std::string::FromUtf8Error;
 
 use evalexpr::{DefaultNumericTypes, EvalexprError};
 use thiserror::Error;
+use typed_builder::TypedBuilder;
 
 use crate::{
     basic_types::{NodeStatus, ParseBoolError},
     blackboard::Blackboard,
+    node_registry::NodeRegistry,
     nodes::{NodeResult, TreeNode},
+    Parser,
 };
 
 #[derive(Debug, Error)]
@@ -61,14 +64,102 @@ pub struct NodeIter<'a> {
     idxs: Vec<i32>,
 }
 
+/// Configuration passed to [`Tree::from_config`] to build a [`Tree`] from XML
+/// text.
+/// 
+/// ```
+/// use behaviortree_rs::prelude::*;
+/// 
+/// let mut registry = NodeRegistry::default();
+/// 
+/// // Insert custom nodes into the registry here
+/// 
+/// let xml = r#"
+/// <root>
+///     <BehaviorTree ID="main-tree">
+///         <Condition />
+///     </BehaviorTree>
+/// </root>
+/// "#;
+/// 
+/// let config = TreeConfig::builder()
+///     .registry(&registry)
+///     .xml(xml)
+///     // Optional
+///     .tree_name("main-tree")
+///     // Optional
+///     .blackboard(Blackboard::default())
+///     .build();
+/// 
+/// let tree = Tree::from_config(&config);
+/// 
+/// assert!(tree.is_ok());
+/// ```
+#[derive(TypedBuilder)]
+pub struct TreeConfig<'a> {
+    /// Holds all registered nodes
+    pub(crate) registry: &'a NodeRegistry,
+    /// XML text to parse the tree from
+    pub(crate) xml: &'a str,
+    /// Optional. Specify which tree to build by ID.
+    /// 
+    /// When this is `None`, the `main_tree_to_execute` value will be used if set.
+    /// If there is no `main_tree_to_execute` attribute set, there must be only
+    /// one behavior tree defined in the XML text, otherwise the build will fail.
+    #[builder(default, setter(strip_option))]
+    pub(crate) tree_name: Option<&'a str>,
+    /// Optional. Provide an external [`Blackboard`] to use as the root for this
+    /// tree. If not provided, a new one will be allocated and used as the root.
+    #[builder(default)]
+    pub(crate) blackboard: Blackboard,
+}
+
+/// Top-level container of a behavior tree. Provides methods to tick the tree,
+/// access the root-level [`Blackboard`], and iterate over its nodes.
+/// 
+/// ```
+/// use behaviortree_rs::prelude::*;
+/// 
+/// let mut registry = NodeRegistry::default();
+/// 
+/// // Insert custom nodes into the registry here
+/// 
+/// let xml = r#"
+/// <root>
+///     <BehaviorTree ID="main-tree">
+///         <Condition />
+///     </BehaviorTree>
+/// </root>
+/// "#;
+/// 
+/// let config = TreeConfig::builder()
+///     .registry(&registry)
+///     .xml(xml)
+///     // Optional
+///     .tree_name("main-tree")
+///     // Optional
+///     .blackboard(Blackboard::default())
+///     .build();
+/// 
+/// let tree = Tree::from_config(&config);
+/// 
+/// assert!(tree.is_ok());
+/// ```
 #[derive(Debug)]
 pub struct Tree {
     root: TreeNode,
 }
 
 impl Tree {
-    pub fn new(root: TreeNode) -> Tree {
+    pub(crate) fn new(root: TreeNode) -> Tree {
         Self { root }
+    }
+
+    /// Creates a behavior tree from the [`TreeConfig`].
+    pub fn from_config(config: &TreeConfig) -> Result<Self, ParseError> {
+        let mut parser = Parser::new(config);
+
+        parser.create_tree()
     }
 
     fn tick_root(&mut self, opt: TickOption) -> NodeResult {

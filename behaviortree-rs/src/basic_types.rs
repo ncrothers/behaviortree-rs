@@ -12,7 +12,6 @@ use crate::{
 /// Specifies all types of nodes that can be used in a behavior tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeType {
-    Undefined,
     /// Leaf node that executes an action
     Action,
     /// Node with children that executes a certain child based on a condition
@@ -29,7 +28,6 @@ pub enum NodeType {
 impl std::fmt::Display for NodeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let text = match self {
-            Self::Undefined => "Undefined",
             Self::Action => "Action",
             Self::Condition => "Condition",
             Self::Control => "Control",
@@ -252,7 +250,6 @@ impl FromString for NodeType {
 
     fn from_string(value: impl AsRef<str>) -> Result<NodeType, Self::Err> {
         match value.as_ref() {
-            "Undefined" => Ok(NodeType::Undefined),
             "Action" => Ok(NodeType::Action),
             "Condition" => Ok(NodeType::Condition),
             "Control" => Ok(NodeType::Control),

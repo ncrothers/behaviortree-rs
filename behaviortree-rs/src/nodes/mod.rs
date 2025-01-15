@@ -49,7 +49,7 @@ pub struct NodeData<'a, T> {
     pub context: &'a mut T,
 }
 
-impl<'a, T> Deref for NodeData<'a, T> {
+impl<T> Deref for NodeData<'_, T> {
     type Target = NodeDataGeneric;
 
     fn deref(&self) -> &Self::Target {
@@ -57,7 +57,7 @@ impl<'a, T> Deref for NodeData<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for NodeData<'a, T> {
+impl<T> DerefMut for NodeData<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data
     }

@@ -88,7 +88,7 @@ pub struct Blackboard {
     parent_bb: Box<Option<Blackboard>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BlackboardData {
     storage: HashMap<String, EntryPtr>,
     internal_to_external: HashMap<String, String>,
@@ -140,10 +140,6 @@ impl Blackboard {
             })),
             parent_bb: Box::new(parent_bb),
         }
-    }
-
-    fn parent(&self) -> Option<Blackboard> {
-        self.parent_bb.as_ref().as_ref().cloned()
     }
 
     /// Creates a Blackboard with `parent_bb` as the parent. Returned as a new `BlackboardPtr`.
@@ -342,8 +338,7 @@ impl Blackboard {
     ///         - If a remapping rule exists for `key`, use the remapped `key`
     ///         - If `auto_remapping` is enabled, it uses `key` directly
     ///     - Return `None` if none of the above work
-    /// - If a value is matched, attempt to coerce the value to `T`. If it couldn't
-    /// be coerced to `T`:
+    /// - If a value is matched, attempt to coerce the value to `T`. If it couldn't be coerced to `T`:
     ///     - If it's a `String` or `&str`, try calling `parse_str()`
     /// - If none of those work, return `None`
     ///
@@ -543,6 +538,15 @@ impl Blackboard {
             .storage
             .insert(key.as_ref().to_string(), Arc::clone(&entry));
         entry
+    }
+}
+
+impl Default for Blackboard {
+    fn default() -> Self {
+        Self {
+            data: Arc::new(RwLock::new(BlackboardData::default())),
+            parent_bb: Box::new(None),
+        }
     }
 }
 
