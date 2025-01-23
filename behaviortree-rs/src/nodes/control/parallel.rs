@@ -95,7 +95,7 @@ impl ControlNode for ParallelNode {
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let children_count = ctx.children.len();
-        
+
         self.success_threshold = self.threshold(ctx.get_input("success_count")?, children_count);
         self.failure_threshold = ctx.get_input("failure_count").unwrap();
 
@@ -142,7 +142,7 @@ impl ControlNode for ParallelNode {
                 || (self.success_count + skipped_count) >= required_success_count
             {
                 self.clear();
-                ctx.reset_children();
+                ctx.reset_children()?;
                 return Ok(NodeStatus::Success);
             }
 
@@ -150,7 +150,7 @@ impl ControlNode for ParallelNode {
                 || self.failure_count >= self.failure_threshold
             {
                 self.clear();
-                ctx.reset_children();
+                ctx.reset_children()?;
                 return Ok(NodeStatus::Failure);
             }
         }
@@ -161,10 +161,5 @@ impl ControlNode for ParallelNode {
             true => Ok(NodeStatus::Skipped),
             false => Ok(NodeStatus::Running),
         }
-    }
-
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
-        ctx.reset_children();
-        Ok(())
     }
 }

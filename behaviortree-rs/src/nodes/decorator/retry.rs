@@ -27,8 +27,6 @@ pub struct RetryNode {
     max_attempts: i32,
     /// Default: 0
     try_count: usize,
-    /// Default: true
-    all_skipped: bool,
 }
 
 impl Default for RetryNode {
@@ -36,7 +34,6 @@ impl Default for RetryNode {
         Self {
             max_attempts: -1,
             try_count: 0,
-            all_skipped: true,
         }
     }
 }
@@ -54,16 +51,10 @@ impl DecoratorNode for RetryNode {
 
         let mut do_loop = (self.try_count as i32) < self.max_attempts || self.max_attempts == -1;
 
-        if matches!(ctx.status, NodeStatus::Idle) {
-            self.all_skipped = true;
-        }
-
         ctx.set_status(NodeStatus::Running);
 
         while do_loop {
-            let child_status = ctx.child().unwrap().execute_tick()?;
-
-            self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
+            let child_status = ctx.child().execute_tick()?;
 
             match child_status {
                 NodeStatus::Success => {
@@ -96,14 +87,11 @@ impl DecoratorNode for RetryNode {
 
         self.try_count = 0;
 
-        match self.all_skipped {
-            true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Failure),
-        }
+        Ok(NodeStatus::Failure)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
+    fn halt(&mut self, _ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
         self.try_count = 0;
-        ctx.reset_child()
+        Ok(())
     }
 }

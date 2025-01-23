@@ -145,3 +145,27 @@ impl SyncActionNode for DataNode {
         Ok(NodeStatus::Success)
     }
 }
+
+#[derive(Debug, Default)]
+pub struct StringAppendNode {}
+
+impl SyncActionNode for StringAppendNode {
+    type Context = SyncActionContext;
+
+    fn ports(&self) -> PortsList {
+        define_ports!(input_port!("key"), input_port!("char"),)
+    }
+
+    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult {
+        let key = ctx.get_input::<String>("key")?;
+        let char = ctx.get_input::<String>("char")?;
+
+        let value = ctx.blackboard.get::<String>(&key).unwrap_or_default();
+
+        let value = value + &char;
+
+        ctx.blackboard.set(key, value);
+
+        Ok(NodeStatus::Success)
+    }
+}

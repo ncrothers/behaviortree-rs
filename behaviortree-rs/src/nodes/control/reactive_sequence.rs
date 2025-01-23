@@ -61,7 +61,7 @@ impl ControlNode for ReactiveSequenceNode {
                     return Ok(NodeStatus::Running);
                 }
                 NodeStatus::Failure => {
-                    ctx.reset_children();
+                    ctx.reset_children()?;
                     return Ok(NodeStatus::Failure);
                 }
                 // Do nothing on Success
@@ -87,8 +87,7 @@ impl ControlNode for ReactiveSequenceNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
-        ctx.reset_children();
+    fn halt(&mut self, _ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.running_child = -1;
         Ok(())
     }

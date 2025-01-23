@@ -65,14 +65,9 @@ impl ControlNode for WhileDoElseNode {
         match status {
             NodeStatus::Running => Ok(NodeStatus::Running),
             status => {
-                ctx.reset_children();
+                ctx.reset_children()?;
                 Ok(status)
             }
         }
-    }
-
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
-        ctx.reset_children();
-        Ok(())
     }
 }

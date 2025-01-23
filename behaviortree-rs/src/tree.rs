@@ -66,14 +66,14 @@ pub struct NodeIter<'a> {
 
 /// Configuration passed to [`Tree::from_config`] to build a [`Tree`] from XML
 /// text.
-/// 
+///
 /// ```
 /// use behaviortree_rs::prelude::*;
-/// 
+///
 /// let mut registry = NodeRegistry::default();
-/// 
+///
 /// // Insert custom nodes into the registry here
-/// 
+///
 /// let xml = r#"
 /// <root>
 ///     <BehaviorTree ID="main-tree">
@@ -81,7 +81,7 @@ pub struct NodeIter<'a> {
 ///     </BehaviorTree>
 /// </root>
 /// "#;
-/// 
+///
 /// let config = TreeConfig::builder()
 ///     .registry(&registry)
 ///     .xml(xml)
@@ -90,9 +90,9 @@ pub struct NodeIter<'a> {
 ///     // Optional
 ///     .blackboard(Blackboard::default())
 ///     .build();
-/// 
+///
 /// let tree = Tree::from_config(&config);
-/// 
+///
 /// assert!(tree.is_ok());
 /// ```
 #[derive(TypedBuilder)]
@@ -102,7 +102,7 @@ pub struct TreeConfig<'a> {
     /// XML text to parse the tree from
     pub(crate) xml: &'a str,
     /// Optional. Specify which tree to build by ID.
-    /// 
+    ///
     /// When this is `None`, the `main_tree_to_execute` value will be used if set.
     /// If there is no `main_tree_to_execute` attribute set, there must be only
     /// one behavior tree defined in the XML text, otherwise the build will fail.
@@ -116,14 +116,14 @@ pub struct TreeConfig<'a> {
 
 /// Top-level container of a behavior tree. Provides methods to tick the tree,
 /// access the root-level [`Blackboard`], and iterate over its nodes.
-/// 
+///
 /// ```
 /// use behaviortree_rs::prelude::*;
-/// 
+///
 /// let mut registry = NodeRegistry::default();
-/// 
+///
 /// // Insert custom nodes into the registry here
-/// 
+///
 /// let xml = r#"
 /// <root>
 ///     <BehaviorTree ID="main-tree">
@@ -131,7 +131,7 @@ pub struct TreeConfig<'a> {
 ///     </BehaviorTree>
 /// </root>
 /// "#;
-/// 
+///
 /// let config = TreeConfig::builder()
 ///     .registry(&registry)
 ///     .xml(xml)
@@ -140,9 +140,9 @@ pub struct TreeConfig<'a> {
 ///     // Optional
 ///     .blackboard(Blackboard::default())
 ///     .build();
-/// 
+///
 /// let tree = Tree::from_config(&config);
-/// 
+///
 /// assert!(tree.is_ok());
 /// ```
 #[derive(Debug)]
@@ -255,3 +255,6 @@ impl<'a> Iterator for NodeIter<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {}

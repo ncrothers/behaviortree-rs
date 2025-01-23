@@ -88,8 +88,9 @@ fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
         Arc::new(|| -> Box<dyn NodeBase> { nodes::control::FallbackNode::default().to_boxed() });
     node_map.insert(String::from("Fallback"), (NodeType::Control, node));
 
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::control::ReactiveFallbackNode.to_boxed() });
+    let node = Arc::new(|| -> Box<dyn NodeBase> {
+        nodes::control::ReactiveFallbackNode::default().to_boxed()
+    });
     node_map.insert(String::from("ReactiveFallback"), (NodeType::Control, node));
 
     let node =

@@ -552,12 +552,14 @@ impl Default for Blackboard {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     // TODO: add other tests
 
-    #[test]
-    fn create_entry() {
+    #[rstest]
+    fn no_remapping() {
         // With no remapping
 
         let mut root_bb = Blackboard::create();
@@ -570,7 +572,10 @@ mod tests {
         // These two should be none because remapping is not enabled
         assert!(right_bb.get::<u32>("foo").is_none());
         assert!(root_bb.get::<u32>("foo").is_none());
+    }
 
+    #[rstest]
+    fn auto_remapping() {
         // With autoremapping
 
         let mut root_bb = Blackboard::create();
@@ -586,7 +591,10 @@ mod tests {
         assert_eq!(left_bb.get::<u32>("foo"), Some(123));
         assert_eq!(right_bb.get::<u32>("foo"), Some(123));
         assert_eq!(root_bb.get::<u32>("foo"), Some(123));
+    }
 
+    #[rstest]
+    fn custom_remapping() {
         // With custom remapping
         let mut root_bb = Blackboard::create();
         let mut left_bb = Blackboard::with_parent(&root_bb);
@@ -649,7 +657,7 @@ mod tests {
         assert_eq!(child3_bb.get::<u32>("foo"), None);
     }
 
-    #[test]
+    #[rstest]
     fn type_matching() {
         let mut bb = Blackboard::create();
 
@@ -660,7 +668,7 @@ mod tests {
         assert!(bb.get::<f32>("foo").is_none());
     }
 
-    #[test]
+    #[rstest]
     fn custom_type() {
         #[derive(Clone, Debug, PartialEq)]
         struct CustomEntry {

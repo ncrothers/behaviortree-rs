@@ -58,10 +58,16 @@ impl<T> NodeData<'_, DecoratorContext<T>> {
         Ok(())
     }
 
-    /// Gets a mutable reference to the first child. Helper for
-    /// `Decorator` nodes to get their child.
-    pub fn child(&mut self) -> Option<&mut TreeNode> {
-        self.children.get_mut(0)
+    /// Gets a mutable reference to the Decorator's child
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the node has no child, but this should
+    /// never happen. Decorator child constraints are validated during parsing.
+    pub fn child(&mut self) -> &mut TreeNode {
+        self.children
+            .get_mut(0)
+            .expect("Decorator node must have a child, this shouldn't happen")
     }
 }
 
@@ -107,10 +113,15 @@ impl NodeBase for Decorator {
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        DecoratorNode::halt(
-            &mut *self.0,
-            &mut NodeData::new(ctx, &mut DecoratorContext(())),
-        )
+        let mut dec_ctx = DecoratorContext(());
+        let mut ctx = NodeData::new(ctx, &mut dec_ctx);
+
+        DecoratorNode::halt(&mut *self.0, &mut ctx)?;
+
+        ctx.reset_child()?;
+        ctx.set_status(NodeStatus::Idle);
+
+        Ok(())
     }
 }
 

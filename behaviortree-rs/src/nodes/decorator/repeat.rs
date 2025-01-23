@@ -27,8 +27,6 @@ pub struct RepeatNode {
     num_cycles: i32,
     /// Default: 0
     repeat_count: usize,
-    /// Default: true
-    all_skipped: bool,
 }
 
 impl Default for RepeatNode {
@@ -36,7 +34,6 @@ impl Default for RepeatNode {
         Self {
             num_cycles: -1,
             repeat_count: 0,
-            all_skipped: true,
         }
     }
 }
@@ -54,16 +51,10 @@ impl DecoratorNode for RepeatNode {
 
         let mut do_loop = (self.repeat_count as i32) < self.num_cycles || self.num_cycles == -1;
 
-        if matches!(ctx.status, NodeStatus::Idle) {
-            self.all_skipped = true;
-        }
-
         ctx.set_status(NodeStatus::Running);
 
         while do_loop {
-            let child_status = ctx.child().unwrap().execute_tick()?;
-
-            self.all_skipped &= matches!(child_status, NodeStatus::Skipped);
+            let child_status = ctx.child().execute_tick()?;
 
             match child_status {
                 NodeStatus::Success => {
@@ -95,14 +86,11 @@ impl DecoratorNode for RepeatNode {
 
         self.repeat_count = 0;
 
-        match self.all_skipped {
-            true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Success),
-        }
+        Ok(NodeStatus::Success)
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
+    fn halt(&mut self, _ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
         self.repeat_count = 0;
-        ctx.reset_child()
+        Ok(())
     }
 }

@@ -57,7 +57,7 @@ impl ControlNode for FallbackNode {
                     self.child_idx += 1;
                 }
                 NodeStatus::Success => {
-                    ctx.reset_children();
+                    ctx.reset_children()?;
                     self.child_idx = 0;
                     return Ok(NodeStatus::Success);
                 }
@@ -74,7 +74,7 @@ impl ControlNode for FallbackNode {
         }
 
         if self.child_idx == ctx.children.len() {
-            ctx.reset_children();
+            ctx.reset_children()?;
             self.child_idx = 0;
         }
 
@@ -84,11 +84,9 @@ impl ControlNode for FallbackNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
+    fn halt(&mut self, _ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.child_idx = 0;
         self.all_skipped = true;
-        ctx.reset_children();
-
         Ok(())
     }
 }

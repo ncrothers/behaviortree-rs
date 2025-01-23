@@ -57,8 +57,9 @@ impl ControlNode for ParallelAllNode {
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let children_count = ctx.children.len();
-        
-        self.failure_threshold = self.failure_threshold(ctx.get_input("max_failures")?, children_count);
+
+        self.failure_threshold =
+            self.failure_threshold(ctx.get_input("max_failures")?, children_count);
 
         if children_count < self.failure_threshold {
             return Err(NodeError::NodeStructureError(
@@ -103,11 +104,10 @@ impl ControlNode for ParallelAllNode {
 
         if skipped_count + self.completed_list.len() >= children_count {
             // Done!
-            ctx.reset_children();
+            ctx.reset_children()?;
             self.completed_list.clear();
 
-            let status = if self.failure_count >= self.failure_threshold
-            {
+            let status = if self.failure_count >= self.failure_threshold {
                 NodeStatus::Failure
             } else {
                 NodeStatus::Success
@@ -120,10 +120,5 @@ impl ControlNode for ParallelAllNode {
         }
 
         Ok(NodeStatus::Running)
-    }
-
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
-        ctx.reset_children();
-        Ok(())
     }
 }

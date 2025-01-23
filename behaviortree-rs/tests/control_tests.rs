@@ -7,48 +7,11 @@ use behaviortree_rs::{
 };
 
 mod nodes;
+mod control {
+    mod fallback;
+}
 
 use nodes::{EchoNode, RunForNode, StatusNode};
-
-#[test]
-fn fallback() {
-    nodes::test_setup();
-
-    let xml = r#"
-        <root>
-            <BehaviorTree ID="main">
-                <Fallback>
-                    <StatusNode status="Failure" />
-                    <StatusNode status="Failure" />
-                    <StatusNode status="Success" />
-                    <StatusNode status="Failure" />
-                    <StatusNode status="Success" />
-                </Fallback>
-            </BehaviorTree>
-        </root>
-    "#
-    .to_string();
-
-    let mut registry = NodeRegistry::default();
-
-    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-
-    let blackboard = Blackboard::create();
-
-    let config = TreeConfig::builder()
-        .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
-        .tree_name("main")
-        .build();
-
-    let mut tree = Tree::from_config(&config).unwrap();
-
-    match tree.tick_while_running() {
-        Ok(status) => log::info!("{status:?}"),
-        Err(e) => log::error!("{e}"),
-    }
-}
 
 #[test]
 fn if_then_else() {

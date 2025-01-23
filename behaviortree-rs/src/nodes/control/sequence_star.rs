@@ -73,7 +73,7 @@ impl ControlNode for SequenceWithMemoryNode {
 
         // All children returned Success
         if self.child_idx == ctx.children.len() {
-            ctx.reset_children();
+            ctx.reset_children()?;
             self.child_idx = 0;
         }
 
@@ -83,9 +83,8 @@ impl ControlNode for SequenceWithMemoryNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
+    fn halt(&mut self, _ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.child_idx = 0;
-        ctx.reset_children();
         Ok(())
     }
 }

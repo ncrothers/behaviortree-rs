@@ -19,7 +19,9 @@ pub use while_do_else::*;
 
 use std::ops::{Deref, DerefMut};
 
-use super::{NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeStatus, PortsList, ToBoxed};
+use super::{
+    NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeStatus, PortsList, ToBoxed,
+};
 
 pub struct ControlContext<T = ()>(T);
 
@@ -116,11 +118,12 @@ impl NodeBase for Control {
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        ControlNode::halt(
-            &mut *self.0,
-            &mut NodeData::new(ctx, &mut ControlContext(())),
-        )?;
+        let mut dec_ctx = ControlContext(());
+        let mut ctx = NodeData::new(ctx, &mut dec_ctx);
+
+        ControlNode::halt(&mut *self.0, &mut ctx)?;
         ctx.set_status(NodeStatus::Idle);
+        ctx.reset_children()?;
 
         Ok(())
     }

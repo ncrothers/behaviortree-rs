@@ -59,7 +59,7 @@ pub(crate) use __impl_into_string as impl_into_string;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __define_ports {
-    ( $($tu:expr),* ) => {
+    ( $($tu:expr),* $(,)? ) => {
         {
             let mut ports = $crate::basic_types::PortsList::new();
             $(

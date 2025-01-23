@@ -65,7 +65,7 @@ impl ControlNode for ReactiveFallbackNode {
                 }
                 NodeStatus::Failure => {}
                 NodeStatus::Success => {
-                    ctx.reset_children();
+                    ctx.reset_children()?;
                     return Ok(NodeStatus::Success);
                 }
                 NodeStatus::Skipped => {
@@ -88,8 +88,7 @@ impl ControlNode for ReactiveFallbackNode {
         }
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
-        ctx.reset_children();
+    fn halt(&mut self, _ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.running_child = -1;
         Ok(())
     }

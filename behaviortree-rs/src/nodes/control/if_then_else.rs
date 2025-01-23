@@ -64,7 +64,7 @@ impl ControlNode for IfThenElseNode {
             match status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
                 status => {
-                    ctx.reset_children();
+                    ctx.reset_children()?;
                     self.child_idx = 0;
                     return Ok(status);
                 }
@@ -76,10 +76,8 @@ impl ControlNode for IfThenElseNode {
         ))
     }
 
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
+    fn halt(&mut self, _ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.child_idx = 0;
-        ctx.reset_children();
-
         Ok(())
     }
 }

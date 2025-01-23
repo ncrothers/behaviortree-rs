@@ -1,4 +1,4 @@
-use crate::nodes::{NodeData, NodeResult};
+use crate::nodes::{NodeData, NodeResult, NodeStatus};
 
 use super::{DecoratorContext, DecoratorNode};
 
@@ -10,14 +10,14 @@ impl DecoratorNode for SubTreeNode {
     type Context = DecoratorContext;
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
-        let child_status = ctx.child().unwrap().execute_tick()?;
+        let prev_status = ctx.status();
 
-        ctx.set_status(child_status);
+        if matches!(prev_status, NodeStatus::Idle) {
+            ctx.set_status(NodeStatus::Running);
+        }
+
+        let child_status = ctx.child().execute_tick()?;
 
         Ok(child_status)
-    }
-
-    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
-        ctx.reset_child()
     }
 }

@@ -93,7 +93,14 @@ impl TreeNode {
 
     /// Tick the node
     pub fn execute_tick(&mut self) -> NodeResult {
-        self.node.execute_tick(&mut self.data)
+        let status = self.node.execute_tick(&mut self.data)?;
+
+        // Preserve Idle state if skipped, but communicate Skipped to the parent
+        if !matches!(status, NodeStatus::Skipped) {
+            self.data.set_status(status);
+        }
+
+        Ok(status)
     }
 
     /// Halt the node
