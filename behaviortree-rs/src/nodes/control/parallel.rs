@@ -15,8 +15,8 @@ use super::{ControlContext, ControlNode};
 /// this Control Node is the __only__ one that can have
 /// multiple children RUNNING at the same time.
 ///
-/// The Node is completed either when the THRESHOLD_SUCCESS
-/// or THRESHOLD_FAILURE number is reached (both configured using ports).
+/// The Node is completed either when the `success_count`
+/// or `failure_count` number is reached (both configured using ports).
 ///
 /// If any of the thresholds is reached, and other children are still running,
 /// they will be halted.
@@ -24,14 +24,13 @@ use super::{ControlContext, ControlNode};
 /// Note that threshold indexes work as in Python:
 /// https://www.i2tutorials.com/what-are-negative-indexes-and-why-are-they-used/
 ///
-/// Therefore -1 is equivalent to the number of children.
+/// Therefore -1 is equivalent to the last child.
 #[derive(Debug)]
 pub struct ParallelNode {
-    /// Default: -1
-    success_threshold: i32,
-    /// Default: -1
-    failure_threshold: i32,
-    /// Defai;t
+    /// Default: 0
+    success_threshold: usize,
+    /// Default: 0
+    failure_threshold: usize,
     completed_list: HashSet<usize>,
     /// Default: 0
     success_count: usize,
@@ -39,11 +38,12 @@ pub struct ParallelNode {
     failure_count: usize,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for ParallelNode {
     fn default() -> Self {
         Self {
-            success_threshold: -1,
-            failure_threshold: -1,
+            success_threshold: 0,
+            failure_threshold: 0,
             completed_list: HashSet::default(),
             success_count: 0,
             failure_count: 0,
@@ -52,21 +52,29 @@ impl Default for ParallelNode {
 }
 
 impl ParallelNode {
-    fn success_threshold(&self, n_children: i32) -> usize {
-        if self.success_threshold < 0 {
-            (n_children + self.success_threshold + 1).max(0) as usize
+    fn threshold(&self, threshold: i32, n_children: usize) -> usize {
+        if threshold < 0 {
+            i32::max(0, n_children as i32 + threshold + 1) as usize
         } else {
-            self.success_threshold as usize
+            threshold as usize
         }
     }
 
-    fn failure_threshold(&self, n_children: i32) -> usize {
-        if self.failure_threshold < 0 {
-            (n_children + self.failure_threshold + 1).max(0) as usize
-        } else {
-            self.failure_threshold as usize
-        }
-    }
+    // fn success_threshold(&self, n_children: i32) -> usize {
+    //     if self.success_threshold < 0 {
+    //         (n_children + self.success_threshold + 1).max(0) as usize
+    //     } else {
+    //         self.success_threshold as usize
+    //     }
+    // }
+
+    // fn failure_threshold(&self, n_children: i32) -> usize {
+    //     if self.failure_threshold < 0 {
+    //         (n_children + self.failure_threshold + 1).max(0) as usize
+    //     } else {
+    //         self.failure_threshold as usize
+    //     }
+    // }
 
     fn clear(&mut self) {
         self.completed_list.clear();
@@ -86,18 +94,18 @@ impl ControlNode for ParallelNode {
     }
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
-        self.success_threshold = ctx.get_input("success_count").unwrap();
+        let children_count = ctx.children.len();
+        
+        self.success_threshold = self.threshold(ctx.get_input("success_count")?, children_count);
         self.failure_threshold = ctx.get_input("failure_count").unwrap();
 
-        let children_count = ctx.children.len();
-
-        if children_count < self.success_threshold(ctx.children.len() as i32) {
+        if children_count < self.success_threshold {
             return Err(NodeError::NodeStructureError(
                 "Number of children is less than the threshold. Can never succeed.".to_string(),
             ));
         }
 
-        if children_count < self.failure_threshold(ctx.children.len() as i32) {
+        if children_count < self.failure_threshold {
             return Err(NodeError::NodeStructureError(
                 "Number of children is less than the threshold. Can never fail.".to_string(),
             ));
@@ -124,12 +132,14 @@ impl ControlNode for ParallelNode {
                 }
             }
 
-            let required_success_count = self.success_threshold(ctx.children.len() as i32);
+            let required_success_count = self.success_threshold;
 
             // Check if success condition has been met
             if self.success_count >= required_success_count
-                || (self.success_threshold < 0
-                    && (self.success_count + skipped_count) >= required_success_count)
+                // Changed from BehaviorTree.CPP to always include skipped_count,
+                // not just when the threshold is negative (since that doesn't
+                // seem to make sense)
+                || (self.success_count + skipped_count) >= required_success_count
             {
                 self.clear();
                 ctx.reset_children();
@@ -137,7 +147,7 @@ impl ControlNode for ParallelNode {
             }
 
             if (children_count - self.failure_count) < required_success_count
-                || self.failure_count == self.failure_threshold(ctx.children.len() as i32)
+                || self.failure_count >= self.failure_threshold
             {
                 self.clear();
                 ctx.reset_children();

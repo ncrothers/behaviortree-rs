@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{
     basic_types::NodeStatus,
     macros::{define_ports, input_port},
@@ -21,10 +19,10 @@ use super::{ControlContext, ControlNode};
 /// Therefore -1 is equivalent to the number of children.
 #[derive(Debug)]
 pub struct ParallelAllNode {
-    /// Default: -1
-    failure_threshold: i32,
+    /// Default: 0
+    failure_threshold: usize,
     /// Default: empty
-    completed_list: HashSet<usize>,
+    completed_list: Vec<usize>,
     /// Default: 0
     failure_count: usize,
 }
@@ -32,19 +30,20 @@ pub struct ParallelAllNode {
 impl Default for ParallelAllNode {
     fn default() -> Self {
         Self {
-            failure_threshold: -1,
-            completed_list: HashSet::default(),
+            failure_threshold: 0,
+            // Presize it to 10 so it's unlikely to need to grow
+            completed_list: Vec::with_capacity(10),
             failure_count: 0,
         }
     }
 }
 
 impl ParallelAllNode {
-    fn failure_threshold(&self, n_children: i32) -> usize {
-        if self.failure_threshold < 0 {
-            (n_children + self.failure_threshold + 1).max(0) as usize
+    fn failure_threshold(&self, threshold: i32, n_children: usize) -> usize {
+        if threshold < 0 {
+            i32::max(0, n_children as i32 + threshold + 1) as usize
         } else {
-            self.failure_threshold as usize
+            threshold as usize
         }
     }
 }
@@ -57,17 +56,19 @@ impl ControlNode for ParallelAllNode {
     }
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
-        self.failure_threshold = ctx.get_input("max_failures")?;
-
         let children_count = ctx.children.len();
+        
+        self.failure_threshold = self.failure_threshold(ctx.get_input("max_failures")?, children_count);
 
-        if (children_count as i32) < self.failure_threshold {
+        if children_count < self.failure_threshold {
             return Err(NodeError::NodeStructureError(
                 "Number of children is less than the threshold. Can never fail.".to_string(),
             ));
         }
 
         let mut skipped_count = 0;
+
+        ctx.set_status(NodeStatus::Running);
 
         for i in 0..children_count {
             // Skip completed node
@@ -78,10 +79,10 @@ impl ControlNode for ParallelAllNode {
             let status = ctx.children[i].execute_tick()?;
             match status {
                 NodeStatus::Success => {
-                    self.completed_list.insert(i);
+                    self.completed_list.push(i);
                 }
                 NodeStatus::Failure => {
-                    self.completed_list.insert(i);
+                    self.completed_list.push(i);
                     self.failure_count += 1;
                 }
                 NodeStatus::Skipped => skipped_count += 1,
@@ -105,7 +106,7 @@ impl ControlNode for ParallelAllNode {
             ctx.reset_children();
             self.completed_list.clear();
 
-            let status = if self.failure_count >= self.failure_threshold(ctx.children.len() as i32)
+            let status = if self.failure_count >= self.failure_threshold
             {
                 NodeStatus::Failure
             } else {

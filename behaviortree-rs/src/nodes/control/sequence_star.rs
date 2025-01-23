@@ -79,7 +79,7 @@ impl ControlNode for SequenceWithMemoryNode {
 
         match self.all_skipped {
             true => Ok(NodeStatus::Skipped),
-            false => Ok(NodeStatus::Failure),
+            false => Ok(NodeStatus::Success),
         }
     }
 

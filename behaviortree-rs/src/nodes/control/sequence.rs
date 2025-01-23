@@ -69,12 +69,16 @@ impl ControlNode for SequenceNode {
             };
         }
 
+        // Entire loop finished, meaning all children returned Success or Skipped
         if self.child_idx == ctx.children.len() {
             ctx.reset_children();
             self.child_idx = 0;
         }
 
-        Ok(NodeStatus::Success)
+        match self.all_skipped {
+            true => Ok(NodeStatus::Skipped),
+            false => Ok(NodeStatus::Success),
+        }
     }
 
     fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {

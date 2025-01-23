@@ -19,7 +19,7 @@ pub use while_do_else::*;
 
 use std::ops::{Deref, DerefMut};
 
-use super::{NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, PortsList, ToBoxed};
+use super::{NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeStatus, PortsList, ToBoxed};
 
 pub struct ControlContext<T = ()>(T);
 
@@ -58,9 +58,8 @@ impl<T> NodeData<'_, ControlContext<T>> {
     }
 
     /// Halts and resets all children
-    pub fn reset_children(&mut self) {
-        // Don't care if this returns an error
-        let _ = self.halt_children(0);
+    pub fn reset_children(&mut self) -> NodeResult<()> {
+        self.halt_children(0)
     }
 
     /// Halt child at the `index`. Not to be confused with `halt_child()`, which is
@@ -120,7 +119,10 @@ impl NodeBase for Control {
         ControlNode::halt(
             &mut *self.0,
             &mut NodeData::new(ctx, &mut ControlContext(())),
-        )
+        )?;
+        ctx.set_status(NodeStatus::Idle);
+
+        Ok(())
     }
 }
 

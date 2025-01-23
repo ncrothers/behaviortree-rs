@@ -86,6 +86,7 @@ impl ControlNode for FallbackNode {
 
     fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         self.child_idx = 0;
+        self.all_skipped = true;
         ctx.reset_children();
 
         Ok(())

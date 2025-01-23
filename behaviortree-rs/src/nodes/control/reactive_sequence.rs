@@ -36,20 +36,22 @@ impl ControlNode for ReactiveSequenceNode {
 
         ctx.set_status(NodeStatus::Running);
 
-        for counter in 0..ctx.children.len() {
-            let child = &mut ctx.children[counter];
+        for index in 0..ctx.children.len() {
+            let child = &mut ctx.children[index];
             let child_status = child.execute_tick()?;
 
             all_skipped &= child_status == NodeStatus::Skipped;
 
             match child_status {
                 NodeStatus::Running => {
-                    for i in 0..counter {
-                        ctx.halt_child(i)?;
+                    for i in 0..ctx.children.len() {
+                        if i != index {
+                            ctx.halt_child(i)?;
+                        }
                     }
                     if self.running_child == -1 {
-                        self.running_child = counter as i32;
-                    } else if self.running_child != counter as i32 {
+                        self.running_child = index as i32;
+                    } else if self.running_child != index as i32 {
                         // Multiple children running at the same time
                         return Err(NodeError::NodeStructureError(
                             "[ReactiveSequence]: Only a single child can return Running."
@@ -66,7 +68,7 @@ impl ControlNode for ReactiveSequenceNode {
                 NodeStatus::Success => {}
                 NodeStatus::Skipped => {
                     // Halt current child
-                    ctx.halt_child(counter)?;
+                    ctx.halt_child(index)?;
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
@@ -77,7 +79,7 @@ impl ControlNode for ReactiveSequenceNode {
             }
         }
 
-        ctx.reset_children();
+        self.halt(ctx)?;
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),
@@ -87,6 +89,7 @@ impl ControlNode for ReactiveSequenceNode {
 
     fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         ctx.reset_children();
+        self.running_child = -1;
         Ok(())
     }
 }

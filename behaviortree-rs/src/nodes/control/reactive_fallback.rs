@@ -17,7 +17,16 @@ use super::{ControlContext, ControlNode};
 /// IMPORTANT: to work properly, this node should not have more than
 ///            a single asynchronous child.
 #[derive(Debug)]
-pub struct ReactiveFallbackNode;
+pub struct ReactiveFallbackNode {
+    /// Default: -1
+    running_child: i32,
+}
+
+impl Default for ReactiveFallbackNode {
+    fn default() -> Self {
+        Self { running_child: -1 }
+    }
+}
 
 impl ControlNode for ReactiveFallbackNode {
     type Context = ControlContext;
@@ -35,8 +44,21 @@ impl ControlNode for ReactiveFallbackNode {
 
             match &child_status {
                 NodeStatus::Running => {
-                    for i in 0..index {
-                        ctx.halt_child(i)?;
+                    for i in 0..ctx.children.len() {
+                        if i != index {
+                            ctx.halt_child(i)?;
+                        }
+                    }
+
+                    // Check if there are two running children
+                    if self.running_child == -1 {
+                        self.running_child = index as i32;
+                    } else if self.running_child != index as i32 {
+                        // Multiple children running at the same time
+                        return Err(NodeError::NodeStructureError(
+                            "[ReactiveFallback]: Only a single child can return Running."
+                                .to_string(),
+                        ));
                     }
 
                     return Ok(NodeStatus::Running);
@@ -51,14 +73,14 @@ impl ControlNode for ReactiveFallbackNode {
                 }
                 NodeStatus::Idle => {
                     return Err(NodeError::StatusError(
-                        "Name here".to_string(),
+                        "ReactiveFallback".to_string(),
                         "Idle".to_string(),
                     ));
                 }
             };
         }
 
-        ctx.reset_children();
+        self.halt(ctx)?;
 
         match all_skipped {
             true => Ok(NodeStatus::Skipped),
@@ -68,6 +90,7 @@ impl ControlNode for ReactiveFallbackNode {
 
     fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         ctx.reset_children();
+        self.running_child = -1;
         Ok(())
     }
 }

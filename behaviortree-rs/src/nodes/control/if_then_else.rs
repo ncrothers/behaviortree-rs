@@ -41,7 +41,7 @@ impl ControlNode for IfThenElseNode {
             let status = ctx.children[0].execute_tick()?;
             match status {
                 NodeStatus::Running => return Ok(NodeStatus::Running),
-                NodeStatus::Success => self.child_idx += 1,
+                NodeStatus::Success => self.child_idx = 1,
                 NodeStatus::Failure => {
                     if children_count == 3 {
                         self.child_idx = 2;
