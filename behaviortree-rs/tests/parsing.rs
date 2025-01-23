@@ -5,6 +5,7 @@ use behaviortree_rs::{
     nodes::ToBoxed,
     tree::{Tree, TreeConfig},
 };
+use rstest::rstest;
 
 use crate::nodes::{DataNode, EchoNode, StatusNode};
 
@@ -452,4 +453,169 @@ fn condition() {
     let res = res.unwrap();
 
     assert_eq!(res, NodeStatus::Success);
+}
+
+#[rstest]
+#[case::missing_root(
+    r#"
+        <root>
+        </root>
+    "#,
+    false
+)]
+#[case::missing_behavior_tree(
+    r#"
+        <BehaviorTree ID="main">
+            <StatusNode status="Success" />
+        </BehaviorTree>
+    "#,
+    false
+)]
+#[case::multiple_root_tags(
+    r#"
+        <root main_tree_to_execute="invalid">
+            <BehaviorTree ID="main">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+        </root>
+        <root main_tree_to_execute="invalid">
+            <BehaviorTree ID="main">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::incorrect_behaviortree_name(
+    r#"
+        <root main_tree_to_execute="invalid">
+            <BehaviorTree ID="main">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::empty_behavior_tree(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::empty_subtree(
+    r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="two">
+            </BehaviorTree>
+
+            <BehaviorTree ID="main">
+                <SubTree ID="two" />
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::single_node(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+        </root>
+    "#,
+    true
+)]
+#[case::simple_subtree(
+    r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="two">
+                <StatusNode status="Success" />
+            </BehaviorTree>
+
+            <BehaviorTree ID="main">
+                <SubTree ID="two" />
+            </BehaviorTree>
+        </root>
+    "#,
+    true
+)]
+#[case::decorator_no_child(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+                <Inverter>
+                </Inverter>
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::decorator_single_child(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+                <Inverter>
+                    <StatusNode status="Success" />
+                </Inverter>
+            </BehaviorTree>
+        </root>
+    "#,
+    true
+)]
+#[case::decorator_multiple_children(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+                <Inverter>
+                    <StatusNode status="Success" />
+                    <StatusNode status="Success" />
+                </Inverter>
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::control_no_child(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+                <Sequence>
+                </Sequence>
+            </BehaviorTree>
+        </root>
+    "#,
+    false
+)]
+#[case::control_single_child(
+    r#"
+        <root>
+            <BehaviorTree ID="main">
+                <Sequence>
+                    <StatusNode status="Success" />
+                </Sequence>
+            </BehaviorTree>
+        </root>
+    "#,
+    true
+)]
+fn parsing(#[case] xml: &str, #[case] is_ok: bool) {
+    nodes::test_setup();
+
+    let mut registry = NodeRegistry::default();
+
+    registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
+
+    let blackboard = Blackboard::create();
+    let config = TreeConfig::builder()
+        .blackboard(blackboard)
+        .registry(&registry)
+        .xml(xml)
+        .build();
+
+    let tree = Tree::from_config(&config);
+
+    assert_eq!(tree.is_ok(), is_ok);
 }

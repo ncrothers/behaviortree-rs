@@ -107,7 +107,10 @@ impl<'a> Parser<'a> {
         }
         // If there's exactly one tree, that tree is necessarily _always_ the correct tree
         // However, handle user-specified tree name separately
-        else if self.tree_roots.len() == 1 && self.tree_config.tree_name.is_none() {
+        else if self.tree_roots.len() == 1
+            && self.main_tree_id.is_none()
+            && self.tree_config.tree_name.is_none()
+        {
             // Unwrap is safe because we check that tree_roots.len() == 1
             self.tree_roots.iter().next().unwrap().0.clone()
         }
@@ -117,13 +120,18 @@ impl<'a> Parser<'a> {
             // Unwrap is safe because this is only reachable if tree_name is Some
             self.tree_config.tree_name.unwrap().to_string()
         }
+        // Handle a tree name defined in the XML root tag
+        else if self.main_tree_id.is_some() {
+            // Unwrap is safe because this is only reachable if main_tree_id is Some
+            self.main_tree_id.clone().unwrap()
+        }
         // Multiple roots and main_tree_id is Some
         else if self.tree_roots.len() > 1 && self.main_tree_id.is_some() {
             self.main_tree_id.clone().unwrap()
         }
-        // Assuming my logic is correct, this is unreachable
+        // Only reachable if there are no BehaviorTree elements
         else {
-            unreachable!()
+            return Err(ParseError::NoMainTree);
         };
 
         self.instantiate_tree(&self.tree_config.blackboard, &tree_id)
@@ -334,6 +342,12 @@ impl<'a> Parser<'a> {
                     NodeType::Control => {
                         let children =
                             self.build_children(reader, blackboard, tree_name, &(path + "/"))?;
+
+                        if children.is_empty() {
+                            return Err(ParseError::ViolateNodeConstraint(
+                                "Control nodes must have at least one child".into(),
+                            ));
+                        }
 
                         let node_data = NodeDataGeneric {
                             meta: node_meta,
