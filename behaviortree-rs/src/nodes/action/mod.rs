@@ -77,7 +77,9 @@ impl NodeBase for SyncAction {
         SyncActionNode::halt(
             &mut *self.0,
             &mut NodeData::new(ctx, &mut SyncActionContext(())),
-        )
+        )?;
+        ctx.set_status(NodeStatus::Idle);
+        Ok(())
     }
 }
 
@@ -201,7 +203,9 @@ impl NodeBase for StatefulAction {
         StatefulActionNode::on_halted(
             &mut *self.0,
             &mut NodeData::new(ctx, &mut StatefulActionContext(())),
-        )
+        )?;
+        ctx.set_status(NodeStatus::Idle);
+        Ok(())
     }
 }
 
