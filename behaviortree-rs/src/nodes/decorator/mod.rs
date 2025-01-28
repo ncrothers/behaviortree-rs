@@ -1,6 +1,4 @@
 mod force_failure;
-use std::ops::{Deref, DerefMut};
-
 pub use force_failure::*;
 mod force_success;
 pub use force_success::*;
@@ -16,6 +14,8 @@ mod run_once;
 pub use run_once::*;
 mod subtree;
 pub(crate) use subtree::*;
+
+use std::ops::{Deref, DerefMut};
 
 use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed, TreeNode,
