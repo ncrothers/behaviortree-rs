@@ -33,7 +33,7 @@ impl Default for RunOnceNode {
 }
 
 impl DecoratorNode for RunOnceNode {
-    type Context = DecoratorContext;
+    type Context = ();
 
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("then_skip", true))

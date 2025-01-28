@@ -20,7 +20,7 @@ use super::{ControlContext, ControlNode};
 pub struct WhileDoElseNode;
 
 impl ControlNode for WhileDoElseNode {
-    type Context = ControlContext;
+    type Context = ();
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let children_count = ctx.children.len();

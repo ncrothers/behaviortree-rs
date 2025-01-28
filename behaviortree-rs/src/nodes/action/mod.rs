@@ -25,7 +25,7 @@ impl<T> DerefMut for SyncActionContext<T> {
 
 /// Wrapper struct around a boxed [`SyncActionNode`] implementer.
 #[derive(Debug)]
-pub struct SyncAction(Box<dyn SyncActionNode<Context = SyncActionContext>>);
+pub struct SyncAction(Box<dyn SyncActionNode<Context = ()>>);
 
 /// Trait to implement for a node that is a "Sync Action Node", which just has
 /// a `tick()` method when running, and is not allowed to return [`NodeStatus::Running`].
@@ -36,16 +36,16 @@ pub trait SyncActionNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext<Self::Context>>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<SyncActionContext<Self::Context>>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for SyncAction {
-    type Target = Box<dyn SyncActionNode<Context = SyncActionContext>>;
+    type Target = Box<dyn SyncActionNode<Context = ()>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -85,7 +85,7 @@ impl NodeBase for SyncAction {
 
 impl<T> From<T> for SyncAction
 where
-    T: SyncActionNode<Context = SyncActionContext> + 'static,
+    T: SyncActionNode<Context = ()> + 'static,
 {
     fn from(value: T) -> SyncAction {
         SyncAction(Box::new(value))
@@ -94,7 +94,7 @@ where
 
 impl<T> ToBoxed<SyncAction> for T
 where
-    T: SyncActionNode<Context = SyncActionContext> + 'static,
+    T: SyncActionNode<Context = ()> + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: SyncAction = self.into();
@@ -123,7 +123,7 @@ impl<T> DerefMut for StatefulActionContext<T> {
 }
 
 #[derive(Debug)]
-pub struct StatefulAction(Box<dyn StatefulActionNode<Context = StatefulActionContext>>);
+pub struct StatefulAction(Box<dyn StatefulActionNode<Context = ()>>);
 
 pub trait StatefulActionNode: std::fmt::Debug + Send + Sync {
     type Context;
@@ -132,18 +132,24 @@ pub trait StatefulActionNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn on_start(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
+    fn on_start(&mut self, ctx: &mut NodeData<StatefulActionContext<Self::Context>>) -> NodeResult;
 
-    fn on_running(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
+    fn on_running(
+        &mut self,
+        ctx: &mut NodeData<StatefulActionContext<Self::Context>>,
+    ) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn on_halted(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult<()> {
+    fn on_halted(
+        &mut self,
+        ctx: &mut NodeData<StatefulActionContext<Self::Context>>,
+    ) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for StatefulAction {
-    type Target = Box<dyn StatefulActionNode<Context = StatefulActionContext>>;
+    type Target = Box<dyn StatefulActionNode<Context = ()>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -211,7 +217,7 @@ impl NodeBase for StatefulAction {
 
 impl<T> From<T> for StatefulAction
 where
-    T: StatefulActionNode<Context = StatefulActionContext> + 'static,
+    T: StatefulActionNode<Context = ()> + 'static,
 {
     fn from(value: T) -> StatefulAction {
         StatefulAction(Box::new(value))
@@ -220,7 +226,7 @@ where
 
 impl<T> ToBoxed<StatefulAction> for T
 where
-    T: StatefulActionNode<Context = StatefulActionContext> + 'static,
+    T: StatefulActionNode<Context = ()> + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: StatefulAction = self.into();

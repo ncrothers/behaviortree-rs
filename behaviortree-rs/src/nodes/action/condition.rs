@@ -93,7 +93,7 @@ impl ConditionNode {
 }
 
 impl SyncActionNode for ConditionNode {
-    type Context = SyncActionContext;
+    type Context = ();
 
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("expr", expr))

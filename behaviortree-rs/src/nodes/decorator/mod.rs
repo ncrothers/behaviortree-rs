@@ -72,7 +72,7 @@ impl<T> NodeData<'_, DecoratorContext<T>> {
 }
 
 #[derive(Debug)]
-pub struct Decorator(Box<dyn DecoratorNode<Context = DecoratorContext>>);
+pub struct Decorator(Box<dyn DecoratorNode<Context = ()>>);
 
 pub trait DecoratorNode: std::fmt::Debug + Send + Sync {
     type Context;
@@ -81,16 +81,16 @@ pub trait DecoratorNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<DecoratorContext<Self::Context>>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext<Self::Context>>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for Decorator {
-    type Target = Box<dyn DecoratorNode<Context = DecoratorContext>>;
+    type Target = Box<dyn DecoratorNode<Context = ()>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -127,7 +127,7 @@ impl NodeBase for Decorator {
 
 impl<T> From<T> for Decorator
 where
-    T: DecoratorNode<Context = DecoratorContext> + 'static,
+    T: DecoratorNode<Context = ()> + 'static,
 {
     fn from(value: T) -> Decorator {
         Decorator(Box::new(value))
@@ -136,7 +136,7 @@ where
 
 impl<T> ToBoxed<Decorator> for T
 where
-    T: DecoratorNode<Context = DecoratorContext> + 'static,
+    T: DecoratorNode<Context = ()> + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: Decorator = self.into();

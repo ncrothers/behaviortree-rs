@@ -49,7 +49,7 @@ impl ParallelAllNode {
 }
 
 impl ControlNode for ParallelAllNode {
-    type Context = ControlContext;
+    type Context = ();
 
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("max_failures", 1))

@@ -29,7 +29,7 @@ impl Default for ReactiveSequenceNode {
 }
 
 impl ControlNode for ReactiveSequenceNode {
-    type Context = ControlContext;
+    type Context = ();
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let mut all_skipped = true;

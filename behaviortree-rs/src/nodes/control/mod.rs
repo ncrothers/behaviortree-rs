@@ -77,7 +77,7 @@ impl<T> NodeData<'_, ControlContext<T>> {
 }
 
 #[derive(Debug)]
-pub struct Control(Box<dyn ControlNode<Context = ControlContext>>);
+pub struct Control(Box<dyn ControlNode<Context = ()>>);
 
 pub trait ControlNode: std::fmt::Debug + Send + Sync {
     type Context;
@@ -86,16 +86,16 @@ pub trait ControlNode: std::fmt::Debug + Send + Sync {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<ControlContext<Self::Context>>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<Self::Context>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<ControlContext<Self::Context>>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for Control {
-    type Target = Box<dyn ControlNode<Context = ControlContext>>;
+    type Target = Box<dyn ControlNode<Context = ()>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -131,7 +131,7 @@ impl NodeBase for Control {
 
 impl<T> From<T> for Control
 where
-    T: ControlNode<Context = ControlContext> + 'static,
+    T: ControlNode<Context = ()> + 'static,
 {
     fn from(value: T) -> Control {
         Control(Box::new(value))
@@ -140,7 +140,7 @@ where
 
 impl<T> ToBoxed<Control> for T
 where
-    T: ControlNode<Context = ControlContext> + 'static,
+    T: ControlNode<Context = ()> + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: Control = self.into();

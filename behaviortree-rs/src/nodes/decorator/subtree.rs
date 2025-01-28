@@ -7,7 +7,7 @@ use super::{DecoratorContext, DecoratorNode};
 pub struct SubTreeNode;
 
 impl DecoratorNode for SubTreeNode {
-    type Context = DecoratorContext;
+    type Context = ();
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         let prev_status = ctx.status();

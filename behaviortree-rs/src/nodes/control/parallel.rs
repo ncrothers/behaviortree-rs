@@ -60,22 +60,6 @@ impl ParallelNode {
         }
     }
 
-    // fn success_threshold(&self, n_children: i32) -> usize {
-    //     if self.success_threshold < 0 {
-    //         (n_children + self.success_threshold + 1).max(0) as usize
-    //     } else {
-    //         self.success_threshold as usize
-    //     }
-    // }
-
-    // fn failure_threshold(&self, n_children: i32) -> usize {
-    //     if self.failure_threshold < 0 {
-    //         (n_children + self.failure_threshold + 1).max(0) as usize
-    //     } else {
-    //         self.failure_threshold as usize
-    //     }
-    // }
-
     fn clear(&mut self) {
         self.completed_list.clear();
         self.success_count = 0;
@@ -84,7 +68,7 @@ impl ParallelNode {
 }
 
 impl ControlNode for ParallelNode {
-    type Context = ControlContext;
+    type Context = ();
 
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(
