@@ -33,8 +33,6 @@ impl Default for SequenceWithMemoryNode {
 }
 
 impl ControlNode for SequenceWithMemoryNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         if ctx.status() == NodeStatus::Idle {
             self.all_skipped = true;

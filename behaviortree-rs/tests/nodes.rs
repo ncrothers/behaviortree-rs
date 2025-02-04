@@ -31,8 +31,6 @@ pub fn test_setup() {
 pub struct StatusNode;
 
 impl SyncActionNode for StatusNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let status: NodeStatus = ctx.get_input("status")?;
 
@@ -52,8 +50,6 @@ pub struct SuccessThenFailure {
 }
 
 impl SyncActionNode for SuccessThenFailure {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let max_iters: usize = ctx.get_input("iters")?;
 
@@ -76,8 +72,6 @@ impl SyncActionNode for SuccessThenFailure {
 pub struct EchoNode;
 
 impl SyncActionNode for EchoNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let msg: String = ctx.get_input("msg")?;
 
@@ -97,8 +91,6 @@ pub struct RunForNode {
 }
 
 impl StatefulActionNode for RunForNode {
-    type Context = ();
-
     fn ports(&self) -> PortsList {
         define_ports!(
             input_port!("iters"),
@@ -139,9 +131,7 @@ impl DataNode {
 }
 
 impl SyncActionNode for DataNode {
-    type Context = ();
-
-    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext<Self::Context>>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         Ok(NodeStatus::Success)
     }
 }
@@ -150,13 +140,11 @@ impl SyncActionNode for DataNode {
 pub struct StringAppendNode {}
 
 impl SyncActionNode for StringAppendNode {
-    type Context = ();
-
     fn ports(&self) -> PortsList {
         define_ports!(input_port!("key"), input_port!("char"),)
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext<Self::Context>>) -> NodeResult {
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let key = ctx.get_input::<String>("key")?;
         let char = ctx.get_input::<String>("char")?;
 

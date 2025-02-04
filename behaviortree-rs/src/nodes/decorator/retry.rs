@@ -39,8 +39,6 @@ impl Default for RetryNode {
 }
 
 impl DecoratorNode for RetryNode {
-    type Context = ();
-
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(input_port!("num_attempts"))
     }

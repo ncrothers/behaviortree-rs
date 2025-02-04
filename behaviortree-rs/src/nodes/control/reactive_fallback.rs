@@ -29,8 +29,6 @@ impl Default for ReactiveFallbackNode {
 }
 
 impl ControlNode for ReactiveFallbackNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let mut all_skipped = true;
         ctx.set_status(NodeStatus::Running);

@@ -24,8 +24,6 @@ pub struct IfThenElseNode {
 }
 
 impl ControlNode for IfThenElseNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         let children_count = ctx.children.len();
         // Node should only have 2 or 3 children

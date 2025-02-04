@@ -68,8 +68,6 @@ impl ParallelNode {
 }
 
 impl ControlNode for ParallelNode {
-    type Context = ();
-
     fn ports(&self) -> crate::basic_types::PortsList {
         define_ports!(
             input_port!("success_count", -1),

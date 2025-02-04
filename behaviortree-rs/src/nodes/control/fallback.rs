@@ -32,8 +32,6 @@ impl Default for FallbackNode {
 }
 
 impl ControlNode for FallbackNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {
         if ctx.status() == NodeStatus::Idle {
             self.all_skipped = true;

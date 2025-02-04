@@ -23,23 +23,9 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeStatus, PortsList, ToBoxed,
 };
 
-pub struct ControlContext<T = ()>(T);
+pub struct ControlContext;
 
-impl<T> Deref for ControlContext<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for ControlContext<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<T> NodeData<'_, ControlContext<T>> {
+impl NodeData<'_, ControlContext> {
     /// Halt children from this index to the end.
     ///
     /// # Errors
@@ -77,25 +63,23 @@ impl<T> NodeData<'_, ControlContext<T>> {
 }
 
 #[derive(Debug)]
-pub struct Control(Box<dyn ControlNode<Context = ()>>);
+pub struct Control(Box<dyn ControlNode>);
 
 pub trait ControlNode: std::fmt::Debug + Send + Sync {
-    type Context;
-
     fn ports(&self) -> PortsList {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<ControlContext<Self::Context>>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<ControlContext<Self::Context>>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for Control {
-    type Target = Box<dyn ControlNode<Context = ()>>;
+    type Target = Box<dyn ControlNode>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -114,12 +98,11 @@ impl NodeBase for Control {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx, &mut ControlContext(())))
+        self.tick(&mut NodeData::new(ctx))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        let mut dec_ctx = ControlContext(());
-        let mut ctx = NodeData::new(ctx, &mut dec_ctx);
+        let mut ctx = NodeData::new(ctx);
 
         ControlNode::halt(&mut *self.0, &mut ctx)?;
         ctx.set_status(NodeStatus::Idle);
@@ -131,7 +114,7 @@ impl NodeBase for Control {
 
 impl<T> From<T> for Control
 where
-    T: ControlNode<Context = ()> + 'static,
+    T: ControlNode + 'static,
 {
     fn from(value: T) -> Control {
         Control(Box::new(value))
@@ -140,7 +123,7 @@ where
 
 impl<T> ToBoxed<Control> for T
 where
-    T: ControlNode<Context = ()> + 'static,
+    T: ControlNode + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: Control = self.into();

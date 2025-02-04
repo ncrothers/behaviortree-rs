@@ -21,23 +21,10 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed, TreeNode,
 };
 
-pub struct DecoratorContext<T = ()>(T);
+#[derive(Debug)]
+pub struct DecoratorContext;
 
-impl<T> Deref for DecoratorContext<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for DecoratorContext<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<T> NodeData<'_, DecoratorContext<T>> {
+impl NodeData<'_, DecoratorContext> {
     /// Calls `halt_child_idx(0)`. This should only be used in
     /// `Decorator` nodes
     pub fn halt_child(&mut self) -> NodeResult<()> {
@@ -72,25 +59,23 @@ impl<T> NodeData<'_, DecoratorContext<T>> {
 }
 
 #[derive(Debug)]
-pub struct Decorator(Box<dyn DecoratorNode<Context = ()>>);
+pub struct Decorator(Box<dyn DecoratorNode>);
 
 pub trait DecoratorNode: std::fmt::Debug + Send + Sync {
-    type Context;
-
     fn ports(&self) -> PortsList {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<DecoratorContext<Self::Context>>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext<Self::Context>>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for Decorator {
-    type Target = Box<dyn DecoratorNode<Context = ()>>;
+    type Target = Box<dyn DecoratorNode>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -109,12 +94,11 @@ impl NodeBase for Decorator {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx, &mut DecoratorContext(())))
+        self.tick(&mut NodeData::new(ctx))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        let mut dec_ctx = DecoratorContext(());
-        let mut ctx = NodeData::new(ctx, &mut dec_ctx);
+        let mut ctx = NodeData::new(ctx);
 
         DecoratorNode::halt(&mut *self.0, &mut ctx)?;
 
@@ -127,16 +111,16 @@ impl NodeBase for Decorator {
 
 impl<T> From<T> for Decorator
 where
-    T: DecoratorNode<Context = ()> + 'static,
+    T: DecoratorNode + 'static,
 {
-    fn from(value: T) -> Decorator {
+    fn from(value: T) -> Self {
         Decorator(Box::new(value))
     }
 }
 
 impl<T> ToBoxed<Decorator> for T
 where
-    T: DecoratorNode<Context = ()> + 'static,
+    T: DecoratorNode + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: Decorator = self.into();

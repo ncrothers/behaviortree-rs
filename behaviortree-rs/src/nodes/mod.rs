@@ -1,6 +1,7 @@
 use std::{
     any::TypeId,
     collections::HashMap,
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -46,7 +47,7 @@ pub struct NodeDataGeneric {
 
 pub struct NodeData<'a, T> {
     data: &'a mut NodeDataGeneric,
-    pub context: &'a mut T,
+    _pd: PhantomData<T>,
 }
 
 impl<T> Deref for NodeData<'_, T> {
@@ -64,8 +65,11 @@ impl<T> DerefMut for NodeData<'_, T> {
 }
 
 impl<'a, T> NodeData<'a, T> {
-    pub fn new(data: &'a mut NodeDataGeneric, context: &'a mut T) -> Self {
-        Self { data, context }
+    pub fn new(data: &'a mut NodeDataGeneric) -> Self {
+        Self {
+            data,
+            _pd: PhantomData,
+        }
     }
 }
 

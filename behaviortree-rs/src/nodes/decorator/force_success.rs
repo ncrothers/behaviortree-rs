@@ -10,8 +10,6 @@ use super::{DecoratorContext, DecoratorNode};
 pub struct ForceSuccessNode;
 
 impl DecoratorNode for ForceSuccessNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         ctx.set_status(NodeStatus::Running);
 

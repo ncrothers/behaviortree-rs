@@ -7,45 +7,29 @@ use crate::nodes::NodeError;
 
 use super::{NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed};
 
-pub struct SyncActionContext<T = ()>(pub T);
-
-impl<T> Deref for SyncActionContext<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for SyncActionContext<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+pub struct SyncActionContext;
 
 /// Wrapper struct around a boxed [`SyncActionNode`] implementer.
 #[derive(Debug)]
-pub struct SyncAction(Box<dyn SyncActionNode<Context = ()>>);
+pub struct SyncAction(Box<dyn SyncActionNode>);
 
 /// Trait to implement for a node that is a "Sync Action Node", which just has
 /// a `tick()` method when running, and is not allowed to return [`NodeStatus::Running`].
 pub trait SyncActionNode: std::fmt::Debug + Send + Sync {
-    type Context;
-
     fn ports(&self) -> PortsList {
         PortsList::default()
     }
 
-    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext<Self::Context>>) -> NodeResult;
+    fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn halt(&mut self, ctx: &mut NodeData<SyncActionContext<Self::Context>>) -> NodeResult<()> {
+    fn halt(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for SyncAction {
-    type Target = Box<dyn SyncActionNode<Context = ()>>;
+    type Target = Box<dyn SyncActionNode>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -64,7 +48,7 @@ impl NodeBase for SyncAction {
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        match self.tick(&mut NodeData::new(ctx, &mut SyncActionContext(())))? {
+        match self.tick(&mut NodeData::new(ctx))? {
             status @ (NodeStatus::Running | NodeStatus::Idle) => Err(NodeError::StatusError(
                 ctx.meta.path.clone(),
                 status.to_string(),
@@ -74,10 +58,7 @@ impl NodeBase for SyncAction {
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        SyncActionNode::halt(
-            &mut *self.0,
-            &mut NodeData::new(ctx, &mut SyncActionContext(())),
-        )?;
+        SyncActionNode::halt(&mut *self.0, &mut NodeData::new(ctx))?;
         ctx.set_status(NodeStatus::Idle);
         Ok(())
     }
@@ -85,7 +66,7 @@ impl NodeBase for SyncAction {
 
 impl<T> From<T> for SyncAction
 where
-    T: SyncActionNode<Context = ()> + 'static,
+    T: SyncActionNode + 'static,
 {
     fn from(value: T) -> SyncAction {
         SyncAction(Box::new(value))
@@ -94,7 +75,7 @@ where
 
 impl<T> ToBoxed<SyncAction> for T
 where
-    T: SyncActionNode<Context = ()> + 'static,
+    T: SyncActionNode + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: SyncAction = self.into();
@@ -123,33 +104,25 @@ impl<T> DerefMut for StatefulActionContext<T> {
 }
 
 #[derive(Debug)]
-pub struct StatefulAction(Box<dyn StatefulActionNode<Context = ()>>);
+pub struct StatefulAction(Box<dyn StatefulActionNode>);
 
 pub trait StatefulActionNode: std::fmt::Debug + Send + Sync {
-    type Context;
-
     fn ports(&self) -> PortsList {
         PortsList::default()
     }
 
-    fn on_start(&mut self, ctx: &mut NodeData<StatefulActionContext<Self::Context>>) -> NodeResult;
+    fn on_start(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult;
 
-    fn on_running(
-        &mut self,
-        ctx: &mut NodeData<StatefulActionContext<Self::Context>>,
-    ) -> NodeResult;
+    fn on_running(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult;
 
     #[allow(unused_variables)]
-    fn on_halted(
-        &mut self,
-        ctx: &mut NodeData<StatefulActionContext<Self::Context>>,
-    ) -> NodeResult<()> {
+    fn on_halted(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult<()> {
         Ok(())
     }
 }
 
 impl Deref for StatefulAction {
-    type Target = Box<dyn StatefulActionNode<Context = ()>>;
+    type Target = Box<dyn StatefulActionNode>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -174,8 +147,7 @@ impl NodeBase for StatefulAction {
             NodeStatus::Idle => {
                 ::log::debug!("[behaviortree_rs]: {}::on_start()", &ctx.meta.path);
                 // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
-                let new_status =
-                    self.on_start(&mut NodeData::new(ctx, &mut StatefulActionContext(())))?;
+                let new_status = self.on_start(&mut NodeData::new(ctx))?;
                 // drop(wrapper);
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
@@ -187,8 +159,7 @@ impl NodeBase for StatefulAction {
             }
             NodeStatus::Running => {
                 ::log::debug!("[behaviortree_rs]: {}::on_running()", &ctx.meta.path);
-                let new_status =
-                    self.on_running(&mut NodeData::new(ctx, &mut StatefulActionContext(())))?;
+                let new_status = self.on_running(&mut NodeData::new(ctx))?;
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
                         format!("{}::on_running()", ctx.meta.path),
@@ -206,10 +177,7 @@ impl NodeBase for StatefulAction {
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        StatefulActionNode::on_halted(
-            &mut *self.0,
-            &mut NodeData::new(ctx, &mut StatefulActionContext(())),
-        )?;
+        StatefulActionNode::on_halted(&mut *self.0, &mut NodeData::new(ctx))?;
         ctx.set_status(NodeStatus::Idle);
         Ok(())
     }
@@ -217,7 +185,7 @@ impl NodeBase for StatefulAction {
 
 impl<T> From<T> for StatefulAction
 where
-    T: StatefulActionNode<Context = ()> + 'static,
+    T: StatefulActionNode + 'static,
 {
     fn from(value: T) -> StatefulAction {
         StatefulAction(Box::new(value))
@@ -226,7 +194,7 @@ where
 
 impl<T> ToBoxed<StatefulAction> for T
 where
-    T: StatefulActionNode<Context = ()> + 'static,
+    T: StatefulActionNode + 'static,
 {
     fn to_boxed(self) -> Box<dyn NodeBase> {
         let node: StatefulAction = self.into();

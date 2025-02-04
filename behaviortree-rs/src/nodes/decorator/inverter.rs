@@ -10,8 +10,6 @@ use super::{DecoratorContext, DecoratorNode};
 pub struct InverterNode;
 
 impl DecoratorNode for InverterNode {
-    type Context = ();
-
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         ctx.set_status(NodeStatus::Running);
 
