@@ -51,9 +51,21 @@ impl NodeData<'_, DecoratorContext> {
     ///
     /// This function will panic if the node has no child, but this should
     /// never happen. Decorator child constraints are validated during parsing.
-    pub fn child(&mut self) -> &mut TreeNode {
+    pub fn child_mut(&mut self) -> &mut TreeNode {
         self.children
             .get_mut(0)
+            .expect("Decorator node must have a child, this shouldn't happen")
+    }
+
+    /// Gets an immutable reference to the Decorator's child
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the node has no child, but this should
+    /// never happen. Decorator child constraints are validated during parsing.
+    pub fn child(&self) -> &TreeNode {
+        self.children
+            .first()
             .expect("Decorator node must have a child, this shouldn't happen")
     }
 }

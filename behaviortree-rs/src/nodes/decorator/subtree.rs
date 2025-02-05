@@ -14,7 +14,7 @@ impl DecoratorNode for SubTreeNode {
             ctx.set_status(NodeStatus::Running);
         }
 
-        let child_status = ctx.child().execute_tick()?;
+        let child_status = ctx.child_mut().execute_tick()?;
 
         Ok(child_status)
     }

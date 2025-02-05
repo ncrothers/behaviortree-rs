@@ -50,7 +50,7 @@ impl DecoratorNode for RunOnceNode {
 
         ctx.set_status(NodeStatus::Running);
 
-        let status = ctx.child().execute_tick()?;
+        let status = ctx.child_mut().execute_tick()?;
 
         if status.is_completed() {
             self.already_ticked = true;

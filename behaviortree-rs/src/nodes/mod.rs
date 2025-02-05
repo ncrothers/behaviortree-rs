@@ -1,3 +1,7 @@
+pub mod action;
+pub mod control;
+pub mod decorator;
+
 use std::{
     any::TypeId,
     collections::HashMap,
@@ -19,10 +23,6 @@ use crate::{
 };
 
 pub use crate::basic_types::{NodeStatus, PortsList};
-
-pub mod action;
-pub mod control;
-pub mod decorator;
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 

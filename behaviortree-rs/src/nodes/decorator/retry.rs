@@ -52,7 +52,7 @@ impl DecoratorNode for RetryNode {
         ctx.set_status(NodeStatus::Running);
 
         while do_loop {
-            let child_status = ctx.child().execute_tick()?;
+            let child_status = ctx.child_mut().execute_tick()?;
 
             match child_status {
                 NodeStatus::Success => {

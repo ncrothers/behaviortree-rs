@@ -13,7 +13,7 @@ impl DecoratorNode for KeepRunningUntilFailureNode {
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
         ctx.set_status(NodeStatus::Running);
 
-        let child_status = ctx.child().execute_tick()?;
+        let child_status = ctx.child_mut().execute_tick()?;
 
         match child_status {
             NodeStatus::Success => {
