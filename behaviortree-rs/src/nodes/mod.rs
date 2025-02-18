@@ -1,6 +1,9 @@
 pub mod action;
+pub use action::*;
 pub mod control;
+pub use control::*;
 pub mod decorator;
+pub use decorator::*;
 
 use std::{
     any::TypeId,
@@ -26,12 +29,49 @@ pub use crate::basic_types::{NodeStatus, PortsList};
 
 pub type NodeResult<Output = NodeStatus> = Result<Output, NodeError>;
 
+/// Trait defining the basic methods common to all nodes. When traversing the
+/// tree and/or accessing a node's children, these are the methods that are
+/// available.
 pub trait NodeBase: std::fmt::Debug + Send + Sync {
     fn ports(&self) -> PortsList;
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult;
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()>;
 }
 
+/// Trait with a blanket implementation for each node-type-specific trait.
+/// You shouldn't need to implement this yourself; it should already be implemented
+/// for nodes that you create.
+///
+/// The method wraps your node into a generic `Box<dyn NodeBase>`.
+///
+/// # Example
+///
+/// ```
+/// use behaviortree_rs::prelude::*;
+///
+/// #[derive(Debug)]
+/// struct MyNode {
+///     foo: i32,
+/// }
+///
+/// impl SyncActionNode for MyNode {
+///     fn ports(&self) -> PortsList {
+///         define_ports!(input_port!("foo"))
+///     }
+///
+///     fn tick(&mut self, _ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
+///         Ok(NodeStatus::Success)
+///     }
+/// }
+///
+/// let node: Box<dyn NodeBase> = MyNode { foo: 10 }.to_boxed();
+///
+/// let expected_ports = define_ports!(input_port!("foo"));
+///
+/// let ports = node.ports();
+///
+/// assert_eq!(ports, expected_ports);
+/// ```
 pub trait ToBoxed<T> {
     fn to_boxed(self) -> Box<dyn NodeBase>;
 }
@@ -73,10 +113,20 @@ impl<'a, T> NodeData<'a, T> {
     }
 }
 
+/// Node within a [`Tree`](crate::prelude::Tree). Can contain any number of children
+/// based on the underlying [`NodeType`], which are held in the `data` field.
+///
+/// # Ticking
+///
+/// To tick this node, call `execute_tick()`. This will call the underlying
+/// node implementation of [`NodeBase`]'s `execute_tick()` method, which may
+/// propagate down the tree.
 #[derive(Debug)]
 pub struct TreeNode {
+    /// Data common to all [`TreeNode`]s.
     pub data: NodeDataGeneric,
-    pub node: Box<dyn NodeBase>,
+    /// Trait object for the implementation of this node.
+    pub(crate) node: Box<dyn NodeBase>,
 }
 
 impl TreeNode {
@@ -118,12 +168,12 @@ impl TreeNode {
     }
 
     /// Get a mutable reference to the `NodeConfig`
-    pub fn config_mut(&mut self) -> &mut NodeMetadata {
-        self.data.config_mut()
+    pub fn metadata_mut(&mut self) -> &mut NodeMetadata {
+        self.data.metadata_mut()
     }
 
     /// Get a reference to the `NodeConfig`
-    pub fn config(&self) -> &NodeMetadata {
+    pub fn metadata(&self) -> &NodeMetadata {
         self.data.metadata()
     }
 
@@ -138,7 +188,7 @@ impl TreeNode {
         self.node.ports()
     }
 
-    /// Return an iterator over the children. Returns `None` if this node
+    /// Return a slice over the children. Returns `None` if this node
     /// has no children (i.e. an `Action` node)
     pub fn children(&self) -> Option<&[TreeNode]> {
         if self.data.children.is_empty() {
@@ -148,7 +198,7 @@ impl TreeNode {
         }
     }
 
-    /// Return a mutable iterator over the children. Returns `None` if this node
+    /// Return a mutable slice over the children. Returns `None` if this node
     /// has no children (i.e. an `Action` node)
     pub fn children_mut(&mut self) -> Option<&mut [TreeNode]> {
         if self.data.children.is_empty() {
@@ -163,6 +213,11 @@ impl NodeDataGeneric {
     /// Get the name of the node
     pub fn name(&self) -> &str {
         &self.meta.name
+    }
+
+    /// Get the path of the in the tree
+    pub fn path(&self) -> &str {
+        &self.meta.path
     }
 
     /// Returns a reference to the blackboard.
@@ -180,13 +235,13 @@ impl NodeDataGeneric {
         self.status = status;
     }
 
-    /// Resets the status back to `NodeStatus::Idle`
+    /// Resets the status back to [`NodeStatus::Idle`]
     pub fn reset_status(&mut self) {
         self.status = NodeStatus::Idle;
     }
 
-    /// Get a mutable reference to the `NodeConfig`
-    pub fn config_mut(&mut self) -> &mut NodeMetadata {
+    /// Get a mutable reference to the [`NodeMetadata`]
+    pub fn metadata_mut(&mut self) -> &mut NodeMetadata {
         &mut self.meta
     }
 
@@ -195,9 +250,15 @@ impl NodeDataGeneric {
         &self.meta
     }
 
-    /// Get the node's `NodeType`, which is more general than `NodeType`
+    /// Get the node's [`NodeType`]
     pub fn node_type(&self) -> NodeType {
         self.meta.node_type
+    }
+
+    /// Get the node's [`TreeNodeManifest`], which contains some metadata defined
+    /// when the node was registered.
+    pub fn manifest(&self) -> &TreeNodeManifest {
+        &self.meta.manifest
     }
 
     /// Returns the value of the input port at the `port` key as a `Result<T, NodeError>`.
@@ -278,7 +339,7 @@ impl NodeDataGeneric {
     }
 
     /// Adds a port to the config based on the direction. Used during XML parsing.
-    pub fn add_port(&mut self, direction: PortDirection, name: String, value: String) {
+    pub(crate) fn add_port(&mut self, direction: PortDirection, name: String, value: String) {
         match direction {
             PortDirection::Input => {
                 self.meta.input_ports.insert(name, value);
@@ -290,7 +351,8 @@ impl NodeDataGeneric {
         };
     }
 
-    pub fn has_port(&self, direction: &PortDirection, name: &String) -> bool {
+    /// Returns whether this node has a port with `name` and `direction`.
+    pub(crate) fn has_port(&self, name: &str, direction: PortDirection) -> bool {
         match direction {
             PortDirection::Input => self.meta.input_ports.contains_key(name),
             PortDirection::Output => self.meta.output_ports.contains_key(name),

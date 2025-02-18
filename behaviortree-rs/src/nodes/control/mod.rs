@@ -23,6 +23,8 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeError, NodeResult, NodeStatus, PortsList, ToBoxed,
 };
 
+/// Empty marker struct to provide access to helper methods specific to Control nodes
+#[derive(Debug)]
 pub struct ControlContext;
 
 impl NodeData<'_, ControlContext> {
@@ -62,6 +64,7 @@ impl NodeData<'_, ControlContext> {
     }
 }
 
+/// Wrapper struct around a boxed [`ControlNode`] implementer.
 #[derive(Debug)]
 pub struct Control(Box<dyn ControlNode>);
 

@@ -127,7 +127,7 @@ pub mod prelude {
     pub use crate::blackboard::Blackboard;
     pub use crate::macros::*;
     pub use crate::node_registry::NodeRegistry;
-    pub use crate::nodes::NodeResult;
+    pub use crate::nodes::*;
     pub use crate::parser::Parser;
     pub use crate::tree::{Tree, TreeConfig};
 }

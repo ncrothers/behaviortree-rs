@@ -273,7 +273,7 @@ impl<'a> Parser<'a> {
 
                 node_ptr
                     .data
-                    .add_port(port.direction().clone(), remap_name, remap_val);
+                    .add_port(port.direction(), remap_name, remap_val);
             }
         }
 
@@ -282,7 +282,7 @@ impl<'a> Parser<'a> {
             let direction = port_info.direction();
 
             if !matches!(direction, PortDirection::Output)
-                && !node_ptr.data.has_port(direction, port_name)
+                && !node_ptr.data.has_port(port_name, direction)
                 && port_info.default_value().is_some()
             {
                 node_ptr.data.add_port(

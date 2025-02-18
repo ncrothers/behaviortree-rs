@@ -104,7 +104,7 @@ pub enum ParsePortDirectionError {
     NoMatch,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PortDirection {
     Input,
     Output,
@@ -379,7 +379,7 @@ where
 
 impl<T> PortValue for T where T: Any + PortClone + Debug + BTToString {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PortInfo {
     r#type: PortDirection,
     description: String,
@@ -426,8 +426,8 @@ impl PortInfo {
         self.parse_expr
     }
 
-    pub fn direction(&self) -> &PortDirection {
-        &self.r#type
+    pub fn direction(&self) -> PortDirection {
+        self.r#type
     }
 }
 

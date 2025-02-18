@@ -7,6 +7,8 @@ use crate::nodes::NodeError;
 
 use super::{NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed};
 
+/// Empty marker struct to provide access to helper methods specific to SyncAction nodes
+#[derive(Debug)]
 pub struct SyncActionContext;
 
 /// Wrapper struct around a boxed [`SyncActionNode`] implementer.
@@ -87,22 +89,11 @@ where
 // Stateful Action Node
 // =====================
 
-pub struct StatefulActionContext<T = ()>(pub T);
+/// Empty marker struct to provide access to helper methods specific to StatefulAction nodes
+#[derive(Debug)]
+pub struct StatefulActionContext;
 
-impl<T> Deref for StatefulActionContext<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for StatefulActionContext<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
+/// Wrapper struct around a boxed [`StatefulActionNode`] implementer.
 #[derive(Debug)]
 pub struct StatefulAction(Box<dyn StatefulActionNode>);
 

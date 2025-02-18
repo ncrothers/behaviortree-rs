@@ -21,6 +21,7 @@ use super::{
     NodeBase, NodeData, NodeDataGeneric, NodeResult, NodeStatus, PortsList, ToBoxed, TreeNode,
 };
 
+/// Empty marker struct to provide access to helper methods specific to Decorators
 #[derive(Debug)]
 pub struct DecoratorContext;
 
@@ -70,6 +71,7 @@ impl NodeData<'_, DecoratorContext> {
     }
 }
 
+/// Wrapper struct around a boxed [`DecoratorNode`] implementer.
 #[derive(Debug)]
 pub struct Decorator(Box<dyn DecoratorNode>);
 
