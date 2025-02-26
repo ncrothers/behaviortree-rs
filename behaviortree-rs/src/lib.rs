@@ -108,6 +108,7 @@ pub mod value;
 
 pub mod nodes;
 
+pub mod error;
 pub mod macros;
 pub mod node_registry;
 pub(crate) mod parser;

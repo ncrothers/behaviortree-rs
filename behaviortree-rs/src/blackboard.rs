@@ -1,8 +1,13 @@
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{
+    any::Any,
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use parking_lot::{Mutex, RwLock};
 
-use crate::basic_types::{BTToString, FromString, ParseStr};
+use crate::basic_types::{FromString, ParseStr};
 
 /// Trait that provides `strip_bb_pointer()` for all `AsRef<str>`,
 /// which includes `String` and `&str`.
@@ -95,35 +100,22 @@ pub struct BlackboardData {
     auto_remapping: bool,
 }
 
-/// Supertrait for `Any + BTToString`
-pub trait AnyStringy: Any + BTToString + Send {}
+#[derive(Debug)]
+pub struct Entry(pub Box<dyn Any + Send>);
 
-impl<T> AnyStringy for T where T: Any + BTToString + Send {}
+impl Deref for Entry {
+    type Target = Box<dyn Any + Send>;
 
-impl std::fmt::Debug for (dyn AnyStringy) {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnyStringy {{ .. }}")
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-#[derive(Debug)]
-pub enum Entry {
-    Generic(Box<dyn Any + Send>),
-    Stringy(Box<dyn AnyStringy>),
+impl DerefMut for Entry {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
-
-// impl Entry {
-//     pub fn as_any(&self) -> &Box<dyn Any + Send> {
-//         match self {
-//             Entry::Generic(value) => value,
-//             Entry::Stringy(value) => value as &Box<dyn Any + Send>,
-//         }
-//     }
-// }
-
-// pub struct Entry {
-//     pub value: Box<dyn Any + Send>,
-// }
 
 pub type BlackboardPtr = Arc<RwLock<Blackboard>>;
 pub type BlackboardDataPtr = Arc<RwLock<BlackboardData>>;
@@ -217,39 +209,8 @@ impl Blackboard {
         self.get_entry(key).and_then(|entry| {
             let entry = entry.lock();
 
-            match &*entry {
-                Entry::Generic(entry) => {
-                    // Try to downcast directly to T
-                    entry.downcast_ref::<T>().cloned()
-                }
-                // Because `Stringy` is a superset of `Generic`, we can return a `Stringy`
-                // entry from this
-                Entry::Stringy(entry) => {
-                    // Try to downcast directly to T
-                    <dyn Any>::downcast_ref::<T>(entry).cloned()
-                }
-            }
-        })
-    }
-
-    /// `stringy` version of `__get_no_string`
-    fn __get_no_string_stringy<T>(&mut self, key: &str) -> Option<T>
-    where
-        T: AnyStringy + Clone,
-    {
-        // Try to get the key
-        self.get_entry(key).and_then(|entry| {
-            let entry = entry.lock();
-
-            match &*entry {
-                Entry::Stringy(entry) => {
-                    // Try to downcast directly to T
-                    <dyn Any>::downcast_ref::<T>(entry).cloned()
-                }
-                // If it's not `Stringy`, we can't do anything even if the value exists as `Generic`,
-                // so return None
-                _ => None,
-            }
+            // Try to downcast directly to T
+            entry.downcast_ref::<T>().cloned()
         })
     }
 
@@ -258,16 +219,12 @@ impl Blackboard {
     fn __get_string(&mut self, key: &str) -> Option<String> {
         self.get_entry(key).and_then(|entry| {
             let entry_lock = entry.lock();
+
             // If value is a String or &str, try to call `FromString` to convert to T
-            match &(*entry_lock) {
-                Entry::Generic(entry) => entry
-                    .downcast_ref::<String>()
-                    .map(ToString::to_string)
-                    .or_else(|| entry.downcast_ref::<&str>().map(ToString::to_string)),
-                Entry::Stringy(entry) => <dyn Any>::downcast_ref::<String>(entry)
-                    .map(ToString::to_string)
-                    .or_else(|| <dyn Any>::downcast_ref::<String>(entry).cloned()),
-            }
+            entry_lock
+                .downcast_ref::<String>()
+                .map(ToString::to_string)
+                .or_else(|| entry_lock.downcast_ref::<&str>().map(ToString::to_string))
         })
     }
 
@@ -289,30 +246,7 @@ impl Blackboard {
                 // `Generic`
 
                 let mut t = entry.lock();
-                *t = Entry::Generic(Box::new(value.clone()));
-                return Some(value);
-            }
-        }
-
-        // No matches
-        None
-    }
-
-    /// `stringy` version of `__get_allow_string`, treating the inner type as a
-    /// `Entry::Stringy`
-    fn __get_allow_string_stringy<T>(&mut self, key: &str) -> Option<T>
-    where
-        T: AnyStringy + Clone + FromString + Send,
-    {
-        // Try to get the key
-        if let Some(entry) = self.get_entry(key) {
-            let value = self.__get_string(key)?;
-
-            // Try to parse String into T
-            if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
-                // Update value with the value type instead of just a string
-                let mut t = entry.lock();
-                *t = Entry::Stringy(Box::new(value.clone()));
+                t.0 = Box::new(value.clone());
                 return Some(value);
             }
         }
@@ -370,46 +304,6 @@ impl Blackboard {
             .or(self.__get_allow_string(key.as_ref()))
     }
 
-    /// Equivalent of `get()` but is `stringy`. This method returns `None` for
-    /// any values set using `set()` instead of `set_stringy()`.
-    ///
-    /// **NOTE**:
-    ///
-    /// You can use this method to retrieve types stored using `set::<String>()`
-    /// or `set_stringy::<String>()`. However, note that once a type is
-    /// successfully parsed into `T`, the inner value gets replaced by the parsed
-    /// version so the string parsing doesn't need to occur again. This is
-    /// normally not an issue, however if you store a `String` type using `set_stringy()`,
-    /// but call `get()` to retrieve it later, it will get replaced by an
-    /// `Entry::Generic`, meaning you can't access it using `get_stringy()` later,
-    /// even if the type implements `BTToString`, because `Entry::Generic`
-    /// just stores a `dyn Any + Send`, whereas `Entry::Stringy` stores a
-    /// `dyn Any + BTToString + Send`, so the trait gets erased when it becomes
-    /// a `Entry::Generic`.
-    pub fn get_stringy<T>(&mut self, key: impl AsRef<str>) -> Option<T>
-    where
-        T: AnyStringy + Clone + FromString + Send,
-    {
-        // Try without parsing string first, then try with parsing string
-        self.__get_no_string_stringy::<T>(key.as_ref())
-            .or_else(|| self.__get_allow_string_stringy::<T>(key.as_ref()))
-    }
-
-    /// Tries to get the value at the provided key, returned as a `String`. This
-    /// method will only work for values originally added via `set_stringy()`, which
-    /// has a trait bound of `BTToString`, and is used by this function to turn it into
-    /// a
-    pub fn get_as_string(&mut self, key: impl AsRef<str>) -> Option<String> {
-        self.get_entry(key.as_ref()).and_then(|entry| {
-            let entry = entry.lock();
-
-            match &*entry {
-                Entry::Stringy(entry) => Some(entry.bt_to_string()),
-                Entry::Generic(_) => None,
-            }
-        })
-    }
-
     /// Version of `get<T>` that does _not_ try to convert from string if the type
     /// doesn't match. This method has the benefit of not requiring the trait
     /// `FromString`, which allows you to avoid implementing the trait for
@@ -457,15 +351,15 @@ impl Blackboard {
     /// assert_eq!(blackboard.get::<u32>("bar"), Some(100u32));
     /// ```
     pub fn set<T: Any + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {
-        let key = key.as_ref().to_string();
+        let key = key.as_ref();
 
         let blackboard = self.data.write();
 
-        if let Some(entry) = blackboard.storage.get(&key) {
+        if let Some(entry) = blackboard.storage.get(key) {
             let mut entry = entry.lock();
 
             // Overwrite value of existing entry
-            *entry = Entry::Generic(Box::new(value));
+            entry.0 = Box::new(value);
         } else {
             drop(blackboard);
             let entry = self.create_entry(&key);
@@ -473,33 +367,7 @@ impl Blackboard {
             let mut entry = entry.lock();
 
             // Set value of new entry
-            *entry = Entry::Generic(Box::new(value));
-        }
-    }
-
-    /// `stringy` version of `set()`
-    ///
-    /// **NOTE**:
-    ///
-    /// See the note on `get_stringy()` for information to remember when using
-    /// `set()`/`get()` vs `set_stringy()`/`get_stringy()`.
-    pub fn set_stringy<T: AnyStringy + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {
-        let key = key.as_ref().to_string();
-
-        let blackboard = self.data.write();
-
-        if let Some(entry) = blackboard.storage.get(&key) {
-            let mut entry = entry.lock();
-
-            // Overwrite value of existing entry
-            *entry = Entry::Stringy(Box::new(value));
-        } else {
-            drop(blackboard);
-            let entry = self.create_entry(&key);
-            let mut entry = entry.lock();
-
-            // Set value of new entry
-            *entry = Entry::Stringy(Box::new(value));
+            entry.0 = Box::new(value);
         }
     }
 
@@ -531,7 +399,7 @@ impl Blackboard {
         // No remapping or no parent blackboard
         else {
             // Create an entry with an empty placeholder value
-            entry = Arc::new(Mutex::new(Entry::Generic(Box::new(()))));
+            entry = Arc::new(Mutex::new(Entry(Box::new(()))));
         }
 
         blackboard

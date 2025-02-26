@@ -1,12 +1,12 @@
-use std::{any::Any, collections::HashMap, convert::Infallible, fmt::Debug, str::FromStr};
+use std::{collections::HashMap, convert::Infallible, fmt::Debug, str::FromStr};
 
 use quick_xml::events::attributes::Attributes;
 use thiserror::Error;
 
 use crate::{
     blackboard::BlackboardString,
+    error::{ParseBoolError, ParseError},
     macros::{impl_from_string, impl_into_string},
-    tree::ParseError,
 };
 
 /// Specifies all types of nodes that can be used in a behavior tree.
@@ -212,12 +212,6 @@ impl FromString for String {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum ParseBoolError {
-    #[error("string wasn't one of the expected: 1/0, true/false, TRUE/FALSE")]
-    ParseError,
-}
-
 impl FromString for bool {
     type Err = ParseBoolError;
 
@@ -273,7 +267,11 @@ impl FromString for PortDirection {
     }
 }
 
+/// Custom implementation of converting a type into a `String`. Going to/from
+/// strings is handled in a custom way in `behaviortree_rs` to maintain
+/// compatibility with the original BehaviorTree.CPP library.
 pub trait BTToString {
+    /// Convert the type to a string
     fn bt_to_string(&self) -> String;
 }
 
@@ -311,6 +309,7 @@ impl_into_string!(
 
 pub type PortsList = HashMap<String, PortInfo>;
 
+/// Data pertaining to the node at the time of instantiation during parsing
 #[derive(Clone, Debug)]
 pub struct TreeNodeManifest {
     pub node_type: NodeType,
@@ -322,15 +321,15 @@ pub struct TreeNodeManifest {
 impl TreeNodeManifest {
     pub fn new(
         node_type: NodeType,
-        registration_id: impl AsRef<str>,
+        registration_id: String,
         ports: PortsList,
-        description: impl AsRef<str>,
+        description: String,
     ) -> TreeNodeManifest {
         Self {
             node_type,
-            registration_id: registration_id.as_ref().to_string(),
+            registration_id,
             ports,
-            description: description.as_ref().to_string(),
+            description,
         }
     }
 }
@@ -339,50 +338,30 @@ impl TreeNodeManifest {
 // Ports
 // ===========================
 
-pub trait PortChecks {
-    fn is_allowed_port_name(&self) -> bool;
-}
-
-impl<T: AsRef<str>> PortChecks for T {
-    fn is_allowed_port_name(&self) -> bool {
-        let name = self.as_ref();
-
-        if name.is_empty() {
-            false
-        } else if name == "_autoremap" {
-            true
-        } else if !name.chars().next().unwrap().is_ascii_alphabetic() {
-            false
-        } else {
-            // If the name isn't name or ID, it's valid
-            !(name == "name" || name == "ID")
-        }
+/// Returns whether `name` is a valid node port identifier
+pub(crate) fn is_allowed_port_name(name: &str) -> bool {
+    if name.is_empty() {
+        false
+    } else if name == "_autoremap" {
+        true
+    } else if !name.chars().next().unwrap().is_ascii_alphabetic() {
+        false
+    } else {
+        // If the name isn't name or ID, it's valid
+        !(name == "name" || name == "ID")
     }
 }
 
 pub type PortsRemapping = HashMap<String, String>;
 
-pub trait PortClone {
-    fn clone_port(&self) -> Box<dyn PortValue>;
-}
-
-pub trait PortValue: Any + PortClone + Debug + BTToString {}
-
-impl<T> PortClone for T
-where
-    T: 'static + Any + Clone + Debug + BTToString,
-{
-    fn clone_port(&self) -> Box<dyn PortValue> {
-        Box::new(self.clone())
-    }
-}
-
-impl<T> PortValue for T where T: Any + PortClone + Debug + BTToString {}
-
+/// Metadata about a node port
 #[derive(Clone, Debug, PartialEq)]
 pub struct PortInfo {
-    r#type: PortDirection,
+    /// Direction category for the port
+    direction: PortDirection,
+    /// Optional description of the port
     description: String,
+    /// Optional default value as a string, as it would appear in the XML
     default_value: Option<String>,
     /// When `true`, should parse the port value as an expression when loading
     /// the tree to validate syntax.
@@ -392,22 +371,18 @@ pub struct PortInfo {
 impl PortInfo {
     pub fn new(direction: PortDirection) -> PortInfo {
         Self {
-            r#type: direction,
+            direction,
             description: String::new(),
             default_value: None,
             parse_expr: false,
         }
     }
 
-    pub fn default_value(&self) -> Option<&String> {
+    pub fn default_value(&self) -> Option<&str> {
         match &self.default_value {
             Some(v) => Some(v),
             None => None,
         }
-    }
-
-    pub fn default_value_str(&self) -> Option<String> {
-        self.default_value.as_ref().map(|v| v.bt_to_string())
     }
 
     pub fn set_default(&mut self, default: impl BTToString) {
@@ -427,11 +402,12 @@ impl PortInfo {
     }
 
     pub fn direction(&self) -> PortDirection {
-        self.r#type
+        self.direction
     }
 }
 
-pub fn get_remapped_key(
+/// Remap a blackboard key
+pub(crate) fn get_remapped_key(
     port_name: impl AsRef<str>,
     remapped_port: impl AsRef<str>,
 ) -> Option<String> {
@@ -446,7 +422,8 @@ pub fn get_remapped_key(
 // Private Helpers
 // ===========================
 
-pub trait AttrsToMap {
+/// Helper trait for parsing XML
+pub(crate) trait AttrsToMap {
     fn to_map(self) -> Result<HashMap<String, String>, ParseError>;
 }
 

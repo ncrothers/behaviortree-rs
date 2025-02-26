@@ -4,6 +4,8 @@ pub mod control;
 pub use control::*;
 pub mod decorator;
 pub use decorator::*;
+pub mod error;
+pub use error::*;
 
 use std::{
     any::TypeId,
@@ -13,12 +15,11 @@ use std::{
     sync::Arc,
 };
 
-use thiserror::Error;
 use typed_builder::TypedBuilder;
 
 use crate::{
     basic_types::{
-        get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortValue, PortsRemapping,
+        get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortsRemapping,
         TreeNodeManifest,
     },
     blackboard::BlackboardString,
@@ -76,15 +77,28 @@ pub trait ToBoxed<T> {
     fn to_boxed(self) -> Box<dyn NodeBase>;
 }
 
+/// Data common to all nodes, without any additional helper methods for node-type-specific
+/// functionality, like is available when wrapped in [`NodeData<T>`].
 #[derive(Debug)]
 pub struct NodeDataGeneric {
+    /// Metadata fields that are less-commonly referenced
     pub(crate) meta: NodeMetadata,
+    /// Current [`NodeStatus`] of this node
     pub(crate) status: NodeStatus,
     /// Vector of child nodes
     pub children: Vec<TreeNode>,
+    /// The [`Blackboard`] belonging to this node, which is linked to the
+    /// subtree this node belongs to (if applicable)
     pub blackboard: Blackboard,
 }
 
+/// Provides access to a node's common data and configuration. This struct is
+/// passed into node methods such as `tick()`, `halt()`, etc.
+///
+/// The generic parameter is used to restrict/expand access to helper methods
+/// based on the type of node. For example, leaf nodes have no children, so
+/// they don't need (and shouldn't have access to) helper methods related to
+/// ticking or halting children.
 pub struct NodeData<'a, T> {
     data: &'a mut NodeDataGeneric,
     _pd: PhantomData<T>,
@@ -165,16 +179,6 @@ impl TreeNode {
     /// Get the name of the node
     pub fn name(&self) -> &str {
         self.data.name()
-    }
-
-    /// Get a mutable reference to the `NodeConfig`
-    pub fn metadata_mut(&mut self) -> &mut NodeMetadata {
-        self.data.metadata_mut()
-    }
-
-    /// Get a reference to the `NodeConfig`
-    pub fn metadata(&self) -> &NodeMetadata {
-        self.data.metadata()
     }
 
     /// Get the node's `NodeType`, which is more general than `NodeType`
@@ -365,37 +369,6 @@ impl NodeDataGeneric {
 // Enum Definitions
 // =============================
 
-#[derive(Debug, Error)]
-pub enum NodeError {
-    #[error(
-        "Child node of [{0}] returned invalid status [NodeStatus::{1}] when it is not allowed"
-    )]
-    StatusError(String, String),
-    #[error("Out of bounds index")]
-    IndexError,
-    #[error("Couldn't find port [{0}]")]
-    PortError(String),
-    #[error("Couldn't parse port [{0}] value into specified type [{1}]")]
-    /// # Arguments
-    /// * Port name
-    /// * Expected type
-    PortValueParseError(String, String),
-    #[error("Couldn't find entry in blackboard [{0}]")]
-    BlackboardError(String),
-    #[error("{0}")]
-    UserError(#[from] anyhow::Error),
-    #[error("{0}")]
-    NodeStructureError(String),
-    #[error("Decorator node does not have a child.")]
-    ChildMissing,
-    #[error("Blackboard lock was poisoned.")]
-    LockPoisoned,
-    #[error("A tick method was called that should have been unreachable. Please report this.")]
-    UnreachableTick,
-    #[error("Error evaluating a Condition expression: {0}")]
-    ConditionExpressionError(String),
-}
-
 /// TODO: Not currently used
 #[derive(Clone, Debug)]
 pub enum PreCond {
@@ -442,10 +415,4 @@ pub struct NodeMetadata {
     /// TODO: not used
     #[builder(default)]
     pub(crate) _post_conditions: HashMap<PostCond, String>,
-}
-
-impl Clone for Box<dyn PortValue> {
-    fn clone(&self) -> Box<dyn PortValue> {
-        self.clone_port()
-    }
 }

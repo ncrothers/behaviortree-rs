@@ -4,11 +4,13 @@ use quick_xml::{events::Event, name::QName, Reader};
 
 use crate::{
     basic_types::{
-        AttrsToMap, FromString, NodeStatus, NodeType, PortChecks, PortDirection, TreeNodeManifest,
+        is_allowed_port_name, AttrsToMap, FromString, NodeStatus, NodeType, PortDirection,
+        TreeNodeManifest,
     },
     blackboard::{Blackboard, BlackboardString},
+    error::ParseError,
     nodes::{decorator::SubTreeNode, NodeDataGeneric, NodeMetadata, ToBoxed, TreeNode},
-    tree::{ParseError, Tree, TreeConfig},
+    tree::{Tree, TreeConfig},
 };
 
 #[derive(Debug)]
@@ -257,7 +259,7 @@ impl<'a> Parser<'a> {
                             let inner_key = &key[1..(key.len() - 1)];
                             // Split the type from the name
                             let (name, var_type) = inner_key.split_once(':').ok_or_else(|| {
-                                ::behaviortree_rs::tree::ParseError::PortExpressionMissingType(
+                                ::behaviortree_rs::error::ParseError::PortExpressionMissingType(
                                     inner_key.to_owned(),
                                 )
                             })?;
@@ -265,7 +267,7 @@ impl<'a> Parser<'a> {
                             // Check if the type is supported
                             match var_type {
                                 "int" | "float" | "str" | "bool" => (),
-                                _ => return Err(::behaviortree_rs::tree::ParseError::PortExpressionInvalidType { ident: name.to_owned(), type_name: var_type.to_owned() }),
+                                _ => return Err(::behaviortree_rs::error::ParseError::PortExpressionInvalidType { ident: name.to_owned(), type_name: var_type.to_owned() }),
                             };
                         }
                     }
@@ -288,7 +290,7 @@ impl<'a> Parser<'a> {
                 node_ptr.data.add_port(
                     PortDirection::Input,
                     port_name.clone(),
-                    port_info.default_value_str().unwrap(),
+                    port_info.default_value().unwrap().to_owned(),
                 );
             }
         }
@@ -332,9 +334,9 @@ impl<'a> Parser<'a> {
                     .path(path.clone())
                     .manifest(Arc::new(TreeNodeManifest::new(
                         node_type,
-                        &node_name,
+                        node_name.clone(),
                         node.ports(),
-                        "",
+                        String::new(),
                     )))
                     .build();
 
@@ -450,13 +452,13 @@ impl<'a> Parser<'a> {
                                     <bool as FromString>::from_string(value)?,
                                 );
                                 continue;
-                            } else if !attr.is_allowed_port_name() {
+                            } else if !is_allowed_port_name(attr) {
                                 continue;
                             }
 
                             if let Some(port_name) = value.strip_bb_pointer() {
                                 // Add remapping if `value` is a Blackboard pointer
-                                child_blackboard.add_subtree_remapping(attr.clone(), port_name);
+                                child_blackboard.add_subtree_remapping(attr.to_owned(), port_name);
                             } else {
                                 // Set string value into Blackboard
                                 child_blackboard.set(attr, value.clone());
@@ -493,14 +495,14 @@ impl<'a> Parser<'a> {
                         let node = SubTreeNode.to_boxed();
 
                         let node_meta = NodeMetadata::builder()
-                            .name(id.clone())
+                            .name(id.to_owned())
                             .node_type(NodeType::SubTree)
                             .path(path)
                             .manifest(Arc::new(TreeNodeManifest::new(
                                 NodeType::Control,
-                                &node_name,
+                                node_name.clone(),
                                 node.ports(),
-                                "",
+                                String::new(),
                             )))
                             .build();
 
@@ -536,9 +538,9 @@ impl<'a> Parser<'a> {
                             .path(path)
                             .manifest(Arc::new(TreeNodeManifest::new(
                                 node_type,
-                                &node_name,
+                                node_name.clone(),
                                 node.ports(),
-                                "",
+                                String::new(),
                             )))
                             .build();
 
