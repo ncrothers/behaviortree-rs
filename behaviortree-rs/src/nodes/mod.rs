@@ -293,7 +293,7 @@ impl NodeDataGeneric {
                     match get_remapped_key(port, val) {
                         // Value is a Blackboard pointer
                         Some(key) => match self.blackboard.get::<T>(&key) {
-                            Some(val) => Ok(val),
+                            Some(val) => Ok(val.clone()),
                             None => Err(NodeError::BlackboardError(key)),
                         },
                         // Value is just a normal string

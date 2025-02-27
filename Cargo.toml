@@ -5,6 +5,7 @@ license = "MIT"
 repository = "https://github.com/ncrothers/behaviortree-rs"
 
 [workspace]
+resolver = "2"
 members = [
     "behaviortree-rs",
     "behaviortree-rs-derive",

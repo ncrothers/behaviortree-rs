@@ -1,11 +1,13 @@
 use std::{
     any::Any,
     collections::HashMap,
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
-use parking_lot::{Mutex, RwLock};
+use ouroboros::self_referencing;
+use parking_lot::{Mutex, MutexGuard, RwLock};
 
 use crate::basic_types::{FromString, ParseStr};
 
@@ -117,9 +119,68 @@ impl DerefMut for Entry {
     }
 }
 
+#[self_referencing]
+pub struct BlackboardValueInner<T>
+where
+    T: 'static,
+{
+    entry: EntryPtr,
+    #[borrows(mut entry)]
+    #[covariant]
+    guard: MutexGuard<'this, Entry>,
+    #[borrows(guard)]
+    value: &'this T,
+}
+
+pub struct BlackboardValue<T: 'static>(BlackboardValueInner<T>);
+
+impl<T> BlackboardValue<T>
+where
+    T: 'static,
+{
+    fn create(entry: EntryPtr) -> Option<Self> {
+        // Check if the inner value can be downcasted directly to `T`
+        let is_valid = entry.lock().downcast_ref::<T>().is_some();
+
+        if is_valid {
+            let inner = BlackboardValueInner::new(
+                entry,
+                |entry| entry.lock(),
+                |guard| {
+                    guard
+                        .downcast_ref::<T>()
+                        .expect("downcasting should always be safe here")
+                },
+            );
+
+            Some(Self(inner))
+        } else {
+            None
+        }
+    }
+
+    /// Clones the type `T` and consumes `self`, which will release the lock
+    pub fn clone_consume(self) -> T
+    where
+        T: Clone,
+    {
+        self.deref().clone()
+    }
+}
+
+impl<T> Deref for BlackboardValue<T>
+where
+    T: 'static,
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.borrow_value()
+    }
+}
+
 pub type BlackboardPtr = Arc<RwLock<Blackboard>>;
 pub type BlackboardDataPtr = Arc<RwLock<BlackboardData>>;
-
 pub type EntryPtr = Arc<Mutex<Entry>>;
 
 impl Blackboard {
@@ -168,7 +229,7 @@ impl Blackboard {
     }
 
     /// Get an Rc to the Entry
-    fn get_entry<'a>(&'a mut self, key: &'a str) -> Option<EntryPtr> {
+    fn get_entry(&mut self, key: &str) -> Option<EntryPtr> {
         let mut blackboard = self.data.write();
 
         // Try to get the key
@@ -202,15 +263,17 @@ impl Blackboard {
 
     /// Internal method that just tries to get value at key. If the stored
     /// type is not T, return None
-    fn __get_no_string<T>(&mut self, key: &str) -> Option<T>
+    fn __get_no_string<T>(&mut self, key: &str) -> Option<BlackboardValue<T>>
     where
-        T: Any + Clone,
+        T: Any,
     {
         self.get_entry(key).and_then(|entry| {
-            let entry = entry.lock();
+            // let guard = ;
 
-            // Try to downcast directly to T
-            entry.downcast_ref::<T>().cloned()
+            BlackboardValue::create(entry)
+
+            // // Try to downcast directly to T
+            // entry.downcast_ref::<T>().cloned()
         })
     }
 
@@ -231,9 +294,9 @@ impl Blackboard {
     /// Internal method that tries to get the value at key, but only works
     /// if it's a String/&str, then tries FromString to convert it to T. Treats
     /// the `Entry` as a `Entry::Generic`
-    fn __get_allow_string<T>(&mut self, key: &str) -> Option<T>
+    fn __get_allow_string<T>(&mut self, key: &str) -> Option<BlackboardValue<T>>
     where
-        T: Any + Clone + FromString + Send,
+        T: Any + FromString + Send,
     {
         // Try to get the key
         if let Some(entry) = self.get_entry(key) {
@@ -242,12 +305,13 @@ impl Blackboard {
             // Try to parse String into T
             if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
                 // Update value with the value type instead of just a string
-                // Because this is the non-`stringy` function, we have to update it as a
-                // `Generic`
-
                 let mut t = entry.lock();
-                t.0 = Box::new(value.clone());
-                return Some(value);
+                t.0 = Box::new(value);
+
+                // Release the lock
+                drop(t);
+
+                return BlackboardValue::create(entry);
             }
         }
 
@@ -255,15 +319,15 @@ impl Blackboard {
         None
     }
 
-    /// Tries to return the value at `key`. The type `T` must implement
-    /// `FromString` when calling this method; it will try to convert
+    /// Tries to return an owned copy of the value at `key`. The type `T` must
+    /// implement [`FromString`] when calling this method; it will try to convert
     /// from `String`/`&str` if there's an entry at `key` but it is not
     /// of type `T`. If it does convert it successfully, it will replace
     /// the existing value with `T` so converting from the string type
     /// won't be needed next time.
     ///
     /// If you want to get an entry that has a type that doesn't implement
-    /// `FromString`, use `get_exact<T>` instead.
+    /// `FromString`, use [`Blackboard::new`] instead.
     ///
     /// The `Blackboard` tries a few things when reading a `key`:
     /// - First it checks if it can find `key`:
@@ -299,9 +363,76 @@ impl Blackboard {
     where
         T: Any + Clone + FromString + Send,
     {
+        self.get_ref(key)
+            .map(|val: BlackboardValue<T>| val.clone_consume())
+    }
+
+    /// Works the same as `Blackboard::get`, except it doesn't clone the value.
+    /// Instead, it returns a [`BlackboardValue<T>`] which wraps the `MutexGuard`
+    /// and provides an immutable reference to `T`.
+    ///
+    /// # Locking
+    /// Until the returned value is dropped or consumed, it holds a lock on the
+    /// `Mutex` for the entry at `key`. **If you do not release the lock, you may get
+    /// unexpected behavior, such as deadlocks.** The lock is only held on the
+    /// entry at `key`, not the entire `Blackboard`.
+    ///
+    /// There are two ways to release the lock:
+    /// - Call `drop` on the value
+    /// - Call [`BlackboardValue::clone_consume`] which will clone `T`, consuming
+    ///     the value and dropping the lock.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::prelude::*;
+    ///
+    /// let mut blackboard = Blackboard::create();
+    ///
+    /// blackboard.set("bar", "100");
+    ///
+    /// let bar_ref = blackboard.get_ref::<String>("bar");
+    /// assert!(bar_ref.is_some());
+    /// let bar_ref = bar_ref.unwrap();
+    /// // Access the inner value using `Deref::deref`
+    /// assert_eq!(*bar_ref, String::from("100"));
+    /// // or calling methods on the inner type via auto-deref
+    /// assert_eq!(bar_ref.as_str(), "100");
+    ///
+    /// // Clone the value, consuming and dropping the lock
+    /// let bar_ref_owned = bar_ref.clone_consume();
+    ///
+    /// let bar_ref = blackboard.get_ref::<u32>("bar");
+    /// assert!(bar_ref.is_some());
+    /// let bar_ref = bar_ref.unwrap();
+    /// assert_eq!(*bar_ref, 100u32);
+    ///
+    /// // Drop the lock without cloning
+    /// drop(bar_ref);
+    /// ```
+    ///
+    /// The lock is only held on the entry itself, not the entire `Blackboard`,
+    /// so you can hold multiple values at the same time
+    ///
+    /// ```
+    /// blackboard.set("foo", 123u32);
+    ///
+    /// let foo = blackboard.get_ref::<u32>("foo").unwrap();
+    /// let bar = blackboard.get_ref::<u32>("bar").unwrap();
+    ///
+    /// assert_ne!(*foo, *bar);
+    ///
+    /// // Don't forget to drop the locks once you no longer need them
+    /// drop(foo);
+    /// drop(bar);
+    /// ```
+    pub fn get_ref<T>(&mut self, key: impl AsRef<str>) -> Option<BlackboardValue<T>>
+    where
+        T: Any + FromString + Send,
+    {
         // Try without parsing string first, then try with parsing string
         self.__get_no_string(key.as_ref())
-            .or(self.__get_allow_string(key.as_ref()))
+            .or_else(|| self.__get_allow_string(key.as_ref()))
     }
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
@@ -329,6 +460,16 @@ impl Blackboard {
     pub fn get_exact<T>(&mut self, key: impl AsRef<str>) -> Option<T>
     where
         T: Any + Clone,
+    {
+        self.__get_no_string(key.as_ref())
+            .map(|val: BlackboardValue<T>| val.clone_consume())
+    }
+
+    /// Works the same as `Blackboard::get_exact`, except it doesn't clone the value.
+    /// See [`Blackboard::get_ref`] for details about the difference
+    pub fn get_exact_ref<T>(&mut self, key: impl AsRef<str>) -> Option<BlackboardValue<T>>
+    where
+        T: Any,
     {
         self.__get_no_string(key.as_ref())
     }
@@ -573,16 +714,12 @@ mod tests {
         bb.set("custom_str", String::from("123,bar"));
         bb.set("custom_str_malformed", String::from("not an int,bar"));
 
-        assert_eq!(
-            bb.get_exact::<CustomEntry>("custom").as_ref(),
-            Some(&custom_value)
-        );
+        assert_eq!(bb.get::<CustomEntry>("custom"), Some(custom_value.clone()));
+
         // Check parse from String
-        assert_eq!(
-            bb.get::<CustomEntry>("custom_str").as_ref(),
-            Some(&custom_value)
-        );
+        assert_eq!(bb.get::<CustomEntry>("custom_str"), Some(custom_value));
+        let val = bb.get::<CustomEntry>("custom_str_malformed");
         // Check it returns None if it cannot be parsed
-        assert_eq!(bb.get::<CustomEntry>("custom_str_malformed").as_ref(), None);
+        assert!(val.is_none());
     }
 }
