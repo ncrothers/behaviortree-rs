@@ -72,7 +72,7 @@ fn registering() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -96,7 +96,7 @@ fn registering() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -129,7 +129,7 @@ fn main_tree_attr() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -157,7 +157,7 @@ fn main_tree_attr() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -181,7 +181,7 @@ fn main_tree_attr() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -219,7 +219,7 @@ fn subtrees() {
 
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
     let config = TreeConfig::builder()
         .blackboard(blackboard)
         .registry(&registry)
@@ -256,7 +256,7 @@ fn node_not_registered() {
 
     // Don't register StatusNode
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
     let config = TreeConfig::builder()
         .blackboard(blackboard)
         .registry(&registry)
@@ -289,7 +289,7 @@ fn ignore_treenodesmodel() {
 
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
     let config = TreeConfig::builder()
         .blackboard(blackboard)
         .registry(&registry)
@@ -335,7 +335,7 @@ fn load_adjacent_controls() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
     let config = TreeConfig::builder()
         .blackboard(blackboard)
         .registry(&registry)
@@ -381,7 +381,7 @@ fn async_test() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
     let config = TreeConfig::builder()
         .blackboard(blackboard)
         .registry(&registry)
@@ -421,7 +421,7 @@ fn condition() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let mut blackboard = Blackboard::create();
+    let mut blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard.clone())
@@ -608,7 +608,7 @@ fn parsing(#[case] xml: &str, #[case] is_ok: bool) {
 
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
     let config = TreeConfig::builder()
         .blackboard(blackboard)
         .registry(&registry)

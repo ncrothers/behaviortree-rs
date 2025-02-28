@@ -1,7 +1,6 @@
 use std::{
     any::Any,
     collections::HashMap,
-    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -120,7 +119,7 @@ impl DerefMut for Entry {
 }
 
 #[self_referencing]
-pub struct BlackboardValueInner<T>
+pub struct EntryInner<T>
 where
     T: 'static,
 {
@@ -132,9 +131,9 @@ where
     value: &'this T,
 }
 
-pub struct BlackboardValue<T: 'static>(BlackboardValueInner<T>);
+pub struct EntryGuard<T: 'static>(EntryInner<T>);
 
-impl<T> BlackboardValue<T>
+impl<T> EntryGuard<T>
 where
     T: 'static,
 {
@@ -143,7 +142,7 @@ where
         let is_valid = entry.lock().downcast_ref::<T>().is_some();
 
         if is_valid {
-            let inner = BlackboardValueInner::new(
+            let inner = EntryInner::new(
                 entry,
                 |entry| entry.lock(),
                 |guard| {
@@ -168,7 +167,7 @@ where
     }
 }
 
-impl<T> Deref for BlackboardValue<T>
+impl<T> Deref for EntryGuard<T>
 where
     T: 'static,
 {
@@ -184,7 +183,19 @@ pub type BlackboardDataPtr = Arc<RwLock<BlackboardData>>;
 pub type EntryPtr = Arc<Mutex<Entry>>;
 
 impl Blackboard {
-    fn new(parent_bb: Option<Blackboard>) -> Blackboard {
+    /// Creates a Blackboard with no parent and returns it as a `BlackboardPtr`.
+    pub fn new() -> Blackboard {
+        Self {
+            parent_bb: Box::new(None),
+            data: Arc::new(RwLock::new(BlackboardData {
+                storage: HashMap::new(),
+                internal_to_external: HashMap::new(),
+                auto_remapping: false,
+            })),
+        }
+    }
+
+    fn create(parent_bb: Option<Blackboard>) -> Blackboard {
         Self {
             data: Arc::new(RwLock::new(BlackboardData {
                 storage: HashMap::new(),
@@ -197,19 +208,7 @@ impl Blackboard {
 
     /// Creates a Blackboard with `parent_bb` as the parent. Returned as a new `BlackboardPtr`.
     pub fn with_parent(parent_bb: &Blackboard) -> Blackboard {
-        Self::new(Some(parent_bb.clone()))
-    }
-
-    /// Creates a Blackboard with no parent and returns it as a `BlackboardPtr`.
-    pub fn create() -> Blackboard {
-        Self {
-            parent_bb: Box::new(None),
-            data: Arc::new(RwLock::new(BlackboardData {
-                storage: HashMap::new(),
-                internal_to_external: HashMap::new(),
-                auto_remapping: false,
-            })),
-        }
+        Self::create(Some(parent_bb.clone()))
     }
 
     /// Enables the Blackboard to use autoremapping when getting values from
@@ -263,14 +262,14 @@ impl Blackboard {
 
     /// Internal method that just tries to get value at key. If the stored
     /// type is not T, return None
-    fn __get_no_string<T>(&mut self, key: &str) -> Option<BlackboardValue<T>>
+    fn __get_no_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
     where
         T: Any,
     {
         self.get_entry(key).and_then(|entry| {
             // let guard = ;
 
-            BlackboardValue::create(entry)
+            EntryGuard::create(entry)
 
             // // Try to downcast directly to T
             // entry.downcast_ref::<T>().cloned()
@@ -294,7 +293,7 @@ impl Blackboard {
     /// Internal method that tries to get the value at key, but only works
     /// if it's a String/&str, then tries FromString to convert it to T. Treats
     /// the `Entry` as a `Entry::Generic`
-    fn __get_allow_string<T>(&mut self, key: &str) -> Option<BlackboardValue<T>>
+    fn __get_allow_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
     where
         T: Any + FromString + Send,
     {
@@ -311,7 +310,7 @@ impl Blackboard {
                 // Release the lock
                 drop(t);
 
-                return BlackboardValue::create(entry);
+                return EntryGuard::create(entry);
             }
         }
 
@@ -364,7 +363,7 @@ impl Blackboard {
         T: Any + Clone + FromString + Send,
     {
         self.get_ref(key)
-            .map(|val: BlackboardValue<T>| val.clone_consume())
+            .map(|val: EntryGuard<T>| val.clone_consume())
     }
 
     /// Works the same as `Blackboard::get`, except it doesn't clone the value.
@@ -426,7 +425,7 @@ impl Blackboard {
     /// drop(foo);
     /// drop(bar);
     /// ```
-    pub fn get_ref<T>(&mut self, key: impl AsRef<str>) -> Option<BlackboardValue<T>>
+    pub fn get_ref<T>(&mut self, key: impl AsRef<str>) -> Option<EntryGuard<T>>
     where
         T: Any + FromString + Send,
     {
@@ -462,12 +461,12 @@ impl Blackboard {
         T: Any + Clone,
     {
         self.__get_no_string(key.as_ref())
-            .map(|val: BlackboardValue<T>| val.clone_consume())
+            .map(|val: EntryGuard<T>| val.clone_consume())
     }
 
     /// Works the same as `Blackboard::get_exact`, except it doesn't clone the value.
     /// See [`Blackboard::get_ref`] for details about the difference
-    pub fn get_exact_ref<T>(&mut self, key: impl AsRef<str>) -> Option<BlackboardValue<T>>
+    pub fn get_exact_ref<T>(&mut self, key: impl AsRef<str>) -> Option<EntryGuard<T>>
     where
         T: Any,
     {
@@ -571,7 +570,7 @@ mod tests {
     fn no_remapping() {
         // With no remapping
 
-        let mut root_bb = Blackboard::create();
+        let mut root_bb = Blackboard::new();
         let mut left_bb = Blackboard::with_parent(&root_bb);
         let mut right_bb = Blackboard::with_parent(&root_bb);
 
@@ -587,7 +586,7 @@ mod tests {
     fn auto_remapping() {
         // With autoremapping
 
-        let mut root_bb = Blackboard::create();
+        let mut root_bb = Blackboard::new();
         let mut left_bb = Blackboard::with_parent(&root_bb);
         let mut right_bb = Blackboard::with_parent(&root_bb);
 
@@ -605,7 +604,7 @@ mod tests {
     #[rstest]
     fn custom_remapping() {
         // With custom remapping
-        let mut root_bb = Blackboard::create();
+        let mut root_bb = Blackboard::new();
         let mut left_bb = Blackboard::with_parent(&root_bb);
         let mut right_bb = Blackboard::with_parent(&root_bb);
 
@@ -623,7 +622,7 @@ mod tests {
     fn remapping() {
         // No remapping
 
-        let mut root_bb = Blackboard::create();
+        let mut root_bb = Blackboard::new();
         let mut child_bb = Blackboard::with_parent(&root_bb);
 
         root_bb.set("foo", 123u32);
@@ -632,7 +631,7 @@ mod tests {
 
         // Auto remapping
 
-        let mut root_bb = Blackboard::create();
+        let mut root_bb = Blackboard::new();
         let mut child1_bb = Blackboard::with_parent(&root_bb);
         let mut child2_bb = Blackboard::with_parent(&child1_bb);
         let mut child3_bb = Blackboard::with_parent(&child2_bb);
@@ -649,7 +648,7 @@ mod tests {
 
         // Custom remapping
 
-        let mut root_bb = Blackboard::create();
+        let mut root_bb = Blackboard::new();
         let mut child1_bb = Blackboard::with_parent(&root_bb);
         let mut child2_bb = Blackboard::with_parent(&child1_bb);
         let mut child3_bb = Blackboard::with_parent(&child2_bb);
@@ -668,7 +667,7 @@ mod tests {
 
     #[rstest]
     fn type_matching() {
-        let mut bb = Blackboard::create();
+        let mut bb = Blackboard::new();
 
         bb.set("foo", 123u32);
 
@@ -703,7 +702,7 @@ mod tests {
             }
         }
 
-        let mut bb = Blackboard::create();
+        let mut bb = Blackboard::new();
 
         let custom_value = CustomEntry {
             foo: 123,

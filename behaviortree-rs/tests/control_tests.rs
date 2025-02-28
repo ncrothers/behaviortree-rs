@@ -75,7 +75,7 @@ fn parallel_all() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -117,7 +117,7 @@ fn parallel() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -156,7 +156,7 @@ fn reactive_fallback() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -201,7 +201,7 @@ fn reactive_sequence() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -246,7 +246,7 @@ fn sequence_star() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -291,7 +291,7 @@ fn sequence_vanilla() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -335,7 +335,7 @@ fn while_do_else() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)

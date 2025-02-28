@@ -31,7 +31,7 @@ fn force_failure() {
 
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -71,7 +71,7 @@ fn force_success() {
 
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -111,7 +111,7 @@ fn inverter() {
 
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -158,7 +158,7 @@ fn keep_running_until_failure() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -206,7 +206,7 @@ fn repeat() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -258,7 +258,7 @@ fn retry() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
@@ -308,7 +308,7 @@ fn run_once() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)

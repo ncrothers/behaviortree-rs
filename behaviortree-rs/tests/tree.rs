@@ -34,7 +34,7 @@ fn visitor() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)

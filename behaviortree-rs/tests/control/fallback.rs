@@ -36,7 +36,7 @@ fn fallback() {
         NodeType::Action,
     );
 
-    let blackboard = Blackboard::create();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard)
