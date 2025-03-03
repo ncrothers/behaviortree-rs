@@ -30,3 +30,7 @@ rstest = "0.23.0"
 [[bench]]
 name = "ticking"
 harness = false
+
+[[bench]]
+name = "blackboard"
+harness = false

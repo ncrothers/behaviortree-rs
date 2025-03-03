@@ -464,7 +464,7 @@ impl Blackboard {
             .map(|val: EntryGuard<T>| val.clone_consume())
     }
 
-    /// Works the same as `Blackboard::get_exact`, except it doesn't clone the value.
+    /// Works the same as [`Blackboard::get_exact`], except it doesn't clone the value.
     /// See [`Blackboard::get_ref`] for details about the difference
     pub fn get_exact_ref<T>(&mut self, key: impl AsRef<str>) -> Option<EntryGuard<T>>
     where
