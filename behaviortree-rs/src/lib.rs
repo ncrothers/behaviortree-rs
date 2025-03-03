@@ -120,8 +120,6 @@ pub use derive::bt_node;
 pub use nodes::NodeResult;
 pub use tree::Factory;
 
-extern crate futures as futures_internal;
-
 pub mod sync {
     pub use futures::{executor::block_on, future::BoxFuture};
 }
