@@ -23,5 +23,10 @@ thiserror = "1.0.47"
 typed-builder = "0.20.0"
 
 [dev-dependencies]
+criterion = "0.5.1"
 pretty_env_logger = "0.5.0"
 rstest = "0.23.0"
+
+[[bench]]
+name = "ticking"
+harness = false

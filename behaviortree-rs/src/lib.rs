@@ -124,7 +124,7 @@ pub use nodes::NodeResult;
 pub use parser::Parser;
 
 pub mod prelude {
-    pub use crate::basic_types::{NodeStatus, PortsList};
+    pub use crate::basic_types::{NodeStatus, NodeType, PortsList};
     pub use crate::blackboard::Blackboard;
     pub use crate::macros::*;
     pub use crate::node_registry::NodeRegistry;
