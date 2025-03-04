@@ -161,7 +161,7 @@ impl<'a> Parser<'a> {
     /// [`Factory::create_tree_from_text`].
     pub fn register_bt_from_text(&mut self, xml: &str) -> Result<(), ParseError> {
         let mut reader = Reader::from_reader(Cursor::new(xml.as_bytes().to_vec()));
-        reader.trim_text(true);
+        reader.config_mut().trim_text(true);
 
         let mut buf = Vec::new();
 
