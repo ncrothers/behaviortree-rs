@@ -11,7 +11,6 @@ pub fn shallow() -> String {
 }
 
 pub fn deep(depth: u32) -> String {
-
     let mut inner = String::new();
 
     for _ in 0..depth {
@@ -24,11 +23,13 @@ pub fn deep(depth: u32) -> String {
         inner.push_str("</Inverter>");
     }
 
-    format!(r#"
+    format!(
+        r#"
         <root>
             <BehaviorTree ID="main">
                 {inner}
             </BehaviorTree>
         </root>
-    "#)
+    "#
+    )
 }

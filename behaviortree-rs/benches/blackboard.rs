@@ -21,11 +21,11 @@ fn criterion_benchmark(c: &mut Criterion) {
             bb.set("value", *input);
 
             let start = Instant::now();
-            
+
             for _ in 0..iters {
                 black_box(bb.get_exact::<i32>("value"));
             }
-            
+
             start.elapsed()
         });
     });
@@ -37,48 +37,58 @@ fn criterion_benchmark(c: &mut Criterion) {
             bb.set("value", *input);
 
             let start = Instant::now();
-            
+
             for _ in 0..iters {
                 black_box(bb.get_exact_ref::<i32>("value"));
             }
-            
+
             start.elapsed()
         });
     });
 
-    let expensive_value = ExpensiveValue { data: black_box((0..1024).collect()) };
-    
-    group.bench_with_input(BenchmarkId::new("get", "ExpensiveValue"), &expensive_value, |b, input| {
-        b.iter_custom(|iters| {
-            let mut bb = Blackboard::new();
+    let expensive_value = ExpensiveValue {
+        data: black_box((0..1024).collect()),
+    };
 
-            bb.set("value", input.clone());
+    group.bench_with_input(
+        BenchmarkId::new("get", "ExpensiveValue"),
+        &expensive_value,
+        |b, input| {
+            b.iter_custom(|iters| {
+                let mut bb = Blackboard::new();
 
-            let start = Instant::now();
-            
-            for _ in 0..iters {
-                black_box(bb.get_exact::<ExpensiveValue>("value"));
-            }
-            
-            start.elapsed()
-        });
-    });
+                bb.set("value", input.clone());
 
-    group.bench_with_input(BenchmarkId::new("get_ref", "ExpensiveValue"), &expensive_value, |b, input| {
-        b.iter_custom(|iters| {
-            let mut bb = Blackboard::new();
+                let start = Instant::now();
 
-            bb.set("value", input.clone());
+                for _ in 0..iters {
+                    black_box(bb.get_exact::<ExpensiveValue>("value"));
+                }
 
-            let start = Instant::now();
-            
-            for _ in 0..iters {
-                black_box(bb.get_exact_ref::<ExpensiveValue>("value"));
-            }
-            
-            start.elapsed()
-        });
-    });
+                start.elapsed()
+            });
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("get_ref", "ExpensiveValue"),
+        &expensive_value,
+        |b, input| {
+            b.iter_custom(|iters| {
+                let mut bb = Blackboard::new();
+
+                bb.set("value", input.clone());
+
+                let start = Instant::now();
+
+                for _ in 0..iters {
+                    black_box(bb.get_exact_ref::<ExpensiveValue>("value"));
+                }
+
+                start.elapsed()
+            });
+        },
+    );
 
     group.finish();
 }

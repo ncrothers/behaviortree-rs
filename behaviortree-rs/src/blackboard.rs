@@ -36,19 +36,11 @@ where
     fn strip_bb_pointer(&self) -> Option<String> {
         let str_ref = self.as_ref();
 
-        // Is bb pointer
-        if str_ref.starts_with('{') && str_ref.ends_with('}') {
-            Some(
-                str_ref
-                    .strip_prefix('{')
-                    .unwrap()
-                    .strip_suffix('}')
-                    .unwrap()
-                    .to_string(),
-            )
-        } else {
-            None
-        }
+        // Try to remove wrapping braces, returns None if either one is missing
+        str_ref
+            .strip_prefix("{")
+            .and_then(|val| val.strip_suffix("}"))
+            .map(ToString::to_string)
     }
 
     fn is_bb_pointer(&self) -> bool {
@@ -60,49 +52,39 @@ where
 /// Struct that stores arbitrary data in a `HashMap<String, Box<dyn Any + Send>>`. Note the
 /// stored data type _must_ implement `Send`.
 ///
-/// # Usage
+/// # Examples
 ///
-/// Create a root-level `Blackboard` using `Blackboard::create()`, which returns
-/// a `BlackboardPtr`.
+/// Create a root-level `Blackboard` using [`Blackboard::new`].
 ///
 /// ```
-/// use behaviortree_rs::Blackboard;
+/// use behaviortree_rs::prelude::*;
 ///
 /// // Create a root-level Blackboard
-/// let bb = Blackboard::create();
+/// let bb = Blackboard::new();
 /// // Create a child Blackboard
 /// let child = Blackboard::with_parent(&bb);
 /// ```
-///
-/// Provides methods `get<T>()`, `get_exact<T>()`, and `set<T>()`.
-///
-/// ## get
-///
-/// When reading from the Blackboard, a String will attempt to be coerced to
-/// `T` by calling `parse_str()`. `get<T>()` will return `None` if:
-/// - No key matches the provided key
-/// - The value type doesn't match the stored type (`.downcast<T>()`)
-/// - Value is a string but `to_string()` returns `Err`
-///
-/// ## get_exact
-///
-/// If the value type at the key doesn't match `T`, it will _not_ try to
-/// parse a string value. It will just return `None`.
 #[derive(Debug, Clone)]
 pub struct Blackboard {
     data: Arc<RwLock<BlackboardData>>,
-    parent_bb: Box<Option<Blackboard>>,
+    parent: Option<Box<Blackboard>>,
 }
 
+/// Private struct that holds all blackboard data
 #[derive(Debug, Default)]
-pub struct BlackboardData {
+struct BlackboardData {
     storage: HashMap<String, EntryPtr>,
+    /// Manual remapping rules from this blackboard to the parent
     internal_to_external: HashMap<String, String>,
+    /// Whether to use auto-remapping
     auto_remapping: bool,
 }
 
+type EntryPtr = Arc<Mutex<Entry>>;
+
+/// Holds the data for a [`Blackboard`] value at a key.
 #[derive(Debug)]
-pub struct Entry(pub Box<dyn Any + Send>);
+struct Entry(pub Box<dyn Any + Send>);
 
 impl Deref for Entry {
     type Target = Box<dyn Any + Send>;
@@ -118,8 +100,11 @@ impl DerefMut for Entry {
     }
 }
 
+/// Self-referencing struct that holds a copied [`EntryPtr`], the locked
+/// `MutexGuard` around the value `T`, and a reference to `T` borrowed from
+/// the `MutexGuard`.
 #[self_referencing]
-pub struct EntryInner<T>
+struct EntryInner<T>
 where
     T: 'static,
 {
@@ -131,12 +116,18 @@ where
     value: &'this T,
 }
 
+/// Locked [`Blackboard`] entry. Until this value is dropped, the lock is held
+/// on the `Blackboard` entry.
+///
+/// Implements [`Deref`], providing access to the locked `T`.
 pub struct EntryGuard<T: 'static>(EntryInner<T>);
 
 impl<T> EntryGuard<T>
 where
     T: 'static,
 {
+    /// Attempts to downcast the `Box<dyn Any + Send>` to `T`. If downcasting
+    /// succeeds, wraps the value and lock into [`EntryGuard`].
     fn create(entry: EntryPtr) -> Option<Self> {
         // Check if the inner value can be downcasted directly to `T`
         let is_valid = entry.lock().downcast_ref::<T>().is_some();
@@ -178,31 +169,21 @@ where
     }
 }
 
-pub type BlackboardPtr = Arc<RwLock<Blackboard>>;
-pub type BlackboardDataPtr = Arc<RwLock<BlackboardData>>;
-pub type EntryPtr = Arc<Mutex<Entry>>;
-
 impl Blackboard {
     /// Creates a Blackboard with no parent and returns it as a `BlackboardPtr`.
     pub fn new() -> Blackboard {
-        Self {
-            parent_bb: Box::new(None),
-            data: Arc::new(RwLock::new(BlackboardData {
-                storage: HashMap::new(),
-                internal_to_external: HashMap::new(),
-                auto_remapping: false,
-            })),
-        }
+        Self::default()
     }
 
-    fn create(parent_bb: Option<Blackboard>) -> Blackboard {
+    /// Create a new [`Blackboard`], with or without a parent. Only used internally.
+    fn create(parent: Option<Blackboard>) -> Blackboard {
         Self {
             data: Arc::new(RwLock::new(BlackboardData {
                 storage: HashMap::new(),
                 internal_to_external: HashMap::new(),
                 auto_remapping: false,
             })),
-            parent_bb: Box::new(parent_bb),
+            parent: parent.map(Box::new),
         }
     }
 
@@ -227,97 +208,6 @@ impl Blackboard {
             .insert(internal, external);
     }
 
-    /// Get an Rc to the Entry
-    fn get_entry(&mut self, key: &str) -> Option<EntryPtr> {
-        let mut blackboard = self.data.write();
-
-        // Try to get the key
-        if let Some(entry) = blackboard.storage.get(key) {
-            return Some(Arc::clone(entry));
-        }
-        // Couldn't find key. Try remapping if we have a parent
-        else if let Some(parent_bb) = self.parent_bb.as_mut() {
-            if let Some(new_key) = blackboard.internal_to_external.get(key) {
-                // Return the value of the parent's `get()`
-                let parent_entry = parent_bb.get_entry(new_key);
-
-                if let Some(value) = &parent_entry {
-                    blackboard
-                        .storage
-                        .insert(key.to_string(), Arc::clone(value));
-                }
-
-                return parent_entry;
-            }
-            // Use auto remapping
-            else if blackboard.auto_remapping {
-                // Return the value of the parent's `get()`
-                return parent_bb.get_entry(key);
-            }
-        }
-
-        // No matches
-        None
-    }
-
-    /// Internal method that just tries to get value at key. If the stored
-    /// type is not T, return None
-    fn __get_no_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
-    where
-        T: Any,
-    {
-        self.get_entry(key).and_then(|entry| {
-            // let guard = ;
-
-            EntryGuard::create(entry)
-
-            // // Try to downcast directly to T
-            // entry.downcast_ref::<T>().cloned()
-        })
-    }
-
-    /// Internal method that tries to get the value at key as a
-    /// `String` or `&str`, returning an owned type
-    fn __get_string(&mut self, key: &str) -> Option<String> {
-        self.get_entry(key).and_then(|entry| {
-            let entry_lock = entry.lock();
-
-            // If value is a String or &str, try to call `FromString` to convert to T
-            entry_lock
-                .downcast_ref::<String>()
-                .map(ToString::to_string)
-                .or_else(|| entry_lock.downcast_ref::<&str>().map(ToString::to_string))
-        })
-    }
-
-    /// Internal method that tries to get the value at key, but only works
-    /// if it's a String/&str, then tries FromString to convert it to T. Treats
-    /// the `Entry` as a `Entry::Generic`
-    fn __get_allow_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
-    where
-        T: Any + FromString + Send,
-    {
-        // Try to get the key
-        if let Some(entry) = self.get_entry(key) {
-            let value = self.__get_string(key)?;
-
-            // Try to parse String into T
-            if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
-                // Update value with the value type instead of just a string
-                let mut t = entry.lock();
-                t.0 = Box::new(value);
-
-                // Release the lock
-                drop(t);
-
-                return EntryGuard::create(entry);
-            }
-        }
-
-        // No matches
-        None
-    }
-
     /// Tries to return an owned copy of the value at `key`. The type `T` must
     /// implement [`FromString`] when calling this method; it will try to convert
     /// from `String`/`&str` if there's an entry at `key` but it is not
@@ -326,7 +216,7 @@ impl Blackboard {
     /// won't be needed next time.
     ///
     /// If you want to get an entry that has a type that doesn't implement
-    /// `FromString`, use [`Blackboard::new`] instead.
+    /// `FromString`, use [`Blackboard::get_exact`] instead.
     ///
     /// The `Blackboard` tries a few things when reading a `key`:
     /// - First it checks if it can find `key`:
@@ -348,7 +238,7 @@ impl Blackboard {
     /// ```
     /// use behaviortree_rs::blackboard::Blackboard;
     ///
-    /// let mut blackboard = Blackboard::create();
+    /// let mut blackboard = Blackboard::new();
     ///
     /// blackboard.set("foo", 132u32);
     /// assert_eq!(blackboard.get::<u32>("foo"), Some(132u32));
@@ -366,19 +256,20 @@ impl Blackboard {
             .map(|val: EntryGuard<T>| val.clone_consume())
     }
 
-    /// Works the same as `Blackboard::get`, except it doesn't clone the value.
-    /// Instead, it returns a [`BlackboardValue<T>`] which wraps the `MutexGuard`
+    /// Works the same as [`Blackboard::get`], except it doesn't clone the value.
+    /// Instead, it returns a [`EntryGuard<T>`] which wraps the `MutexGuard`
     /// and provides an immutable reference to `T`.
     ///
     /// # Locking
     /// Until the returned value is dropped or consumed, it holds a lock on the
     /// `Mutex` for the entry at `key`. **If you do not release the lock, you may get
-    /// unexpected behavior, such as deadlocks.** The lock is only held on the
-    /// entry at `key`, not the entire `Blackboard`.
+    /// unexpected behavior, such as deadlocks.**
+    ///
+    /// The lock is only held on the entry at `key`, not the entire `Blackboard`.
     ///
     /// There are two ways to release the lock:
     /// - Call `drop` on the value
-    /// - Call [`BlackboardValue::clone_consume`] which will clone `T`, consuming
+    /// - Call [`EntryGuard::clone_consume`] which will clone `T`, consuming
     ///     the value and dropping the lock.
     ///
     /// # Examples
@@ -386,7 +277,7 @@ impl Blackboard {
     /// ```
     /// use behaviortree_rs::prelude::*;
     ///
-    /// let mut blackboard = Blackboard::create();
+    /// let mut blackboard = Blackboard::new();
     ///
     /// blackboard.set("bar", "100");
     ///
@@ -414,6 +305,11 @@ impl Blackboard {
     /// so you can hold multiple values at the same time
     ///
     /// ```
+    /// use behaviortree_rs::prelude::*;
+    ///
+    /// let mut blackboard = Blackboard::new();
+    ///
+    /// blackboard.set("bar", "100");
     /// blackboard.set("foo", 123u32);
     ///
     /// let foo = blackboard.get_ref::<u32>("foo").unwrap();
@@ -431,7 +327,7 @@ impl Blackboard {
     {
         // Try without parsing string first, then try with parsing string
         self.__get_no_string(key.as_ref())
-            .or_else(|| self.__get_allow_string(key.as_ref()))
+            .or_else(|| self.__parse_from_string(key.as_ref()))
     }
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
@@ -445,7 +341,7 @@ impl Blackboard {
     /// ```
     /// use behaviortree_rs::blackboard::Blackboard;
     ///
-    /// let mut blackboard = Blackboard::create();
+    /// let mut blackboard = Blackboard::new();
     ///
     /// blackboard.set("foo", 132u32);
     /// assert_eq!(blackboard.get_exact::<u32>("foo"), Some(132u32));
@@ -465,7 +361,27 @@ impl Blackboard {
     }
 
     /// Works the same as [`Blackboard::get_exact`], except it doesn't clone the value.
-    /// See [`Blackboard::get_ref`] for details about the difference
+    /// See [`Blackboard::get_ref`] for details about the difference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::prelude::*;
+    /// use behaviortree_rs::blackboard::EntryGuard;
+    ///
+    /// let mut blackboard = Blackboard::new();
+    ///
+    /// blackboard.set("bar", 100u32);
+    ///
+    /// let bar_ref: Option<EntryGuard<u32>> = blackboard.get_exact_ref::<u32>("bar");
+    /// assert!(bar_ref.is_some());
+    /// let bar_ref = bar_ref.unwrap();
+    /// // Access the inner value using `Deref::deref`
+    /// assert_eq!(*bar_ref, 100u32);
+    ///
+    /// // Clone the value, consuming and dropping the lock
+    /// let bar_ref_owned = bar_ref.clone_consume();
+    /// ```
     pub fn get_exact_ref<T>(&mut self, key: impl AsRef<str>) -> Option<EntryGuard<T>>
     where
         T: Any,
@@ -480,7 +396,7 @@ impl Blackboard {
     /// ```
     /// use behaviortree_rs::blackboard::Blackboard;
     ///
-    /// let mut blackboard = Blackboard::create();
+    /// let mut blackboard = Blackboard::new();
     ///
     /// blackboard.set("foo", 132u32);
     /// assert_eq!(blackboard.get::<u32>("foo"), Some(132u32));
@@ -491,61 +407,130 @@ impl Blackboard {
     /// assert_eq!(blackboard.get::<u32>("bar"), Some(100u32));
     /// ```
     pub fn set<T: Any + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {
-        let key = key.as_ref();
-
-        let blackboard = self.data.write();
-
-        if let Some(entry) = blackboard.storage.get(key) {
-            let mut entry = entry.lock();
-
-            // Overwrite value of existing entry
-            entry.0 = Box::new(value);
-        } else {
-            drop(blackboard);
-            let entry = self.create_entry(&key);
-
-            let mut entry = entry.lock();
-
-            // Set value of new entry
-            entry.0 = Box::new(value);
-        }
+        self.update_or_create_entry(key.as_ref(), Box::new(value));
     }
 
-    fn create_entry<'a>(&'a mut self, key: &'a (impl AsRef<str> + Sync)) -> EntryPtr {
-        let entry;
+    /// Internal method that just tries to get value at key. If the stored
+    /// type is not `T`, return `None`
+    fn __get_no_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
+    where
+        T: Any,
+    {
+        self.get_entry(key)
+            .and_then(|entry| EntryGuard::create(entry))
+    }
 
+    /// Internal method that tries to get the value at key as a
+    /// `String` or `&str`, returning an owned type
+    fn __get_as_string(&mut self, key: &str) -> Option<String> {
+        self.get_entry(key).and_then(|entry| {
+            let entry_lock = entry.lock();
+
+            // If value is a String or &str, try to call `FromString` to convert to T
+            entry_lock
+                .downcast_ref::<String>()
+                .map(|val| val.as_str())
+                .or_else(|| entry_lock.downcast_ref::<&str>().map(|v| &**v))
+                .map(ToString::to_string)
+        })
+    }
+
+    /// Internal method that tries to get the value at key, but only works
+    /// if it's a String/&str, then tries FromString to convert it to T. Treats
+    /// the `Entry` as a `Entry::Generic`
+    fn __parse_from_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
+    where
+        T: Any + FromString + Send,
+    {
+        // Try to get the key
+        if let Some(entry) = self.get_entry(key) {
+            let value = self.__get_as_string(key)?;
+
+            // Try to parse String into T
+            if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
+                // Update value with the value type instead of just a string
+                let mut t = entry.lock();
+                t.0 = Box::new(value);
+
+                // Release the lock
+                drop(t);
+
+                return EntryGuard::create(entry);
+            }
+        }
+
+        // No matches
+        None
+    }
+
+    /// Try to get a cloned [`EntryPtr`] for `key`
+    fn get_entry(&mut self, key: &str) -> Option<EntryPtr> {
+        let mut blackboard = self.data.write();
+
+        // Try to get the key
+        if let Some(entry) = blackboard.storage.get(key) {
+            return Some(Arc::clone(entry));
+        }
+        // Couldn't find key. Try remapping if we have a parent
+        else if let Some(parent) = self.parent.as_mut() {
+            if let Some(new_key) = blackboard.internal_to_external.get(key) {
+                // Return the value of the parent's `get()`
+                let parent_entry = parent.get_entry(new_key);
+
+                if let Some(value) = &parent_entry {
+                    blackboard
+                        .storage
+                        .insert(key.to_string(), Arc::clone(value));
+                }
+
+                return parent_entry;
+            }
+            // Use auto remapping
+            else if blackboard.auto_remapping {
+                // Return the value of the parent's `get()`
+                return parent.get_entry(key);
+            }
+        }
+
+        // No matches
+        None
+    }
+
+    /// Updates the value at `key`, or creates a new [`Entry`].
+    fn update_or_create_entry(&mut self, key: &str, value: Box<dyn Any + Send>) {
         let mut blackboard = self.data.write();
 
         // If the entry already exists
-        if let Some(existing_entry) = blackboard.storage.get(key.as_ref()) {
-            return Arc::clone(existing_entry);
-        }
-        // Use explicit remapping rule
-        else if blackboard.internal_to_external.contains_key(key.as_ref())
-            && self.parent_bb.is_some()
-        {
-            // Safe to unwrap because .contains_key() is true
-            let remapped_key = blackboard.internal_to_external.get(key.as_ref()).unwrap();
+        if let Some(existing_entry) = blackboard.storage.get(key) {
+            existing_entry.lock().0 = value;
+        } else if let Some(parent) = self.parent.as_mut() {
+            // Use explicit remapping rule
+            if let Some(remapped_key) = blackboard.internal_to_external.get(key) {
+                parent.update_or_create_entry(remapped_key, value);
+            }
+            // Use autoremapping
+            else if blackboard.auto_remapping {
+                parent.update_or_create_entry(key, value)
+            }
+            // No remapping
+            else {
+                // Create a new entry
+                let entry = Arc::new(Mutex::new(Entry(value)));
 
-            entry = (*self.parent_bb)
-                .as_mut()
-                .unwrap()
-                .create_entry(remapped_key);
+                blackboard
+                    .storage
+                    .insert(key.to_string(), Arc::clone(&entry));
+            }
         }
-        // Use autoremapping
-        else if blackboard.auto_remapping && self.parent_bb.is_some() {
-            entry = (*self.parent_bb).as_mut().unwrap().create_entry(key);
-        }
-        // No remapping or no parent blackboard
+        // No parent blackboard
         else {
-            // Create an entry with an empty placeholder value
-            entry = Arc::new(Mutex::new(Entry(Box::new(()))));
-        }
+            // Create a new entry
+            let entry = Arc::new(Mutex::new(Entry(value)));
 
-        blackboard
-            .storage
-            .insert(key.as_ref().to_string(), Arc::clone(&entry));
-        entry
+            blackboard
+                .storage
+                .insert(key.to_string(), Arc::clone(&entry));
+        }
     }
 }
 
@@ -553,7 +538,7 @@ impl Default for Blackboard {
     fn default() -> Self {
         Self {
             data: Arc::new(RwLock::new(BlackboardData::default())),
-            parent_bb: Box::new(None),
+            parent: None,
         }
     }
 }

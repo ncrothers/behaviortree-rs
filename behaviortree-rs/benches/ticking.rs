@@ -21,10 +21,7 @@ fn deep_tree_n(depth: u32) -> Tree {
 
     let registry = registry();
 
-    let config = TreeConfig::builder()
-        .registry(&registry)
-        .xml(&xml)
-        .build();
+    let config = TreeConfig::builder().registry(&registry).xml(&xml).build();
 
     Tree::from_config(&config).unwrap()
 }
@@ -34,10 +31,7 @@ fn shallow_tree() -> Tree {
 
     let registry = registry();
 
-    let config = TreeConfig::builder()
-        .registry(&registry)
-        .xml(&xml)
-        .build();
+    let config = TreeConfig::builder().registry(&registry).xml(&xml).build();
 
     Tree::from_config(&config).unwrap()
 }
@@ -48,25 +42,25 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut tree = shallow_tree();
 
             let start = Instant::now();
-            
+
             for _ in 0..iters {
                 black_box(tree.tick_once().unwrap());
             }
-            
+
             start.elapsed()
         });
     });
-    
+
     c.bench_function("deep tree - 100 - manual", |b| {
         b.iter_custom(|iters| {
             let mut tree = deep_tree_n(100);
 
             let start = Instant::now();
-            
+
             for _ in 0..iters {
                 black_box(tree.tick_once().unwrap());
             }
-            
+
             start.elapsed()
         });
     });
@@ -76,11 +70,11 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut tree = deep_tree_n(1000);
 
             let start = Instant::now();
-            
+
             for _ in 0..iters {
                 black_box(tree.tick_once().unwrap());
             }
-            
+
             start.elapsed()
         });
     });
