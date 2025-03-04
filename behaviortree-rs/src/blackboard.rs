@@ -326,8 +326,8 @@ impl Blackboard {
         T: Any + FromString + Send,
     {
         // Try without parsing string first, then try with parsing string
-        self.__get_no_string(key.as_ref())
-            .or_else(|| self.__parse_from_string(key.as_ref()))
+        self._get_value(key.as_ref())
+            .or_else(|| self._parse_from_string(key.as_ref()))
     }
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
@@ -356,7 +356,7 @@ impl Blackboard {
     where
         T: Any + Clone,
     {
-        self.__get_no_string(key.as_ref())
+        self._get_value(key.as_ref())
             .map(|val: EntryGuard<T>| val.clone_consume())
     }
 
@@ -386,7 +386,7 @@ impl Blackboard {
     where
         T: Any,
     {
-        self.__get_no_string(key.as_ref())
+        self._get_value(key.as_ref())
     }
 
     /// Sets the `value` in the Blackboard at `key`.
@@ -406,45 +406,47 @@ impl Blackboard {
     /// assert_eq!(blackboard.get::<String>("bar"), Some(String::from("100")));
     /// assert_eq!(blackboard.get::<u32>("bar"), Some(100u32));
     /// ```
-    pub fn set<T: Any + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {
-        self.update_or_create_entry(key.as_ref(), Box::new(value));
+    pub fn set<T>(&mut self, key: impl AsRef<str>, value: T)
+    where
+        T: Any + Send + 'static,
+    {
+        self._update_or_create_entry(key.as_ref(), Box::new(value));
     }
 
     /// Internal method that just tries to get value at key. If the stored
     /// type is not `T`, return `None`
-    fn __get_no_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
+    fn _get_value<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
     where
         T: Any,
     {
-        self.get_entry(key)
+        self._get_entry(key)
             .and_then(|entry| EntryGuard::create(entry))
     }
 
     /// Internal method that tries to get the value at key as a
     /// `String` or `&str`, returning an owned type
-    fn __get_as_string(&mut self, key: &str) -> Option<String> {
-        self.get_entry(key).and_then(|entry| {
+    fn _get_as_string(&mut self, key: &str) -> Option<String> {
+        self._get_entry(key).and_then(|entry| {
             let entry_lock = entry.lock();
 
-            // If value is a String or &str, try to call `FromString` to convert to T
+            // Try to downcast value to either String or &str and return as String
             entry_lock
                 .downcast_ref::<String>()
                 .map(|val| val.as_str())
-                .or_else(|| entry_lock.downcast_ref::<&str>().map(|v| &**v))
+                .or_else(|| entry_lock.downcast_ref::<&str>().copied())
                 .map(ToString::to_string)
         })
     }
 
     /// Internal method that tries to get the value at key, but only works
-    /// if it's a String/&str, then tries FromString to convert it to T. Treats
-    /// the `Entry` as a `Entry::Generic`
-    fn __parse_from_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
+    /// if it's a String/&str, then tries FromString to convert it to T.
+    fn _parse_from_string<T>(&mut self, key: &str) -> Option<EntryGuard<T>>
     where
         T: Any + FromString + Send,
     {
         // Try to get the key
-        if let Some(entry) = self.get_entry(key) {
-            let value = self.__get_as_string(key)?;
+        if let Some(entry) = self._get_entry(key) {
+            let value = self._get_as_string(key)?;
 
             // Try to parse String into T
             if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
@@ -464,7 +466,7 @@ impl Blackboard {
     }
 
     /// Try to get a cloned [`EntryPtr`] for `key`
-    fn get_entry(&mut self, key: &str) -> Option<EntryPtr> {
+    fn _get_entry(&mut self, key: &str) -> Option<EntryPtr> {
         let mut blackboard = self.data.write();
 
         // Try to get the key
@@ -475,7 +477,7 @@ impl Blackboard {
         else if let Some(parent) = self.parent.as_mut() {
             if let Some(new_key) = blackboard.internal_to_external.get(key) {
                 // Return the value of the parent's `get()`
-                let parent_entry = parent.get_entry(new_key);
+                let parent_entry = parent._get_entry(new_key);
 
                 if let Some(value) = &parent_entry {
                     blackboard
@@ -488,7 +490,7 @@ impl Blackboard {
             // Use auto remapping
             else if blackboard.auto_remapping {
                 // Return the value of the parent's `get()`
-                return parent.get_entry(key);
+                return parent._get_entry(key);
             }
         }
 
@@ -497,7 +499,7 @@ impl Blackboard {
     }
 
     /// Updates the value at `key`, or creates a new [`Entry`].
-    fn update_or_create_entry(&mut self, key: &str, value: Box<dyn Any + Send>) {
+    fn _update_or_create_entry(&mut self, key: &str, value: Box<dyn Any + Send>) {
         let mut blackboard = self.data.write();
 
         // If the entry already exists
@@ -506,11 +508,11 @@ impl Blackboard {
         } else if let Some(parent) = self.parent.as_mut() {
             // Use explicit remapping rule
             if let Some(remapped_key) = blackboard.internal_to_external.get(key) {
-                parent.update_or_create_entry(remapped_key, value);
+                parent._update_or_create_entry(remapped_key, value);
             }
             // Use autoremapping
             else if blackboard.auto_remapping {
-                parent.update_or_create_entry(key, value)
+                parent._update_or_create_entry(key, value)
             }
             // No remapping
             else {
