@@ -1,12 +1,10 @@
-mod nodes;
-mod trees;
+mod common;
 
 use std::time::Instant;
 
 use behaviortree_rs::prelude::*;
+use common::{nodes::StatusNode, trees::deep};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use nodes::StatusNode;
-use trees::deep;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let deep_tree = deep(100);

@@ -1,12 +1,13 @@
-mod nodes;
-mod trees;
+mod common;
 
 use std::time::Instant;
 
 use behaviortree_rs::prelude::*;
+use common::{
+    nodes::StatusNode,
+    trees::{deep, shallow},
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use nodes::StatusNode;
-use trees::{deep, shallow};
 
 fn registry() -> NodeRegistry {
     let mut registry = NodeRegistry::new();

@@ -1,5 +1,4 @@
-mod nodes;
-mod trees;
+mod common;
 
 use std::time::Instant;
 
