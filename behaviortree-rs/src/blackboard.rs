@@ -195,7 +195,7 @@ impl Blackboard {
     /// Enables the Blackboard to use autoremapping when getting values from
     /// the parent Blackboard. Only uses autoremapping if there's no matching
     /// explicit remapping rule.
-    pub fn enable_auto_remapping(&mut self, use_remapping: bool) {
+    pub fn set_auto_remapping(&mut self, use_remapping: bool) {
         self.data.write().auto_remapping = use_remapping;
     }
 
@@ -575,9 +575,9 @@ mod tests {
         let mut left_bb = Blackboard::with_parent(&root_bb);
         let mut right_bb = Blackboard::with_parent(&root_bb);
 
-        root_bb.enable_auto_remapping(true);
-        left_bb.enable_auto_remapping(true);
-        right_bb.enable_auto_remapping(true);
+        root_bb.set_auto_remapping(true);
+        left_bb.set_auto_remapping(true);
+        right_bb.set_auto_remapping(true);
 
         left_bb.set("foo", 123u32);
 
@@ -621,9 +621,9 @@ mod tests {
         let mut child2_bb = Blackboard::with_parent(&child1_bb);
         let mut child3_bb = Blackboard::with_parent(&child2_bb);
 
-        child1_bb.enable_auto_remapping(true);
-        child2_bb.enable_auto_remapping(true);
-        child3_bb.enable_auto_remapping(true);
+        child1_bb.set_auto_remapping(true);
+        child2_bb.set_auto_remapping(true);
+        child3_bb.set_auto_remapping(true);
 
         root_bb.set("foo", 123u32);
 

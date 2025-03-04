@@ -448,9 +448,8 @@ impl<'a> Parser<'a> {
                         for (attr, value) in attributes.iter() {
                             // Set autoremapping to true or false
                             if attr == "_autoremap" {
-                                child_blackboard.enable_auto_remapping(
-                                    <bool as FromString>::from_string(value)?,
-                                );
+                                child_blackboard
+                                    .set_auto_remapping(<bool as FromString>::from_string(value)?);
                                 continue;
                             } else if !is_allowed_port_name(attr) {
                                 continue;
