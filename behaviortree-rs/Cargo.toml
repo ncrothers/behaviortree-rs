@@ -34,3 +34,7 @@ harness = false
 [[bench]]
 name = "blackboard"
 harness = false
+
+[[bench]]
+name = "parsing"
+harness = false

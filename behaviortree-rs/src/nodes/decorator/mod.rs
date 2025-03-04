@@ -104,17 +104,17 @@ impl DerefMut for Decorator {
 
 impl NodeBase for Decorator {
     fn ports(&self) -> PortsList {
-        DecoratorNode::ports(&*self.0)
+        self.0.ports()
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        self.tick(&mut NodeData::new(ctx))
+        self.0.tick(&mut NodeData::new(ctx))
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
         let mut ctx = NodeData::new(ctx);
 
-        DecoratorNode::halt(&mut *self.0, &mut ctx)?;
+        self.0.halt(&mut ctx)?;
 
         ctx.reset_child()?;
         ctx.set_status(NodeStatus::Idle);

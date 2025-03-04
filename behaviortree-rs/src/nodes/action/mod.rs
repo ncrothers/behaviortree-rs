@@ -46,11 +46,11 @@ impl DerefMut for SyncAction {
 
 impl NodeBase for SyncAction {
     fn ports(&self) -> PortsList {
-        SyncActionNode::ports(&*self.0)
+        self.0.ports()
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
-        match self.tick(&mut NodeData::new(ctx))? {
+        match self.0.tick(&mut NodeData::new(ctx))? {
             status @ (NodeStatus::Running | NodeStatus::Idle) => Err(NodeError::StatusError(
                 ctx.meta.path.clone(),
                 status.to_string(),
@@ -60,7 +60,7 @@ impl NodeBase for SyncAction {
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        SyncActionNode::halt(&mut *self.0, &mut NodeData::new(ctx))?;
+        self.0.tick(&mut NodeData::new(ctx))?;
         ctx.set_status(NodeStatus::Idle);
         Ok(())
     }
@@ -128,7 +128,7 @@ impl DerefMut for StatefulAction {
 
 impl NodeBase for StatefulAction {
     fn ports(&self) -> PortsList {
-        StatefulActionNode::ports(&*self.0)
+        self.0.ports()
     }
 
     fn execute_tick(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult {
@@ -138,7 +138,7 @@ impl NodeBase for StatefulAction {
             NodeStatus::Idle => {
                 ::log::debug!("[behaviortree_rs]: {}::on_start()", &ctx.meta.path);
                 // let mut wrapper = ArgWrapper::new(&mut self.data, &mut self.context);
-                let new_status = self.on_start(&mut NodeData::new(ctx))?;
+                let new_status = self.0.on_start(&mut NodeData::new(ctx))?;
                 // drop(wrapper);
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
@@ -150,7 +150,7 @@ impl NodeBase for StatefulAction {
             }
             NodeStatus::Running => {
                 ::log::debug!("[behaviortree_rs]: {}::on_running()", &ctx.meta.path);
-                let new_status = self.on_running(&mut NodeData::new(ctx))?;
+                let new_status = self.0.on_running(&mut NodeData::new(ctx))?;
                 if matches!(new_status, NodeStatus::Idle) {
                     return Err(NodeError::StatusError(
                         format!("{}::on_running()", ctx.meta.path),
@@ -168,7 +168,7 @@ impl NodeBase for StatefulAction {
     }
 
     fn halt(&mut self, ctx: &mut NodeDataGeneric) -> NodeResult<()> {
-        StatefulActionNode::on_halted(&mut *self.0, &mut NodeData::new(ctx))?;
+        self.0.on_halted(&mut NodeData::new(ctx))?;
         ctx.set_status(NodeStatus::Idle);
         Ok(())
     }

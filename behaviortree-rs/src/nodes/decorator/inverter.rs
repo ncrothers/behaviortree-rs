@@ -27,7 +27,7 @@ impl DecoratorNode for InverterNode {
             status @ (NodeStatus::Running | NodeStatus::Skipped) => Ok(status),
             NodeStatus::Idle => Err(NodeError::StatusError(
                 "InverterNode".to_string(),
-                "Idle".to_string(),
+                NodeStatus::Idle.to_string(),
             )),
         }
     }
