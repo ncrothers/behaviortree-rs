@@ -6,7 +6,7 @@ use crate::{
     error::ParseError,
     node_registry::NodeRegistry,
     nodes::{NodeResult, TreeNode},
-    Parser,
+    parser::Parser,
 };
 
 enum TickOption {
@@ -33,7 +33,7 @@ pub struct NodeIter<'a> {
 /// let xml = r#"
 /// <root>
 ///     <BehaviorTree ID="main-tree">
-///         <Condition />
+///         <Condition expr="" />
 ///     </BehaviorTree>
 /// </root>
 /// "#;
@@ -83,7 +83,7 @@ pub struct TreeConfig<'a> {
 /// let xml = r#"
 /// <root>
 ///     <BehaviorTree ID="main-tree">
-///         <Condition />
+///         <Condition expr="" />
 ///     </BehaviorTree>
 /// </root>
 /// "#;

@@ -13,6 +13,6 @@ impl SyncActionNode for StatusNode {
     }
 
     fn ports(&self) -> PortsList {
-        define_ports!(input_port!("status"))
+        PortsList::from([PortInfo::input::<NodeStatus>("status").build()])
     }
 }

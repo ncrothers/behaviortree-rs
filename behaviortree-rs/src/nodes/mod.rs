@@ -18,10 +18,7 @@ use std::{
 use typed_builder::TypedBuilder;
 
 use crate::{
-    basic_types::{
-        get_remapped_key, FromString, NodeType, ParseStr, PortDirection, PortsRemapping,
-        TreeNodeManifest,
-    },
+    basic_types::{get_remapped_key, FromString, NodeType, PortDirection, TreeNodeManifest},
     blackboard::BlackboardString,
     Blackboard,
 };
@@ -57,7 +54,9 @@ pub trait NodeBase: std::fmt::Debug + Send + Sync {
 ///
 /// impl SyncActionNode for MyNode {
 ///     fn ports(&self) -> PortsList {
-///         define_ports!(input_port!("foo"))
+///         PortsList::from([
+///             PortInfo::input::<i32>("foo").build()
+///         ])
 ///     }
 ///
 ///     fn tick(&mut self, _ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
@@ -67,7 +66,9 @@ pub trait NodeBase: std::fmt::Debug + Send + Sync {
 ///
 /// let node: Box<dyn NodeBase> = MyNode { foo: 10 }.to_boxed();
 ///
-/// let expected_ports = define_ports!(input_port!("foo"));
+/// let expected_ports = PortsList::from([
+///     PortInfo::input::<i32>("foo").build()
+/// ]);
 ///
 /// let ports = node.ports();
 ///
@@ -273,42 +274,64 @@ impl NodeDataGeneric {
     /// - If a remapped key (e.g. a port value of `"{foo}"` references the blackboard
     ///     key `"foo"`), blackboard entry wasn't found or couldn't be read as `T`
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
-    pub fn get_input<T>(&mut self, port: &str) -> Result<T, NodeError>
+    pub fn get_input<T>(&self, port_name: &str) -> Result<T, NodeError>
     where
         T: FromString + Clone + Send + 'static,
     {
-        match self.meta.input_ports.get(port) {
-            Some(val) => {
-                // Check if default is needed
-                if val.is_empty() {
-                    let port_info = self.meta.manifest.ports.get(port).unwrap();
-                    match port_info.default_value() {
-                        Some(default) => match default.parse_str() {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(NodeError::PortError(String::from(port))),
-                        },
-                        None => Err(NodeError::PortError(String::from(port))),
-                    }
-                } else {
-                    match get_remapped_key(port, val) {
-                        // Value is a Blackboard pointer
-                        Some(key) => match self.blackboard.get::<T>(&key) {
-                            Some(val) => Ok(val.clone()),
-                            None => Err(NodeError::BlackboardError(key)),
-                        },
-                        // Value is just a normal string
-                        None => match <T as FromString>::from_string(val) {
-                            Ok(val) => Ok(val),
-                            Err(_) => Err(NodeError::PortValueParseError(
-                                String::from(port),
-                                format!("{:?}", TypeId::of::<T>()),
-                            )),
-                        },
-                    }
+        // Check if port exists first
+        if !self.meta.manifest.ports.contains_key(port_name) {
+            return Err(NodeError::PortError(port_name.to_string()));
+        }
+
+        match self.meta.port_values.get(port_name) {
+            Some((PortDirection::Input, val)) => {
+                match get_remapped_key(port_name, val) {
+                    // Value is a Blackboard pointer
+                    Some(key) => match self.blackboard.get::<T>(&key) {
+                        Some(val) => Ok(val.clone()),
+                        None => Err(NodeError::BlackboardError(key)),
+                    },
+                    // Value is just a normal string
+                    None => match <T as FromString>::from_string(val) {
+                        Ok(val) => Ok(val),
+                        Err(_) => Err(NodeError::PortValueParseError(
+                            String::from(port_name),
+                            format!("{:?}", TypeId::of::<T>()),
+                        )),
+                    },
                 }
             }
-            // Port not found
-            None => Err(NodeError::PortError(String::from(port))),
+            // Return error if it's not an input port
+            Some((dir, _)) => Err(NodeError::PortDirectionError {
+                name: port_name.to_string(),
+                actual: *dir,
+                expected: PortDirection::Input,
+            }),
+            // Try to load default since a value wasn't set in the XML
+            None => {
+                // Unwrapping is safe because we already verified the port exists
+                let port_info = self.meta.manifest.ports.get(port_name).unwrap();
+
+                // Return error if it's not an input port
+                if port_info.direction() != PortDirection::Input {
+                    return Err(NodeError::PortDirectionError {
+                        name: port_name.to_string(),
+                        actual: port_info.direction(),
+                        expected: PortDirection::Input,
+                    });
+                }
+
+                // Return error if there's no default
+                if !port_info.has_default() {
+                    return Err(NodeError::MissingRequiredPort(port_name.to_string()));
+                }
+
+                match port_info.default_value::<T>() {
+                    Some(default) => Ok(default.clone()),
+                    // The only reason this returns `None` is if the types aren't the same
+                    None => Err(NodeError::PortTypeMismatch(String::from(port_name))),
+                }
+            }
         }
     }
 
@@ -320,16 +343,17 @@ impl NodeDataGeneric {
     /// - Port value: `"="`: uses the port name as the blackboard key
     /// - `"foo"` uses `"foo"` as the blackboard key
     /// - `"{foo}"` uses `"foo"` as the blackboard key
-    pub fn set_output<T>(&mut self, port: &str, value: T) -> Result<(), NodeError>
+    pub fn set_output<T>(&self, port_name: &str, value: T) -> Result<(), NodeError>
     where
         T: Clone + Send + 'static,
     {
-        match self.meta.output_ports.get(port) {
-            Some(port_value) => {
+        match self.meta.port_values.get(port_name) {
+            // Only match if port exists and is an output port
+            Some((PortDirection::Output, port_value)) => {
                 let blackboard_key = match port_value.as_str() {
-                    "=" => port.to_string(),
+                    "=" => port_name.to_string(),
                     value => match value.is_bb_pointer() {
-                        true => value.strip_bb_pointer().unwrap(),
+                        true => value.strip_bb_pointer().unwrap().to_string(),
                         false => value.to_string(),
                     },
                 };
@@ -338,29 +362,7 @@ impl NodeDataGeneric {
 
                 Ok(())
             }
-            None => Err(NodeError::PortError(port.to_string())),
-        }
-    }
-
-    /// Adds a port to the config based on the direction. Used during XML parsing.
-    pub(crate) fn add_port(&mut self, direction: PortDirection, name: String, value: String) {
-        match direction {
-            PortDirection::Input => {
-                self.meta.input_ports.insert(name, value);
-            }
-            PortDirection::Output => {
-                self.meta.output_ports.insert(name, value);
-            }
-            _ => {}
-        };
-    }
-
-    /// Returns whether this node has a port with `name` and `direction`.
-    pub(crate) fn has_port(&self, name: &str, direction: PortDirection) -> bool {
-        match direction {
-            PortDirection::Input => self.meta.input_ports.contains_key(name),
-            PortDirection::Output => self.meta.output_ports.contains_key(name),
-            _ => false,
+            _ => Err(NodeError::PortError(port_name.to_string())),
         }
     }
 }
@@ -404,10 +406,13 @@ pub struct NodeMetadata {
     pub(crate) path: String,
     /// The type of this node
     pub(crate) node_type: NodeType,
+    /// Values of ports set in the node XML attributes
     #[builder(default)]
-    pub(crate) input_ports: PortsRemapping,
-    #[builder(default)]
-    pub(crate) output_ports: PortsRemapping,
+    pub(crate) port_values: HashMap<String, (PortDirection, String)>,
+    // #[builder(default)]
+    // pub(crate) input_ports: HashMap<String, String>,
+    // #[builder(default)]
+    // pub(crate) output_ports: HashMap<String, String>,
     pub(crate) manifest: Arc<TreeNodeManifest>,
     /// TODO: not used
     #[builder(default)]
@@ -415,4 +420,36 @@ pub struct NodeMetadata {
     /// TODO: not used
     #[builder(default)]
     pub(crate) _post_conditions: HashMap<PostCond, String>,
+}
+
+impl NodeMetadata {
+    /// Sets the value of a port. Used in XML parsing to set the value of a port
+    /// using the string value of the XML attribute.
+    pub(crate) fn set_port_value(&mut self, direction: PortDirection, name: String, value: String) {
+        self.port_values.insert(name, (direction, value));
+        // match direction {
+        //     PortDirection::Input => {
+        //         self.meta.input_ports.insert(name, value);
+        //     }
+        //     PortDirection::Output => {
+        //         self.meta.output_ports.insert(name, value);
+        //     }
+        //     _ => {}
+        // };
+    }
+
+    /// Returns whether the `name` and `direction` have been set using
+    /// [`Self::set_port_value`].
+    pub(crate) fn is_port_value_set(&self, name: &str, direction: PortDirection) -> bool {
+        self.port_values
+            .get(name)
+            .map(|(dir, _)| *dir == direction)
+            .unwrap_or(false)
+
+        // match direction {
+        //     PortDirection::Input => self.meta.input_ports.contains_key(name),
+        //     PortDirection::Output => self.meta.output_ports.contains_key(name),
+        //     _ => false,
+        // }
+    }
 }

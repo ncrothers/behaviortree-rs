@@ -1,4 +1,12 @@
-use std::{collections::HashMap, convert::Infallible, fmt::Debug, str::FromStr};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    convert::Infallible,
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 
 use quick_xml::events::attributes::Attributes;
 use thiserror::Error;
@@ -307,10 +315,39 @@ impl_into_string!(
 // End of String Conversions
 // ===========================
 
-pub type PortsList = HashMap<String, PortInfo>;
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct PortsList(HashMap<String, PortInfo>);
+
+impl<T> From<T> for PortsList
+where
+    T: IntoIterator<Item = PortInfo>,
+{
+    fn from(value: T) -> Self {
+        let list = value
+            .into_iter()
+            .map(|info| (info.name.clone(), info))
+            .collect();
+
+        Self(list)
+    }
+}
+
+impl Deref for PortsList {
+    type Target = HashMap<String, PortInfo>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for PortsList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// Data pertaining to the node at the time of instantiation during parsing
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TreeNodeManifest {
     pub node_type: NodeType,
     pub registration_id: String,
@@ -352,41 +389,137 @@ pub(crate) fn is_allowed_port_name(name: &str) -> bool {
     }
 }
 
-pub type PortsRemapping = HashMap<String, String>;
+pub trait DynPortValue: Any + Send + Sync {
+    fn as_any(&self) -> &dyn Any;
+    fn clone_boxed(&self) -> Box<dyn DynPortValue>;
+}
+
+impl<T> DynPortValue for T
+where
+    T: Any + Clone + Send + Sync,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_boxed(&self) -> Box<dyn DynPortValue> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn DynPortValue> {
+    fn clone(&self) -> Self {
+        self.clone_boxed()
+    }
+}
+
+impl std::fmt::Debug for Box<dyn DynPortValue> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Box {{ .. }}")
+    }
+}
+
+pub struct PortInfoBuilder<T> {
+    name: String,
+    direction: PortDirection,
+    description: Option<String>,
+    default_value: Option<Box<dyn DynPortValue>>,
+    parse_expr: bool,
+    type_id: TypeId,
+    _pd: PhantomData<T>,
+}
 
 /// Metadata about a node port
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct PortInfo {
+    name: String,
     /// Direction category for the port
     direction: PortDirection,
+    type_id: TypeId,
     /// Optional description of the port
     description: String,
-    /// Optional default value as a string, as it would appear in the XML
-    default_value: Option<String>,
+    default_value: Option<Box<dyn DynPortValue>>,
     /// When `true`, should parse the port value as an expression when loading
     /// the tree to validate syntax.
     parse_expr: bool,
 }
 
+impl<T> PortInfoBuilder<T>
+where
+    T: DynPortValue + 'static,
+{
+    pub fn build(self) -> PortInfo {
+        PortInfo {
+            name: self.name,
+            direction: self.direction,
+            type_id: self.type_id,
+            description: self.description.unwrap_or_default(),
+            default_value: self.default_value,
+            parse_expr: self.parse_expr,
+        }
+    }
+
+    pub fn description(mut self, description: String) -> Self {
+        self.description = Some(description);
+
+        self
+    }
+
+    pub fn default_value(mut self, value: impl Into<T>) -> Self {
+        self.default_value = Some(Box::new(value.into()));
+
+        self
+    }
+
+    pub fn parse_expr(mut self) -> Self {
+        self.parse_expr = true;
+
+        self
+    }
+}
+
 impl PortInfo {
-    pub fn new(direction: PortDirection) -> PortInfo {
-        Self {
-            direction,
-            description: String::new(),
+    pub fn input<T: DynPortValue + 'static>(name: impl Into<String>) -> PortInfoBuilder<T> {
+        PortInfoBuilder {
+            name: name.into(),
+            direction: PortDirection::Input,
+            type_id: TypeId::of::<T>(),
+            description: None,
             default_value: None,
             parse_expr: false,
+            _pd: PhantomData,
         }
     }
 
-    pub fn default_value(&self) -> Option<&str> {
-        match &self.default_value {
-            Some(v) => Some(v),
-            None => None,
+    pub fn output(name: impl Into<String>) -> PortInfoBuilder<String> {
+        PortInfoBuilder {
+            name: name.into(),
+            direction: PortDirection::Output,
+            type_id: TypeId::of::<String>(),
+            description: None,
+            default_value: None,
+            parse_expr: false,
+            _pd: PhantomData::<String>,
         }
     }
 
-    pub fn set_default(&mut self, default: impl BTToString) {
-        self.default_value = Some(default.bt_to_string())
+    pub fn has_default(&self) -> bool {
+        self.default_value.is_some()
+    }
+
+    // TODO: Make this function (and others like it) return `Result` instead of `Option`?
+    pub fn default_value<T>(&self) -> Option<&T>
+    where
+        T: 'static,
+    {
+        // Check the type IDs are the same first
+        if TypeId::of::<T>() != self.type_id {
+            None
+        } else {
+            self.default_value
+                .as_ref()
+                .and_then(|val| val.as_any().downcast_ref())
+        }
     }
 
     pub fn set_description(&mut self, description: String) {
@@ -406,15 +539,23 @@ impl PortInfo {
     }
 }
 
+impl PartialEq for PortInfo {
+    fn eq(&self, other: &Self) -> bool {
+        // Does not check equality between default values
+        self.name == other.name
+            && self.direction == other.direction
+            && self.type_id == other.type_id
+            && self.description == other.description
+            && self.parse_expr == other.parse_expr
+    }
+}
+
 /// Remap a blackboard key
-pub(crate) fn get_remapped_key(
-    port_name: impl AsRef<str>,
-    remapped_port: impl AsRef<str>,
-) -> Option<String> {
-    if port_name.as_ref() == "=" {
-        Some(port_name.as_ref().to_string())
+pub(crate) fn get_remapped_key(port_name: &str, remapped_port: &str) -> Option<String> {
+    if remapped_port == "=" || remapped_port == "{=}" {
+        Some(port_name.to_string())
     } else {
-        remapped_port.as_ref().strip_bb_pointer()
+        remapped_port.strip_bb_pointer().map(ToString::to_string)
     }
 }
 

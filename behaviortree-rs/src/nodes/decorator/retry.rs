@@ -1,7 +1,6 @@
 use crate::{
-    basic_types::NodeStatus,
-    macros::{define_ports, input_port},
-    nodes::{NodeData, NodeError, NodeResult},
+    basic_types::{NodeStatus, PortInfo},
+    nodes::{NodeData, NodeError, NodeResult, PortsList},
 };
 
 use super::{DecoratorContext, DecoratorNode};
@@ -40,7 +39,9 @@ impl Default for RetryNode {
 
 impl DecoratorNode for RetryNode {
     fn ports(&self) -> crate::basic_types::PortsList {
-        define_ports!(input_port!("num_attempts"))
+        PortsList::from([PortInfo::input::<i32>("num_attempts")
+            .default_value(1)
+            .build()])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {

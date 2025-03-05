@@ -56,7 +56,7 @@ impl NodeData<'_, ControlContext> {
     /// a helper that calls `halt_child_idx(0)`, primarily used for `Decorator` nodes.
     pub fn halt_child(&mut self, index: usize) -> NodeResult<()> {
         let child = self.children.get_mut(index).ok_or(NodeError::IndexError)?;
-        if child.status() == ::behaviortree_rs::nodes::NodeStatus::Running {
+        if child.status() == NodeStatus::Running {
             child.halt()?;
         }
         child.reset_status();

@@ -56,90 +56,101 @@ macro_rules! __impl_into_string {
 #[doc(inline)]
 pub(crate) use __impl_into_string as impl_into_string;
 
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __define_ports {
-    ( $($tu:expr),* $(,)? ) => {
-        {
-            let mut ports = $crate::basic_types::PortsList::new();
-            $(
-                let (name, port_info) = $tu;
-                ports.insert(String::from(name), port_info);
-            )*
+// /// Helper macro to build the [`PortsList`] type.
+// ///
+// /// [`PortsList`]: crate::basic_types::PortsList
+// ///
+// /// # Examples
+// ///
+// /// ```
+// /// use behaviortree_rs::prelude::*;
+// ///
+// /// fn ports() -> PortsList {
+// ///     define_ports!(
+// ///         input_port!("foo"),
+// ///         output_port!("bar")
+// ///     )
+// /// }
+// /// ```
+// #[macro_export]
+// #[doc(hidden)]
+// macro_rules! __define_ports {
+//     ( $($tu:expr),* $(,)? ) => {
+//         {
+//             let mut ports = $crate::basic_types::PortsList::new();
+//             $(
+//                 let (name, port_info) = $tu;
+//                 ports.insert(String::from(name), port_info);
+//             )*
 
-            ports
-        }
-    };
-}
-#[doc(inline)]
-pub use __define_ports as define_ports;
+//             ports
+//         }
+//     };
+// }
+// #[doc(inline)]
+// pub use __define_ports as define_ports;
 
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __input_port {
-    ($n:literal) => {{
-        use $crate::basic_types::{PortDirection, PortInfo};
-        let port_info = PortInfo::new(PortDirection::Input);
+// /// Helper macro to build an input port. Should be used in conjunction with
+// /// [`define_ports!`].
+// ///
+// /// # Examples
+// ///
+// /// ```
+// /// fn ports() -> PortsList {
+// ///     define_ports!(
+// ///         // Simple input port with no default parameters
+// ///         input_port!("foo"),
+// ///         input_port!("bar")
+// ///     )
+// /// }
+// /// ```
+// #[macro_export]
+// #[doc(hidden)]
+// macro_rules! __input_port {
+//     ($n:literal) => {{
+//         use $crate::basic_types::{PortDirection, PortInfo};
+//         let port_info = PortInfo::new(PortDirection::Input);
 
-        ($n, port_info)
-    }};
-    ($n:literal, expr) => {{
-        use $crate::basic_types::{PortDirection, PortInfo};
-        let mut port_info = PortInfo::new(PortDirection::Input);
+//         ($n, port_info)
+//     }};
+//     ($n:literal, expr) => {{
+//         use $crate::basic_types::{PortDirection, PortInfo};
+//         let mut port_info = PortInfo::new(PortDirection::Input);
 
-        port_info.set_expr(true);
+//         port_info.set_expr(true);
 
-        ($n, port_info)
-    }};
-    ($n:literal, $d:expr) => {{
-        use $crate::basic_types::{PortDirection, PortInfo};
-        let mut port_info = PortInfo::new(PortDirection::Input);
+//         ($n, port_info)
+//     }};
+//     ($n:literal, $d:expr) => {{
+//         use $crate::basic_types::{PortDirection, PortInfo};
+//         let mut port_info = PortInfo::new(PortDirection::Input);
 
-        port_info.set_default($d);
+//         port_info.set_default($d);
 
-        ($n, port_info)
-    }};
-    ($n:literal, $d:expr, expr) => {{
-        use $crate::basic_types::{PortDirection, PortInfo};
-        let mut port_info = PortInfo::new(PortDirection::Input);
+//         ($n, port_info)
+//     }};
+//     ($n:literal, $d:expr, expr) => {{
+//         use $crate::basic_types::{PortDirection, PortInfo};
+//         let mut port_info = PortInfo::new(PortDirection::Input);
 
-        port_info.set_default($d);
-        port_info.set_expr(true);
+//         port_info.set_default($d);
+//         port_info.set_expr(true);
 
-        ($n, port_info)
-    }};
-}
-#[doc(inline)]
-pub use __input_port as input_port;
-
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __output_port {
-    ($n:tt) => {{
-        use $crate::basic_types::{PortDirection, PortInfo};
-        let port_info = PortInfo::new(PortDirection::Output);
-
-        ($n, port_info)
-    }};
-}
-#[doc(inline)]
-pub use __output_port as output_port;
+//         ($n, port_info)
+//     }};
+// }
+// #[doc(inline)]
+// pub use __input_port as input_port;
 
 // #[macro_export]
 // #[doc(hidden)]
-// macro_rules! __build_node_ptr {
-//     ($conf:expr, $n:expr, $t:ty $(,$x:expr),* $(,)?) => {
-//         {
-//             let mut node = <$t>::create_node($n, $conf, $($x),*);
-//             let manifest = $crate::basic_types::TreeNodeManifest::new(node.node_category(), $n, node.provided_ports(), "");
-//             node.config_mut().set_manifest(::std::sync::Arc::new(manifest));
-//             // let node = Box::new(node);
-//             node
-//         }
-//     };
-//     // ($f:ident, $n:expr, $t:ty, $($x:expr),*) => {
-//     //     <$t>::new($n, $($x),*)
-//     // };
+// macro_rules! __output_port {
+//     ($n:tt) => {{
+//         use $crate::basic_types::{PortDirection, PortInfo};
+//         let port_info = PortInfo::new(PortDirection::Output);
+
+//         ($n, port_info)
+//     }};
 // }
 // #[doc(inline)]
-// pub use __build_node_ptr as build_node_ptr;
+// pub use __output_port as output_port;

@@ -12,6 +12,32 @@ type NodeCreateFnDyn = dyn Fn() -> Box<dyn NodeBase> + Send + Sync;
 
 static BUILTIN_NODES: OnceLock<HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)>> = OnceLock::new();
 
+/// Registry of nodes that are available when parsing and building a [`Tree`].
+/// Should be passed to a [`TreeConfig`](crate::prelude::TreeConfig).
+///
+/// When creating multiple [`Tree`]s, it is highly recommended to reuse a single
+/// `NodeRegistry` rather than building a new one for each tree.
+///
+/// [`Tree`]: crate::prelude::Tree
+///
+/// # Examples
+///
+/// ```
+/// use behaviortree_rs::prelude::*;
+///
+/// #[derive(Debug)]
+/// struct CustomNode;
+///
+/// impl SyncActionNode for CustomNode {
+///     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
+///         Ok(NodeStatus::Success)
+///     }
+/// }
+///
+/// let mut registry = NodeRegistry::new();
+///
+/// registry.insert("CustomNode", || CustomNode.to_boxed(), NodeType::Action);
+/// ```
 #[derive(Default)]
 pub struct NodeRegistry {
     node_map: HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)>,
@@ -26,9 +52,52 @@ impl NodeRegistry {
 
     /// Registers a custom node with the `name`.
     ///
-    /// `node_fn` is the function that builds your node and returns it as a
+    /// `node_builder_fn` is the function that builds your node and returns it as a
     /// `Box<dyn NodeBase>`. This function will be called for every instance of
     /// that node defined in the XML behavior tree definition.
+    ///
+    /// # Converting your node into `Box<dyn NodeBase>`
+    ///
+    /// There's a helper trait with a blanket implementation that can be used to
+    /// convert your custom node into a `Box<dyn NodeBase>`, [`ToBoxed`] with the
+    /// method [`ToBoxed::to_boxed`]. See the examples for its usage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::prelude::*;
+    ///
+    /// #[derive(Debug)]
+    /// struct CustomNode {
+    ///     foo: i32,
+    ///     bar: String,
+    /// }
+    ///
+    /// impl CustomNode {
+    ///     // You can provide a custom new method
+    ///     pub fn new(foo: i32) -> Self {
+    ///         Self {
+    ///             foo,
+    ///             bar: String::new(),
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// impl SyncActionNode for CustomNode {
+    ///     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
+    ///         Ok(NodeStatus::Success)
+    ///     }
+    /// }
+    ///
+    /// let mut registry = NodeRegistry::new();
+    ///
+    /// registry.insert(
+    ///     "CustomNode",
+    ///     // Here we call to_boxed() on the node after creation
+    ///     || CustomNode::new(10).to_boxed(),
+    ///     NodeType::Action
+    /// );
+    /// ```
     pub fn insert<F>(&mut self, name: impl AsRef<str>, node_builder_fn: F, node_type: NodeType)
     where
         F: Fn() -> Box<dyn NodeBase> + Send + Sync + 'static,
@@ -57,6 +126,7 @@ impl NodeRegistry {
     }
 }
 
+/// Registers all of the built-in nodes provided by `behaviortree_rs`
 fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
     let mut node_map = HashMap::new();
 

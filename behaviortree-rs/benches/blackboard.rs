@@ -15,7 +15,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_with_input(BenchmarkId::new("get", "i32"), &10i32, |b, input| {
         b.iter_custom(|iters| {
-            let mut bb = Blackboard::new();
+            let bb = Blackboard::new();
 
             bb.set("value", *input);
 
@@ -31,7 +31,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_with_input(BenchmarkId::new("get_ref", "i32"), &10i32, |b, input| {
         b.iter_custom(|iters| {
-            let mut bb = Blackboard::new();
+            let bb = Blackboard::new();
 
             bb.set("value", *input);
 
@@ -54,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         &expensive_value,
         |b, input| {
             b.iter_custom(|iters| {
-                let mut bb = Blackboard::new();
+                let bb = Blackboard::new();
 
                 bb.set("value", input.clone());
 
@@ -74,7 +74,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         &expensive_value,
         |b, input| {
             b.iter_custom(|iters| {
-                let mut bb = Blackboard::new();
+                let bb = Blackboard::new();
 
                 bb.set("value", input.clone());
 

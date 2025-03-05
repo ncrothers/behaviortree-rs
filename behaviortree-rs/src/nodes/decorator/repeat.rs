@@ -1,7 +1,6 @@
 use crate::{
-    basic_types::NodeStatus,
-    macros::{define_ports, input_port},
-    nodes::{NodeData, NodeError, NodeResult},
+    basic_types::{NodeStatus, PortInfo},
+    nodes::{NodeData, NodeError, NodeResult, PortsList},
 };
 
 use super::{DecoratorContext, DecoratorNode};
@@ -40,7 +39,7 @@ impl Default for RepeatNode {
 
 impl DecoratorNode for RepeatNode {
     fn ports(&self) -> crate::basic_types::PortsList {
-        define_ports!(input_port!("num_cycles"))
+        PortsList::from([PortInfo::input::<i32>("num_cycles").build()])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {

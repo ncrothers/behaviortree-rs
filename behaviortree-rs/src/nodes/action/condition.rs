@@ -3,9 +3,8 @@ use evalexpr::{
 };
 
 use crate::{
-    basic_types::NodeStatus,
-    macros::{define_ports, input_port},
-    nodes::{NodeData, NodeError, NodeResult},
+    basic_types::{NodeStatus, PortInfo},
+    nodes::{NodeData, NodeError, NodeResult, PortsList},
 };
 
 use super::{SyncActionContext, SyncActionNode};
@@ -17,14 +16,12 @@ pub struct ConditionNode {
 }
 
 impl ConditionNode {
-    fn run_condition(&mut self, node: &mut NodeData<SyncActionContext>) -> NodeResult<bool> {
+    fn run_condition(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult<bool> {
         if self.expr.is_none() {
-            let expr_str = node
-                .meta
-                .input_ports
-                .get("expr")
+            let expr_str = ctx
+                .get_input::<String>("expr")
                 .expect("couldn't get expr port, shouldn't be possible");
-            self.compile_condition(expr_str);
+            self.compile_condition(&expr_str);
         }
 
         let expr = self
@@ -44,25 +41,25 @@ impl ConditionNode {
                     .expect("variable missing : delimiter, shouldn't be possible");
 
                 let value = match var_type {
-                    "int" => Value::Int(node.blackboard.get::<i64>(name).ok_or_else(|| {
+                    "int" => Value::Int(ctx.blackboard.get::<i64>(name).ok_or_else(|| {
                         NodeError::BlackboardError(format!(
                             "Couldn't load blackboard key {name} as an integer"
                         ))
                     })?),
-                    "float" => Value::Float(node.blackboard.get::<f64>(name).ok_or_else(|| {
+                    "float" => Value::Float(ctx.blackboard.get::<f64>(name).ok_or_else(|| {
                         NodeError::BlackboardError(format!(
                             "Couldn't load blackboard key {name} as a float"
                         ))
                     })?),
                     "str" => {
-                        Value::String(node.blackboard.get::<String>(name).ok_or_else(|| {
+                        Value::String(ctx.blackboard.get::<String>(name).ok_or_else(|| {
                             NodeError::BlackboardError(format!(
                                 "Couldn't load blackboard key {name} as a string"
                             ))
                         })?)
                     }
                     "bool" => {
-                        Value::Boolean(node.blackboard.get::<bool>(name).ok_or_else(|| {
+                        Value::Boolean(ctx.blackboard.get::<bool>(name).ok_or_else(|| {
                             NodeError::BlackboardError(format!(
                                 "Couldn't load blackboard key {name} as a bool"
                             ))
@@ -94,7 +91,7 @@ impl ConditionNode {
 
 impl SyncActionNode for ConditionNode {
     fn ports(&self) -> crate::basic_types::PortsList {
-        define_ports!(input_port!("expr", expr))
+        PortsList::from([PortInfo::input::<String>("expr").parse_expr().build()])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {

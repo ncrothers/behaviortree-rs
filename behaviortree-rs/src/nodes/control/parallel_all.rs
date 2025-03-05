@@ -1,7 +1,6 @@
 use crate::{
-    basic_types::NodeStatus,
-    macros::{define_ports, input_port},
-    nodes::{NodeData, NodeError, NodeResult},
+    basic_types::{NodeStatus, PortInfo},
+    nodes::{NodeData, NodeError, NodeResult, PortsList},
 };
 
 use super::{ControlContext, ControlNode};
@@ -50,7 +49,9 @@ impl ParallelAllNode {
 
 impl ControlNode for ParallelAllNode {
     fn ports(&self) -> crate::basic_types::PortsList {
-        define_ports!(input_port!("max_failures", 1))
+        PortsList::from([PortInfo::input::<i32>("max_failures")
+            .default_value(1)
+            .build()])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {

@@ -1,14 +1,4 @@
-use behaviortree_rs::{
-    basic_types::{BTToString, NodeStatus, PortsList},
-    macros::{define_ports, input_port},
-    nodes::{
-        action::{
-            StatefulAction, StatefulActionContext, StatefulActionNode, SyncAction,
-            SyncActionContext, SyncActionNode,
-        },
-        NodeBase, NodeData, NodeDataGeneric, NodeResult, ToBoxed,
-    },
-};
+use behaviortree_rs::prelude::*;
 use behaviortree_rs_derive::{BTToString, FromString};
 
 #[derive(BTToString)]
@@ -40,7 +30,7 @@ impl SyncActionNode for StatusNode {
     }
 
     fn ports(&self) -> PortsList {
-        define_ports!(input_port!("status"))
+        PortsList::from([PortInfo::input::<NodeStatus>("status").build()])
     }
 }
 
@@ -64,7 +54,7 @@ impl SyncActionNode for SuccessThenFailure {
     }
 
     fn ports(&self) -> PortsList {
-        define_ports!(input_port!("iters"))
+        PortsList::from([PortInfo::input::<usize>("iters").build()])
     }
 }
 
@@ -81,7 +71,7 @@ impl SyncActionNode for EchoNode {
     }
 
     fn ports(&self) -> PortsList {
-        define_ports!(input_port!("msg"))
+        PortsList::from([PortInfo::input::<String>("msg").build()])
     }
 }
 
@@ -92,10 +82,12 @@ pub struct RunForNode {
 
 impl StatefulActionNode for RunForNode {
     fn ports(&self) -> PortsList {
-        define_ports!(
-            input_port!("iters"),
-            input_port!("status", NodeStatus::Success)
-        )
+        PortsList::from([
+            PortInfo::input::<usize>("iters").build(),
+            PortInfo::input::<NodeStatus>("status")
+                .default_value(NodeStatus::Success)
+                .build(),
+        ])
     }
 
     fn on_start(&mut self, ctx: &mut NodeData<StatefulActionContext>) -> NodeResult {
@@ -141,7 +133,10 @@ pub struct StringAppendNode {}
 
 impl SyncActionNode for StringAppendNode {
     fn ports(&self) -> PortsList {
-        define_ports!(input_port!("key"), input_port!("char"),)
+        PortsList::from([
+            PortInfo::input::<String>("key").build(),
+            PortInfo::input::<String>("char").build(),
+        ])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {

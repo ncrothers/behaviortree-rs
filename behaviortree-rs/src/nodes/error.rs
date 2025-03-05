@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::basic_types::PortDirection;
+
 #[derive(Debug, Error)]
 pub enum NodeError {
     #[error(
@@ -10,10 +12,20 @@ pub enum NodeError {
     IndexError,
     #[error("Couldn't find port [{0}]")]
     PortError(String),
-    #[error("Couldn't parse port [{0}] value into specified type [{1}]")]
+    #[error("Port [{0}] wasn't specified in XML, but has no default value.")]
+    MissingRequiredPort(String),
+    #[error("Port [{0}] was defined with a different type than requested.")]
+    PortTypeMismatch(String),
+    #[error("Port [{name}] exists, but is {actual}. Expected {expected}")]
+    PortDirectionError {
+        name: String,
+        actual: PortDirection,
+        expected: PortDirection,
+    },
     /// # Arguments
     /// * Port name
     /// * Expected type
+    #[error("Couldn't parse port [{0}] value into specified type [{1}]")]
     PortValueParseError(String, String),
     #[error("Couldn't find entry in blackboard [{0}]")]
     BlackboardError(String),

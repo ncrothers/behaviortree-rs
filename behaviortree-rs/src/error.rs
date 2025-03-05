@@ -11,9 +11,12 @@ pub enum ParseBoolError {
 
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error("Port name [{0}] did not match Node [{1}] port list: {2:?}")]
     /// `(port_name, node_name, port_list)`
+    #[error("Port name [{0}] did not match Node [{1}] port list: {2:?}")]
     InvalidPort(String, String, Vec<String>),
+    /// `(port_name, node_name, port_list)`
+    #[error("Node [{node}] missing required port [{port}]")]
+    MissingRequiredPort { node: String, port: String },
     #[error("Error occurred parsing XML attribute: {0}")]
     AttrError(#[from] quick_xml::events::attributes::AttrError),
     #[error("Error occurred parsing XML: {0}")]

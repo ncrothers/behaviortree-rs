@@ -1,11 +1,10 @@
-use std::{collections::HashMap, io::Cursor, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, io::Cursor, sync::Arc};
 
 use quick_xml::{events::Event, name::QName, Reader};
 
 use crate::{
     basic_types::{
-        is_allowed_port_name, AttrsToMap, FromString, NodeStatus, NodeType, PortDirection,
-        TreeNodeManifest,
+        is_allowed_port_name, AttrsToMap, FromString, NodeStatus, NodeType, TreeNodeManifest,
     },
     blackboard::{Blackboard, BlackboardString},
     error::ParseError,
@@ -20,12 +19,8 @@ enum CreateNodeControl {
     End,
 }
 
-/// Factory used to create [`Tree`]s from XML text, building both built-in and
-/// user-created custom nodes that have been registered with the `Factory`.
-///
-/// To register custom nodes, use [`Factory::register_node`] which makes them
-/// available when parsing XMLs.
-pub struct Parser<'a> {
+/// Parses a behavior tree XML into a [`Tree`] based on the provided [`TreeConfig`].
+pub(crate) struct Parser<'a> {
     /// Registry of tree nodes, both built-in and custom-defined
     tree_config: &'a TreeConfig<'a>,
     /// Mapping from each `<BehaviorTree>`'s `ID` to a copy of the `Reader`
@@ -41,7 +36,7 @@ pub struct Parser<'a> {
     main_tree_id: Option<String>,
 
     // TODO: temporary solution, potentially replace later
-    tree_uid: std::sync::Mutex<u32>,
+    tree_uid: RefCell<u32>,
 }
 
 impl<'a> Parser<'a> {
@@ -52,15 +47,12 @@ impl<'a> Parser<'a> {
             tree_config,
             tree_roots: HashMap::new(),
             main_tree_id: None,
-            tree_uid: std::sync::Mutex::new(0),
+            tree_uid: RefCell::new(0),
         }
     }
 
     fn get_uid(&self) -> u32 {
-        let uid = *self.tree_uid.lock().unwrap();
-        *self.tree_uid.lock().unwrap() += 1;
-
-        uid
+        self.tree_uid.replace_with(|prev| *prev + 1)
     }
 
     fn recursively_build_subtree(
@@ -96,7 +88,7 @@ impl<'a> Parser<'a> {
     ///
     /// * The `main_tree_to_execute` attribute is set on the `<root>` tag
     /// * There is only one `<BehaviorTree` element in the text.
-    pub fn create_tree(&mut self) -> Result<Tree, ParseError> {
+    pub(crate) fn create_tree(&mut self) -> Result<Tree, ParseError> {
         self.register_bt_from_text(self.tree_config.xml)?;
 
         // Get which tree ID to instantiate
@@ -142,7 +134,7 @@ impl<'a> Parser<'a> {
     /// Builds and returns the [`Tree`] with the name `main_tree_id`. This method
     /// can only be called after calling [`Factory::register_bt_from_text`], which
     /// loads all of the `<BehaviorTree>` definitions in the XML.
-    pub fn instantiate_tree(
+    fn instantiate_tree(
         &mut self,
         blackboard: &Blackboard,
         main_tree_id: &str,
@@ -156,10 +148,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `xml` as XML and loads all of the `<BehaviorTree>` elements in
-    /// preparation for building [`Tree`]s. This must be called before
-    /// [`Factory::instantiate_tree`], but is called automatically by
-    /// [`Factory::create_tree_from_text`].
-    pub fn register_bt_from_text(&mut self, xml: &str) -> Result<(), ParseError> {
+    /// preparation for building [`Tree`]s
+    fn register_bt_from_text(&mut self, xml: &str) -> Result<(), ParseError> {
         let mut reader = Reader::from_reader(Cursor::new(xml.as_bytes().to_vec()));
         reader.config_mut().trim_text(true);
 
@@ -200,6 +190,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Continues building children until none left, returning the set of children up
     fn build_children(
         &self,
         reader: &mut Reader<Cursor<Vec<u8>>>,
@@ -238,12 +229,12 @@ impl<'a> Parser<'a> {
                 return Err(ParseError::InvalidPort(
                     port_name.clone(),
                     node_name.to_owned(),
-                    manifest.ports.to_owned().into_keys().collect(),
+                    manifest.ports.keys().cloned().collect(),
                 ));
             }
         }
 
-        // Add ports to NodeConfig
+        // Set string port values
         for (remap_name, remap_val) in remap {
             if let Some(port) = manifest.ports.get(&remap_name) {
                 // Validate that any expr-enabled ports contain valid expressions,
@@ -254,20 +245,21 @@ impl<'a> Parser<'a> {
 
                     for key in expr.iter_variable_identifiers() {
                         // Check if it's a blackboard pointer
-                        if key.starts_with('{') && key.ends_with('}') {
-                            // Remove the brackets
-                            let inner_key = &key[1..(key.len() - 1)];
+                        if let Some(inner_key) = key.strip_bb_pointer() {
                             // Split the type from the name
                             let (name, var_type) = inner_key.split_once(':').ok_or_else(|| {
-                                ::behaviortree_rs::error::ParseError::PortExpressionMissingType(
-                                    inner_key.to_owned(),
-                                )
+                                ParseError::PortExpressionMissingType(inner_key.to_owned())
                             })?;
 
                             // Check if the type is supported
                             match var_type {
                                 "int" | "float" | "str" | "bool" => (),
-                                _ => return Err(::behaviortree_rs::error::ParseError::PortExpressionInvalidType { ident: name.to_owned(), type_name: var_type.to_owned() }),
+                                _ => {
+                                    return Err(ParseError::PortExpressionInvalidType {
+                                        ident: name.to_owned(),
+                                        type_name: var_type.to_owned(),
+                                    })
+                                }
                             };
                         }
                     }
@@ -275,23 +267,25 @@ impl<'a> Parser<'a> {
 
                 node_ptr
                     .data
-                    .add_port(port.direction(), remap_name, remap_val);
+                    .meta
+                    .set_port_value(port.direction(), remap_name, remap_val);
             }
         }
 
-        // Try to use defaults for unspecified port values
+        // Check if unspecified port values have a default. If not, they are required
+        // ports and parsing should fail
         for (port_name, port_info) in manifest.ports.iter() {
             let direction = port_info.direction();
 
-            if !matches!(direction, PortDirection::Output)
-                && !node_ptr.data.has_port(port_name, direction)
-                && port_info.default_value().is_some()
+            // If the port value hasn't been set and it doesn't have a default
+            // value, return error
+            if !(node_ptr.data.meta.is_port_value_set(port_name, direction)
+                || port_info.has_default())
             {
-                node_ptr.data.add_port(
-                    PortDirection::Input,
-                    port_name.clone(),
-                    port_info.default_value().unwrap().to_owned(),
-                );
+                return Err(ParseError::MissingRequiredPort {
+                    node: node_name.to_string(),
+                    port: port_name.clone(),
+                });
             }
         }
 
@@ -442,7 +436,7 @@ impl<'a> Parser<'a> {
 
                 let node = match node_name.as_str() {
                     "SubTree" => {
-                        let mut child_blackboard = Blackboard::with_parent(blackboard);
+                        let child_blackboard = Blackboard::with_parent(blackboard);
 
                         // Process attributes (Ports, special fields, etc)
                         for (attr, value) in attributes.iter() {
@@ -455,9 +449,10 @@ impl<'a> Parser<'a> {
                                 continue;
                             }
 
+                            // Add remapping if `value` is a Blackboard pointer
                             if let Some(port_name) = value.strip_bb_pointer() {
-                                // Add remapping if `value` is a Blackboard pointer
-                                child_blackboard.add_subtree_remapping(attr.to_owned(), port_name);
+                                child_blackboard
+                                    .add_subtree_remapping(attr.to_owned(), port_name.to_string());
                             } else {
                                 // Set string value into Blackboard
                                 child_blackboard.set(attr, value.clone());

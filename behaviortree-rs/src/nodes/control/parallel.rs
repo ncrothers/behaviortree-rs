@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
 use crate::{
-    basic_types::NodeStatus,
-    macros::{define_ports, input_port},
-    nodes::{NodeData, NodeError, NodeResult},
+    basic_types::{NodeStatus, PortInfo},
+    nodes::{NodeData, NodeError, NodeResult, PortsList},
 };
 
 use super::{ControlContext, ControlNode};
@@ -69,10 +68,14 @@ impl ParallelNode {
 
 impl ControlNode for ParallelNode {
     fn ports(&self) -> crate::basic_types::PortsList {
-        define_ports!(
-            input_port!("success_count", -1),
-            input_port!("failure_count", 1)
-        )
+        PortsList::from([
+            PortInfo::input::<i32>("success_count")
+                .default_value(-1)
+                .build(),
+            PortInfo::input::<i32>("failure_count")
+                .default_value(1)
+                .build(),
+        ])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<ControlContext>) -> NodeResult {

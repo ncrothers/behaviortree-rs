@@ -1,7 +1,6 @@
 use crate::{
-    basic_types::NodeStatus,
-    macros::{define_ports, input_port},
-    nodes::{NodeData, NodeResult},
+    basic_types::{NodeStatus, PortInfo},
+    nodes::{NodeData, NodeResult, PortsList},
 };
 
 use super::{DecoratorContext, DecoratorNode};
@@ -34,7 +33,9 @@ impl Default for RunOnceNode {
 
 impl DecoratorNode for RunOnceNode {
     fn ports(&self) -> crate::basic_types::PortsList {
-        define_ports!(input_port!("then_skip", true))
+        PortsList::from([PortInfo::input::<bool>("then_skip")
+            .default_value(true)
+            .build()])
     }
 
     fn tick(&mut self, ctx: &mut NodeData<DecoratorContext>) -> NodeResult {
