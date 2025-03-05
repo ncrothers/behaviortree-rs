@@ -100,10 +100,10 @@ impl DerefMut for Entry {
 }
 
 /// Self-referencing struct that holds a copied [`EntryPtr`], the locked
-/// `MutexGuard` around the value `T`, and a reference to `T` borrowed from
+/// `MutexGuard` around the `Entry`, and a reference to downcasted `T` borrowed from
 /// the `MutexGuard`.
 #[self_referencing]
-struct EntryInner<T>
+struct EntryGuardInner<T>
 where
     T: 'static,
 {
@@ -119,7 +119,7 @@ where
 /// on the `Blackboard` entry.
 ///
 /// Implements [`Deref`], providing access to the locked `T`.
-pub struct EntryGuard<T: 'static>(EntryInner<T>);
+pub struct EntryGuard<T: 'static>(EntryGuardInner<T>);
 
 impl<T> EntryGuard<T>
 where
@@ -132,7 +132,7 @@ where
         let is_valid = entry.lock().downcast_ref::<T>().is_some();
 
         if is_valid {
-            let inner = EntryInner::new(
+            let inner = EntryGuardInner::new(
                 entry,
                 |entry| entry.lock(),
                 |guard| {
