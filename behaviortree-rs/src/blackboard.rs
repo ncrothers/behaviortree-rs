@@ -2,13 +2,12 @@ use std::{
     any::Any,
     collections::HashMap,
     ops::{Deref, DerefMut},
+    str::FromStr,
     sync::Arc,
 };
 
 use ouroboros::self_referencing;
 use parking_lot::{Mutex, MutexGuard, RwLock};
-
-use crate::basic_types::{FromString, ParseStr};
 
 /// Trait that provides `strip_bb_pointer()` for all `AsRef<str>`,
 /// which includes `String` and `&str`.
@@ -60,6 +59,7 @@ where
 ///
 /// // Create a root-level Blackboard
 /// let bb = Blackboard::new();
+///
 /// // Create a child Blackboard
 /// let child = Blackboard::with_parent(&bb);
 /// ```
@@ -79,11 +79,12 @@ struct BlackboardData {
     auto_remapping: bool,
 }
 
+/// Convenience type for the pointer around an [`Entry`]
 type EntryPtr = Arc<Mutex<Entry>>;
 
 /// Holds the data for a [`Blackboard`] value at a key.
 #[derive(Debug)]
-struct Entry(pub Box<dyn Any + Send>);
+struct Entry(Box<dyn Any + Send>);
 
 impl Deref for Entry {
     type Target = Box<dyn Any + Send>;
@@ -169,12 +170,12 @@ where
 }
 
 impl Blackboard {
-    /// Creates a Blackboard with no parent and returns it as a `BlackboardPtr`.
+    /// Creates an empty `Blackboard` with no parent.
     pub fn new() -> Blackboard {
         Self::default()
     }
 
-    /// Create a new [`Blackboard`], with or without a parent. Only used internally.
+    /// Create an empty [`Blackboard`], with or without a parent. Only used internally.
     fn create(parent: Option<Blackboard>) -> Blackboard {
         Self {
             data: Arc::new(RwLock::new(BlackboardData {
@@ -186,7 +187,7 @@ impl Blackboard {
         }
     }
 
-    /// Creates a Blackboard with `parent_bb` as the parent. Returned as a new `BlackboardPtr`.
+    /// Creates an empty `Blackboard` with `parent_bb` as the parent.
     pub fn with_parent(parent_bb: &Blackboard) -> Blackboard {
         Self::create(Some(parent_bb.clone()))
     }
@@ -208,14 +209,14 @@ impl Blackboard {
     }
 
     /// Tries to return an owned copy of the value at `key`. The type `T` must
-    /// implement [`FromString`] when calling this method; it will try to convert
+    /// implement [`FromStr`] when calling this method; it will try to convert
     /// from `String`/`&str` if there's an entry at `key` but it is not
     /// of type `T`. If it does convert it successfully, it will replace
     /// the existing value with `T` so converting from the string type
     /// won't be needed next time.
     ///
     /// If you want to get an entry that has a type that doesn't implement
-    /// `FromString`, use [`Blackboard::get_exact`] instead.
+    /// `FromStr`, use [`Blackboard::get_exact`] instead.
     ///
     /// The `Blackboard` tries a few things when reading a `key`:
     /// - First it checks if it can find `key`:
@@ -245,7 +246,7 @@ impl Blackboard {
     /// ```
     pub fn get<T>(&self, key: impl AsRef<str>) -> Option<T>
     where
-        T: Any + Clone + FromString + Send,
+        T: Any + Clone + FromStr + Send,
     {
         self.get_ref(key)
             .map(|val: EntryGuard<T>| val.clone_consume())
@@ -318,7 +319,7 @@ impl Blackboard {
     /// ```
     pub fn get_ref<T>(&self, key: impl AsRef<str>) -> Option<EntryGuard<T>>
     where
-        T: Any + FromString + Send,
+        T: Any + FromStr + Send,
     {
         // Try without parsing string first, then try with parsing string
         self._get_value(key.as_ref())
@@ -327,7 +328,7 @@ impl Blackboard {
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
     /// doesn't match. This method has the benefit of not requiring the trait
-    /// `FromString`, which allows you to avoid implementing the trait for
+    /// [`FromStr`], which allows you to avoid implementing the trait for
     /// types that don't need it or it's impossible to represent the data
     /// type as a string.
     ///
@@ -434,17 +435,17 @@ impl Blackboard {
     }
 
     /// Internal method that tries to get the value at key, but only works
-    /// if it's a String/&str, then tries FromString to convert it to T.
+    /// if it's a `String`/`&str`, then tries [`FromStr::from_str`] to convert it to T.
     fn _parse_from_string<T>(&self, key: &str) -> Option<EntryGuard<T>>
     where
-        T: Any + FromString + Send,
+        T: Any + FromStr + Send,
     {
         // Try to get the key
         if let Some(entry) = self._get_entry(key) {
             let value = self._get_as_string(key)?;
 
             // Try to parse String into T
-            if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
+            if let Ok(value) = <T as FromStr>::from_str(&value) {
                 // Update value with the value type instead of just a string
                 let mut t = entry.lock();
                 t.0 = Box::new(value);
@@ -542,6 +543,8 @@ impl Default for Blackboard {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use rstest::rstest;
 
     use super::*;
@@ -666,11 +669,11 @@ mod tests {
             pub bar: String,
         }
 
-        impl FromString for CustomEntry {
+        impl FromStr for CustomEntry {
             type Err = anyhow::Error;
 
-            fn from_string(value: impl AsRef<str>) -> Result<Self, Self::Err> {
-                let splits: Vec<&str> = value.as_ref().split(',').collect();
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                let splits: Vec<&str> = value.split(',').collect();
 
                 if splits.len() != 2 {
                     Err(anyhow::anyhow!("Error!"))
@@ -702,5 +705,22 @@ mod tests {
         let val = bb.get::<CustomEntry>("custom_str_malformed");
         // Check it returns None if it cannot be parsed
         assert!(val.is_none());
+    }
+
+    #[rstest]
+    fn get_exact() {
+        let bb = Blackboard::new();
+
+        bb.set::<i32>("i32", 100i32);
+        bb.set("i32_str", "100");
+
+        assert!(bb.get_exact::<i32>("i32").is_some());
+        assert!(bb.get_exact::<&str>("i32_str").is_some());
+        // Should not try to convert &str to i32
+        assert!(bb.get_exact::<i32>("i32_str").is_none());
+
+        // After calling get, get_exact should work
+        assert!(bb.get::<i32>("i32_str").is_some());
+        assert!(bb.get_exact::<i32>("i32_str").is_some());
     }
 }

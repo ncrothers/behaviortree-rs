@@ -12,13 +12,14 @@ use std::{
     collections::HashMap,
     marker::PhantomData,
     ops::{Deref, DerefMut},
+    str::FromStr,
     sync::Arc,
 };
 
 use typed_builder::TypedBuilder;
 
 use crate::{
-    basic_types::{get_remapped_key, FromString, NodeType, PortDirection, TreeNodeManifest},
+    basic_types::{get_remapped_key, NodeType, PortDirection, TreeNodeManifest},
     blackboard::BlackboardString,
     Blackboard,
 };
@@ -276,7 +277,7 @@ impl NodeDataGeneric {
     /// - If port value is a string, couldn't convert it to `T` using `parse_str()`.
     pub fn get_input<T>(&self, port_name: &str) -> Result<T, NodeError>
     where
-        T: FromString + Clone + Send + 'static,
+        T: FromStr + Clone + Send + 'static,
     {
         // Check if port exists first
         if !self.meta.manifest.ports.contains_key(port_name) {
@@ -292,7 +293,7 @@ impl NodeDataGeneric {
                         None => Err(NodeError::BlackboardError(key)),
                     },
                     // Value is just a normal string
-                    None => match <T as FromString>::from_string(val) {
+                    None => match <T as FromStr>::from_str(val) {
                         Ok(val) => Ok(val),
                         Err(_) => Err(NodeError::PortValueParseError(
                             String::from(port_name),

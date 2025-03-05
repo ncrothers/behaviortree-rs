@@ -13,7 +13,6 @@ pub mod value;
 pub mod nodes;
 
 pub mod error;
-pub mod macros;
 pub mod node_registry;
 pub(crate) mod parser;
 pub mod tree;
@@ -27,9 +26,7 @@ pub use blackboard::Blackboard;
 pub use nodes::NodeResult;
 
 pub mod prelude {
-    pub use crate::basic_types::{
-        BTToString, FromString, NodeStatus, NodeType, PortInfo, PortsList,
-    };
+    pub use crate::basic_types::{NodeStatus, NodeType, PortInfo, PortsList};
     pub use crate::blackboard::Blackboard;
     pub use crate::node_registry::NodeRegistry;
     pub use crate::nodes::*;

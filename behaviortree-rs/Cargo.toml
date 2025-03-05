@@ -14,7 +14,7 @@ repository.workspace = true
 anyhow = "1.0.75"
 behaviortree-rs-derive = { path = "../behaviortree-rs-derive" }
 # behaviortree-rs-derive = "0.2.5-alpha3"
-evalexpr = "12.0.1"
+evalexpr = { version = "12.0.1", optional = true }
 log = "0.4.22"
 ouroboros = "0.18.5"
 parking_lot = "0.12.3"
@@ -26,6 +26,9 @@ typed-builder = "0.20.0"
 criterion = "0.5.1"
 pretty_env_logger = "0.5.0"
 rstest = "0.23.0"
+
+[features]
+expr = ["dep:evalexpr"]
 
 [[bench]]
 name = "ticking"

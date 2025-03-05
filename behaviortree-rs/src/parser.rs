@@ -1,11 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, io::Cursor, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, io::Cursor, str::FromStr, sync::Arc};
 
 use quick_xml::{events::Event, name::QName, Reader};
 
 use crate::{
-    basic_types::{
-        is_allowed_port_name, AttrsToMap, FromString, NodeStatus, NodeType, TreeNodeManifest,
-    },
+    basic_types::{is_allowed_port_name, AttrsToMap, NodeStatus, NodeType, TreeNodeManifest},
     blackboard::{Blackboard, BlackboardString},
     error::ParseError,
     nodes::{decorator::SubTreeNode, NodeDataGeneric, NodeMetadata, ToBoxed, TreeNode},
@@ -239,6 +237,7 @@ impl<'a> Parser<'a> {
             if let Some(port) = manifest.ports.get(&remap_name) {
                 // Validate that any expr-enabled ports contain valid expressions,
                 // and the provided types for blackboard pointers are one of the valid ones
+                #[cfg(feature = "expr")]
                 if port.parse_expr() {
                     let expr =
                         evalexpr::build_operator_tree::<evalexpr::DefaultNumericTypes>(&remap_val)?;
@@ -443,7 +442,7 @@ impl<'a> Parser<'a> {
                             // Set autoremapping to true or false
                             if attr == "_autoremap" {
                                 child_blackboard
-                                    .set_auto_remapping(<bool as FromString>::from_string(value)?);
+                                    .set_auto_remapping(<bool as FromStr>::from_str(value)?);
                                 continue;
                             } else if !is_allowed_port_name(attr) {
                                 continue;

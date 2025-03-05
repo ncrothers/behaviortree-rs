@@ -1,6 +1,8 @@
+#[cfg(feature = "expr")]
 mod condition;
 use std::ops::{Deref, DerefMut};
 
+#[cfg(feature = "expr")]
 pub use condition::*;
 
 use crate::nodes::NodeError;

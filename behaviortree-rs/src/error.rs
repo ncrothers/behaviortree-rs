@@ -1,13 +1,8 @@
-use std::string::FromUtf8Error;
+use std::{str::ParseBoolError, string::FromUtf8Error};
 
+#[cfg(feature = "expr")]
 use evalexpr::{DefaultNumericTypes, EvalexprError};
 use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum ParseBoolError {
-    #[error("string wasn't one of the expected: 1/0, true/false, TRUE/FALSE")]
-    ParseError,
-}
 
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -45,6 +40,7 @@ pub enum ParseError {
     ParseStringError(#[from] ParseBoolError),
     #[error("Violated node type constraint: {0}")]
     ViolateNodeConstraint(String),
+    #[cfg(feature = "expr")]
     #[error("Error parsing expression in port value: {0}")]
     InvalidPortExpression(#[from] EvalexprError<DefaultNumericTypes>),
     #[error("Variable in blackboard pointer \"{0}\" is missing a type.")]

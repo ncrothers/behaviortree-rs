@@ -1,19 +1,8 @@
 use behaviortree_rs::prelude::*;
-use behaviortree_rs_derive::{BTToString, FromString};
-
-#[derive(BTToString)]
-struct Test {}
-
-impl ToString for Test {
-    fn to_string(&self) -> String {
-        todo!()
-    }
-}
 
 pub fn test_setup() {
     let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Debug)
-        .is_test(true)
+        .filter_level(log::LevelFilter::Off)
         .try_init();
 }
 
@@ -24,7 +13,7 @@ impl SyncActionNode for StatusNode {
     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
         let status: NodeStatus = ctx.get_input("status")?;
 
-        log::info!("I am a node that returns {}!", status.bt_to_string());
+        log::info!("I am a node that returns {}!", status);
 
         Ok(status)
     }

@@ -307,10 +307,7 @@ fn ignore_treenodesmodel() {
 
 #[test]
 fn load_adjacent_controls() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Debug)
-        .is_test(false)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root main_tree_to_execute="main">
@@ -353,10 +350,7 @@ fn load_adjacent_controls() {
 
 #[test]
 fn async_test() {
-    let _ = pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Debug)
-        .is_test(false)
-        .try_init();
+    nodes::test_setup();
 
     let xml = r#"
         <root main_tree_to_execute="main">
@@ -402,6 +396,7 @@ fn async_test() {
     assert!(res.is_ok());
 }
 
+#[cfg(feature = "expr")]
 #[test]
 fn condition() {
     nodes::test_setup();
@@ -421,7 +416,7 @@ fn condition() {
 
     let mut registry = NodeRegistry::default();
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
-    let mut blackboard = Blackboard::new();
+    let blackboard = Blackboard::new();
 
     let config = TreeConfig::builder()
         .blackboard(blackboard.clone())

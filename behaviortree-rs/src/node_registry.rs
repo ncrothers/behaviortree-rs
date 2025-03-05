@@ -171,10 +171,15 @@ fn builtin_nodes() -> HashMap<String, (NodeType, Arc<NodeCreateFnDyn>)> {
     node_map.insert(String::from("WhileDoElse"), (NodeType::Control, node));
 
     // Decorator nodes
-    // Condition node
-    let node =
-        Arc::new(|| -> Box<dyn NodeBase> { nodes::action::ConditionNode::default().to_boxed() });
-    node_map.insert(String::from("Condition"), (NodeType::Action, node));
+
+    #[cfg(feature = "expr")]
+    {
+        // Condition node
+        let node = Arc::new(|| -> Box<dyn NodeBase> {
+            nodes::action::ConditionNode::default().to_boxed()
+        });
+        node_map.insert(String::from("Condition"), (NodeType::Action, node));
+    }
 
     let node = Arc::new(|| -> Box<dyn NodeBase> { nodes::decorator::ForceFailureNode.to_boxed() });
     node_map.insert(String::from("ForceFailure"), (NodeType::Decorator, node));

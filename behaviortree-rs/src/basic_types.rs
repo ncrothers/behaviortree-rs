@@ -1,7 +1,6 @@
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
-    convert::Infallible,
     fmt::Debug,
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -11,11 +10,7 @@ use std::{
 use quick_xml::events::attributes::Attributes;
 use thiserror::Error;
 
-use crate::{
-    blackboard::BlackboardString,
-    error::{ParseBoolError, ParseError},
-    macros::{impl_from_string, impl_into_string},
-};
+use crate::{blackboard::BlackboardString, error::ParseError};
 
 /// Specifies all types of nodes that can be used in a behavior tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -67,7 +62,7 @@ impl NodeStatus {
         matches!(self, Self::Success | Self::Failure)
     }
 
-    pub fn into_string_color(&self) -> String {
+    pub fn to_colorized_string(&self) -> String {
         let color_start = match self {
             Self::Idle => "\x1b[36m",
             Self::Running => "\x1b[33m",
@@ -76,7 +71,7 @@ impl NodeStatus {
             Self::Skipped => "\x1b[34m",
         };
 
-        color_start.to_string() + &self.bt_to_string() + "\x1b[0m"
+        color_start.to_string() + &self.to_string() + "\x1b[0m"
     }
 }
 
@@ -135,108 +130,11 @@ impl std::fmt::Display for PortDirection {
 // Converting string to types
 // ===========================
 
-///
-/// Trait for custom conversion from String
-///
-/// Out of the box, `ParseStr<T>` is implemented on all numeric types, `bool`,
-/// `NodeStatus`, `NodeType`, and `PortDirection`, and `Vec`s holding those types.
-///
-/// To implement `ParseStr<T>` on your own type, you can derive
-/// the `behaviortree_rs` trait: `FromString` on it. To derive this
-/// trait you will need to implement the Rust built-in trait `FromStr`.
-/// You can also just implement `FromString` yourself, but it's recommended
-/// to implement `FromStr` that also provides the `::parse()` function.
-///
-/// # Example
-///
-/// ```
-/// use behaviortree_rs::derive::FromString;
-///
-/// #[derive(FromString)]
-/// struct MyType {
-///     foo: String
-/// }
-///
-/// impl std::str::FromStr for MyType {
-///     // Replace with your error
-///     type Err = core::convert::Infallible;
-///
-///     fn from_str(s: &str) -> Result<Self, Self::Err> {
-///         todo!()
-///     }
-/// }
-///
-/// ```
-pub trait ParseStr<T> {
-    type Err;
-
-    fn parse_str(&self) -> Result<T, Self::Err>;
-}
-
-// Implements ParseStr<T> for all T that implements FromString
-impl<T, U> ParseStr<T> for U
-where
-    T: FromString,
-    U: AsRef<str>,
-{
-    type Err = <T as FromString>::Err;
-
-    fn parse_str(&self) -> Result<T, Self::Err> {
-        <T as FromString>::from_string(self)
-    }
-}
-
-pub trait FromString
-where
-    Self: Sized,
-{
-    type Err;
-
-    fn from_string(value: impl AsRef<str>) -> Result<Self, Self::Err>;
-}
-
-impl<T> FromString for Vec<T>
-where
-    T: FromString,
-{
-    type Err = <T as FromString>::Err;
-
-    fn from_string(value: impl AsRef<str>) -> Result<Vec<T>, Self::Err> {
-        value
-            .as_ref()
-            .split(';')
-            .map(|x| T::from_string(x))
-            .collect()
-    }
-}
-
-impl_from_string!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
-
-impl FromString for String {
-    type Err = Infallible;
-
-    fn from_string(value: impl AsRef<str>) -> Result<String, Self::Err> {
-        Ok(value.as_ref().to_string())
-    }
-}
-
-impl FromString for bool {
-    type Err = ParseBoolError;
-
-    fn from_string(value: impl AsRef<str>) -> Result<bool, ParseBoolError> {
-        match value.as_ref() {
-            "1" | "true" | "TRUE" => Ok(true),
-            "0" | "false" | "FALSE" => Ok(false),
-            _ => Err(ParseBoolError::ParseError),
-        }
-    }
-}
-
-impl FromString for NodeStatus {
+impl FromStr for NodeStatus {
     type Err = ParseNodeStatusError;
 
-    fn from_string(value: impl AsRef<str>) -> Result<NodeStatus, Self::Err> {
-        match value.as_ref() {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
             "IDLE" | "Idle" => Ok(NodeStatus::Idle),
             "RUNNING" | "Running" => Ok(NodeStatus::Running),
             "SUCCESS" | "Success" => Ok(NodeStatus::Success),
@@ -247,11 +145,11 @@ impl FromString for NodeStatus {
     }
 }
 
-impl FromString for NodeType {
+impl FromStr for NodeType {
     type Err = ParseNodeTypeError;
 
-    fn from_string(value: impl AsRef<str>) -> Result<NodeType, Self::Err> {
-        match value.as_ref() {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
             "Action" => Ok(NodeType::Action),
             "Condition" => Ok(NodeType::Condition),
             "Control" => Ok(NodeType::Control),
@@ -262,11 +160,11 @@ impl FromString for NodeType {
     }
 }
 
-impl FromString for PortDirection {
+impl FromStr for PortDirection {
     type Err = ParsePortDirectionError;
 
-    fn from_string(value: impl AsRef<str>) -> Result<PortDirection, Self::Err> {
-        match value.as_ref() {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
             "Input" | "INPUT" => Ok(PortDirection::Input),
             "Output" | "OUTPUT" => Ok(PortDirection::Output),
             "InOut" | "INOUT" => Ok(PortDirection::InOut),
@@ -274,42 +172,6 @@ impl FromString for PortDirection {
         }
     }
 }
-
-/// Custom implementation of converting a type into a `String`. Going to/from
-/// strings is handled in a custom way in `behaviortree_rs` to maintain
-/// compatibility with the original BehaviorTree.CPP library.
-pub trait BTToString {
-    /// Convert the type to a string
-    fn bt_to_string(&self) -> String;
-}
-
-impl BTToString for String {
-    fn bt_to_string(&self) -> String {
-        self.clone()
-    }
-}
-
-impl_into_string!(
-    u8,
-    u16,
-    u32,
-    u64,
-    u128,
-    usize,
-    i8,
-    i16,
-    i32,
-    i64,
-    i128,
-    isize,
-    f32,
-    f64,
-    bool,
-    NodeStatus,
-    NodeType,
-    PortDirection,
-    &str
-);
 
 // ===========================
 // End of String Conversions
@@ -424,6 +286,7 @@ pub struct PortInfoBuilder<T> {
     direction: PortDirection,
     description: Option<String>,
     default_value: Option<Box<dyn DynPortValue>>,
+    #[cfg(feature = "expr")]
     parse_expr: bool,
     type_id: TypeId,
     _pd: PhantomData<T>,
@@ -441,6 +304,7 @@ pub struct PortInfo {
     default_value: Option<Box<dyn DynPortValue>>,
     /// When `true`, should parse the port value as an expression when loading
     /// the tree to validate syntax.
+    #[cfg(feature = "expr")]
     parse_expr: bool,
 }
 
@@ -455,6 +319,7 @@ where
             type_id: self.type_id,
             description: self.description.unwrap_or_default(),
             default_value: self.default_value,
+            #[cfg(feature = "expr")]
             parse_expr: self.parse_expr,
         }
     }
@@ -471,6 +336,7 @@ where
         self
     }
 
+    #[cfg(feature = "expr")]
     pub fn parse_expr(mut self) -> Self {
         self.parse_expr = true;
 
@@ -486,6 +352,7 @@ impl PortInfo {
             type_id: TypeId::of::<T>(),
             description: None,
             default_value: None,
+            #[cfg(feature = "expr")]
             parse_expr: false,
             _pd: PhantomData,
         }
@@ -498,6 +365,7 @@ impl PortInfo {
             type_id: TypeId::of::<String>(),
             description: None,
             default_value: None,
+            #[cfg(feature = "expr")]
             parse_expr: false,
             _pd: PhantomData::<String>,
         }
@@ -526,10 +394,12 @@ impl PortInfo {
         self.description = description
     }
 
+    #[cfg(feature = "expr")]
     pub fn set_expr(&mut self, parse_expr: bool) {
         self.parse_expr = parse_expr;
     }
 
+    #[cfg(feature = "expr")]
     pub fn parse_expr(&self) -> bool {
         self.parse_expr
     }
@@ -540,18 +410,27 @@ impl PortInfo {
 }
 
 impl PartialEq for PortInfo {
+    #[allow(unused_mut, unused_assignments)]
     fn eq(&self, other: &Self) -> bool {
         // Does not check equality between default values
-        self.name == other.name
+        let mut base_eq = self.name == other.name
             && self.direction == other.direction
             && self.type_id == other.type_id
-            && self.description == other.description
-            && self.parse_expr == other.parse_expr
+            && self.description == other.description;
+
+        #[cfg(feature = "expr")]
+        {
+            // Only check this on the expr feature
+            base_eq = self.parse_expr == other.parse_expr;
+        }
+
+        base_eq
     }
 }
 
 /// Remap a blackboard key
 pub(crate) fn get_remapped_key(port_name: &str, remapped_port: &str) -> Option<String> {
+    // When the port value is "=", use the port name
     if remapped_port == "=" || remapped_port == "{=}" {
         Some(port_name.to_string())
     } else {

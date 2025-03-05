@@ -26,14 +26,24 @@ pub struct NodeIter<'a> {
 /// ```
 /// use behaviortree_rs::prelude::*;
 ///
+/// #[derive(Debug)]
+/// struct SimpleNode;
+///
+/// impl SyncActionNode for SimpleNode {
+///     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
+///         Ok(NodeStatus::Success)
+///     }
+/// }
+///
 /// let mut registry = NodeRegistry::default();
 ///
 /// // Insert custom nodes into the registry here
+/// registry.insert("SimpleNode", || SimpleNode.to_boxed(), NodeType::Action);
 ///
 /// let xml = r#"
 /// <root>
 ///     <BehaviorTree ID="main-tree">
-///         <Condition expr="" />
+///         <SimpleNode />
 ///     </BehaviorTree>
 /// </root>
 /// "#;
@@ -44,7 +54,7 @@ pub struct NodeIter<'a> {
 ///     // Optional
 ///     .tree_name("main-tree")
 ///     // Optional
-///     .blackboard(Blackboard::default())
+///     .blackboard(Blackboard::new())
 ///     .build();
 ///
 /// let tree = Tree::from_config(&config);
@@ -76,14 +86,26 @@ pub struct TreeConfig<'a> {
 /// ```
 /// use behaviortree_rs::prelude::*;
 ///
+/// #[derive(Debug)]
+/// struct SimpleNode;
+///
+/// impl SyncActionNode for SimpleNode {
+///     fn tick(&mut self, ctx: &mut NodeData<SyncActionContext>) -> NodeResult {
+///         Ok(NodeStatus::Success)
+///     }
+/// }
+///
 /// let mut registry = NodeRegistry::default();
+///
+/// // Insert custom nodes into the registry here
+/// registry.insert("SimpleNode", || SimpleNode.to_boxed(), NodeType::Action);
 ///
 /// // Insert custom nodes into the registry here
 ///
 /// let xml = r#"
 /// <root>
 ///     <BehaviorTree ID="main-tree">
-///         <Condition expr="" />
+///         <SimpleNode />
 ///     </BehaviorTree>
 /// </root>
 /// "#;
