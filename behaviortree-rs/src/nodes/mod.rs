@@ -346,7 +346,7 @@ impl NodeDataGeneric {
     /// - `"{foo}"` uses `"foo"` as the blackboard key
     pub fn set_output<T>(&self, port_name: &str, value: T) -> Result<(), NodeError>
     where
-        T: Clone + Send + 'static,
+        T: Send + 'static,
     {
         match self.meta.port_values.get(port_name) {
             // Only match if port exists and is an output port
@@ -410,10 +410,6 @@ pub struct NodeMetadata {
     /// Values of ports set in the node XML attributes
     #[builder(default)]
     pub(crate) port_values: HashMap<String, (PortDirection, String)>,
-    // #[builder(default)]
-    // pub(crate) input_ports: HashMap<String, String>,
-    // #[builder(default)]
-    // pub(crate) output_ports: HashMap<String, String>,
     pub(crate) manifest: Arc<TreeNodeManifest>,
     /// TODO: not used
     #[builder(default)]
@@ -428,29 +424,14 @@ impl NodeMetadata {
     /// using the string value of the XML attribute.
     pub(crate) fn set_port_value(&mut self, direction: PortDirection, name: String, value: String) {
         self.port_values.insert(name, (direction, value));
-        // match direction {
-        //     PortDirection::Input => {
-        //         self.meta.input_ports.insert(name, value);
-        //     }
-        //     PortDirection::Output => {
-        //         self.meta.output_ports.insert(name, value);
-        //     }
-        //     _ => {}
-        // };
     }
 
-    /// Returns whether the `name` and `direction` have been set using
-    /// [`Self::set_port_value`].
+    /// Returns whether the value for `name` and `direction` has been set using
+    /// [`NodeMetadata::set_port_value`].
     pub(crate) fn is_port_value_set(&self, name: &str, direction: PortDirection) -> bool {
         self.port_values
             .get(name)
             .map(|(dir, _)| *dir == direction)
             .unwrap_or(false)
-
-        // match direction {
-        //     PortDirection::Input => self.meta.input_ports.contains_key(name),
-        //     PortDirection::Output => self.meta.output_ports.contains_key(name),
-        //     _ => false,
-        // }
     }
 }

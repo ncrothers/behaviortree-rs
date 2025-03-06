@@ -177,7 +177,8 @@ impl FromStr for PortDirection {
 // End of String Conversions
 // ===========================
 
-#[derive(Debug, Default, Clone, PartialEq)]
+/// Wrapper around a `HashMap` storing ports
+#[derive(Debug, Default, PartialEq)]
 pub struct PortsList(HashMap<String, PortInfo>);
 
 impl<T> From<T> for PortsList
@@ -251,41 +252,11 @@ pub(crate) fn is_allowed_port_name(name: &str) -> bool {
     }
 }
 
-pub trait DynPortValue: Any + Send + Sync {
-    fn as_any(&self) -> &dyn Any;
-    fn clone_boxed(&self) -> Box<dyn DynPortValue>;
-}
-
-impl<T> DynPortValue for T
-where
-    T: Any + Clone + Send + Sync,
-{
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_boxed(&self) -> Box<dyn DynPortValue> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn DynPortValue> {
-    fn clone(&self) -> Self {
-        self.clone_boxed()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn DynPortValue> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Box {{ .. }}")
-    }
-}
-
 pub struct PortInfoBuilder<T> {
     name: String,
     direction: PortDirection,
     description: Option<String>,
-    default_value: Option<Box<dyn DynPortValue>>,
+    default_value: Option<Box<dyn Any + Send + Sync>>,
     #[cfg(feature = "expr")]
     parse_expr: bool,
     type_id: TypeId,
@@ -293,7 +264,7 @@ pub struct PortInfoBuilder<T> {
 }
 
 /// Metadata about a node port
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PortInfo {
     name: String,
     /// Direction category for the port
@@ -301,7 +272,7 @@ pub struct PortInfo {
     type_id: TypeId,
     /// Optional description of the port
     description: String,
-    default_value: Option<Box<dyn DynPortValue>>,
+    default_value: Option<Box<dyn Any + Send + Sync>>,
     /// When `true`, should parse the port value as an expression when loading
     /// the tree to validate syntax.
     #[cfg(feature = "expr")]
@@ -310,7 +281,7 @@ pub struct PortInfo {
 
 impl<T> PortInfoBuilder<T>
 where
-    T: DynPortValue + 'static,
+    T: Any + Send + Sync + 'static,
 {
     pub fn build(self) -> PortInfo {
         PortInfo {
@@ -324,8 +295,8 @@ where
         }
     }
 
-    pub fn description(mut self, description: String) -> Self {
-        self.description = Some(description);
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
 
         self
     }
@@ -345,7 +316,30 @@ where
 }
 
 impl PortInfo {
-    pub fn input<T: DynPortValue + 'static>(name: impl Into<String>) -> PortInfoBuilder<T> {
+    /// Start a builder for an input port. The type `T` must be specified, and
+    /// this type will be enforced when retrieving the value later with
+    /// `get_input()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::prelude::*;
+    ///
+    /// let port = PortInfo::input::<i32>("foo")
+    ///     // Optionally, set the default value of the port
+    ///     .default_value(10i32)
+    ///     // Optionally, set the description for the port
+    ///     .description("Port description")
+    ///     // If the `expr` feature is enabled, optionally enable expression
+    ///     // validation during parsing.
+    ///     // .parse_expr()
+    ///     // Finally, build and get the `PortInfo`
+    ///     .build();
+    ///
+    /// assert!(port.has_default());
+    /// assert_eq!(port.default_value::<i32>().copied(), Some(10));
+    /// ```
+    pub fn input<T: Any + Send + Sync + 'static>(name: impl Into<String>) -> PortInfoBuilder<T> {
         PortInfoBuilder {
             name: name.into(),
             direction: PortDirection::Input,
@@ -386,17 +380,8 @@ impl PortInfo {
         } else {
             self.default_value
                 .as_ref()
-                .and_then(|val| val.as_any().downcast_ref())
+                .and_then(|val| val.downcast_ref())
         }
-    }
-
-    pub fn set_description(&mut self, description: String) {
-        self.description = description
-    }
-
-    #[cfg(feature = "expr")]
-    pub fn set_expr(&mut self, parse_expr: bool) {
-        self.parse_expr = parse_expr;
     }
 
     #[cfg(feature = "expr")]

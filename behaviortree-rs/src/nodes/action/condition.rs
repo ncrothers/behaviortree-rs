@@ -9,7 +9,6 @@ use crate::{
 
 use super::{SyncActionContext, SyncActionNode};
 
-/// The InverterNode returns Failure on Success, and Success on Failure
 #[derive(Debug, Default)]
 pub struct ConditionNode {
     expr: Option<evalexpr::Node>,
