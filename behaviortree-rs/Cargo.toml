@@ -21,6 +21,7 @@ parking_lot = "0.12.3"
 quick-xml = { version = "0.37.2", features = ["serde", "serialize"] }
 thiserror = "1.0.47"
 typed-builder = "0.20.0"
+winnow = "0.7.3"
 
 [dev-dependencies]
 criterion = "0.5.1"

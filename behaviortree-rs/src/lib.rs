@@ -17,6 +17,8 @@ pub mod node_registry;
 pub(crate) mod parser;
 pub mod tree;
 
+pub mod scripting;
+
 pub mod derive {
     pub use behaviortree_rs_derive::*;
 }
