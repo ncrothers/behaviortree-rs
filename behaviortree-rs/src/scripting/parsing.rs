@@ -1,6 +1,13 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, str::FromStr};
 
-use winnow::{ascii::{dec_int, float}, combinator::{alt, separated, trace}, error::{ContextError, ErrMode}, stream::{AsChar, Stream}, token::{one_of, take_while}, ModalResult, Parser};
+use winnow::{
+    ascii::{dec_int, float},
+    combinator::{alt, separated, trace},
+    error::{ContextError, ErrMode},
+    stream::{AsChar, Stream},
+    token::{one_of, take_while},
+    ModalResult, Parser,
+};
 
 use crate::scripting::value::Value;
 
@@ -42,41 +49,50 @@ fn ident<'s>(input: &mut &'s str) -> ModalResult<&'s str> {
     .parse_next(input)
 }
 
-pub(super) fn variable_assignment<'a, 's: 'a>(state: &'a ParsingState<'s>) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
+fn parse_to_scalar<T>(input: &mut &str) -> ModalResult<T>
+where
+    T: FromStr,
+{
+    take_while(1.., |c: char| {
+        !(AsChar::is_space(c)
+            || (c.is_ascii_punctuation() && c != '_' && c != '.' && c != '-' && c != '+'))
+            || (c == 'e' || c == 'E')
+    })
+    .parse_to()
+    .parse_next(input)
+}
+
+pub(super) fn variable_assignment<'a, 's: 'a>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
     |input: &mut _| {
         trace("variable_assignment", |input: &mut _| {
             let var = ident(input)?;
-    
+
             whitespace_all(input)?;
-    
+
             "=".parse_next(input)?;
-    
+
             whitespace_all(input)?;
-    
-            
-    
+
             todo!()
         })
         .parse_next(input)
     }
 }
 
-pub(super) fn expression<'a, 's>(state: &'a ParsingState<'s>) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
-    move |input: &mut _| {
-        alt((
-            literal,
-            literal
-        ))
-        .parse_next(input)
-    }
+pub(super) fn expression<'a, 's>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
+    move |input: &mut _| alt((literal, literal)).parse_next(input)
 }
 
 pub(super) fn literal(input: &mut &str) -> ModalResult<Node> {
     trace("literal", |input: &mut _| {
         // Parse either a float or int
         let value = alt((
-            dec_int::<_, i64, _>.map(Value::from),
-            float::<_, f64, _>.map(Value::from),
+            parse_to_scalar::<i64>.map(Value::from),
+            parse_to_scalar::<f64>.map(Value::from),
         ))
         .parse_next(input)?;
 
@@ -88,26 +104,25 @@ pub(super) fn literal(input: &mut &str) -> ModalResult<Node> {
     .parse_next(input)
 }
 
-pub(super) fn full_expression<'a, 's>(state: &'a ParsingState<'s>) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
+pub(super) fn full_expression<'a, 's>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
     move |input: &mut _| {
-        let mut statements: Vec<Node> = separated(1.., expression(state), ";")
-            .parse_next(input)?;
+        let mut statements: Vec<Node> = separated(1.., expression(state), ";").parse_next(input)?;
 
         // If more than 1 statement is parsed, means it's a chain
         if statements.len() > 1 {
             Ok(Node {
                 operator: Operator::RootNode,
-                children: vec![
-                    Node {
-                        operator: Operator::Chain,
-                        children: statements,
-                    }
-                ]
+                children: vec![Node {
+                    operator: Operator::Chain,
+                    children: statements,
+                }],
             })
         } else {
             Ok(Node {
                 operator: Operator::RootNode,
-                children: vec![statements.pop().unwrap()]
+                children: vec![statements.pop().unwrap()],
             })
         }
     }
@@ -115,16 +130,43 @@ pub(super) fn full_expression<'a, 's>(state: &'a ParsingState<'s>) -> impl Parse
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn literal() {
+    #[rstest]
+    #[case::int("3", Node {
+        operator: Operator::RootNode,
+        children: vec![Node {
+            operator: Operator::Const {
+                value: Value::Int(3)
+            },
+            children: Vec::new()
+        }]
+    })]
+    #[case::float("123.045", Node {
+        operator: Operator::RootNode,
+        children: vec![Node {
+            operator: Operator::Const {
+                value: Value::Float(123.045)
+            },
+            children: Vec::new()
+        }]
+    })]
+    #[case::float("1e-2", Node {
+        operator: Operator::RootNode,
+        children: vec![Node {
+            operator: Operator::Const {
+                value: Value::Float(0.01)
+            },
+            children: Vec::new()
+        }]
+    })]
+    fn literal(#[case] input: &'static str, #[case] output: Node) {
         let state = ParsingState::new();
-        
-        let expr = "3";
 
-        let res = full_expression(&state).parse(expr);
+        let res = full_expression(&state).parse(input);
 
-        assert_eq!(res, Ok(Node { operator: Operator::RootNode, children: vec![Node { operator: Operator::Const { value: Value::Int(3) }, children: Vec::new() }] }));
+        assert_eq!(res, Ok(output));
     }
 }
