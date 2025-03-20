@@ -2,10 +2,10 @@ use std::{cell::RefCell, str::FromStr};
 
 use winnow::{
     ascii::{dec_int, float},
-    combinator::{alt, separated, trace},
+    combinator::{alt, cut_err, separated, trace},
     error::{ContextError, ErrMode},
     stream::{AsChar, Stream},
-    token::{one_of, take_while},
+    token::{one_of, take_till, take_while},
     ModalResult, Parser,
 };
 
@@ -84,7 +84,29 @@ pub(super) fn variable_assignment<'a, 's: 'a>(
 pub(super) fn expression<'a, 's>(
     state: &'a ParsingState<'s>,
 ) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
-    move |input: &mut _| alt((literal, literal)).parse_next(input)
+    move |input: &mut _| alt((parentheses_wrapped_expression(state), literal)).parse_next(input)
+}
+
+pub(super) fn parentheses_wrapped_expression<'a, 's>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
+    move |input: &mut _| {
+        // Check for a leading open parenthesis
+        "(".parse_next(input)?;
+        // If we match a "(", if we don't find a closing ")" then we need to cut
+        let mut inner = cut_err(take_till(1.., ')')).parse_next(input)?;
+
+        cut_err(")").parse_next(input)?;
+
+        // Parse the inner expression
+        // If this inner expression is invalid, need to cut
+        let inner = cut_err(expression(state)).parse_next(&mut inner)?;
+
+        Ok(Node {
+            operator: Operator::Chain,
+            children: vec![inner],
+        })
+    }
 }
 
 pub(super) fn literal(input: &mut &str) -> ModalResult<Node> {
@@ -166,6 +188,31 @@ mod tests {
         let state = ParsingState::new();
 
         let res = full_expression(&state).parse(input);
+
+        assert_eq!(res, Ok(output));
+    }
+
+    #[rstest]
+    #[case::one_float("(1.0)", Node {
+        operator: Operator::RootNode,
+        children: vec![Node {
+            operator: Operator::Chain,
+            children: vec![Node {
+                operator: Operator::Const {
+                    value: Value::Float(1.0)
+                },
+                children: Vec::new()
+            }]
+        }]
+    })]
+    fn parentheses(#[case] input: &'static str, #[case] output: Node) {
+        let state = ParsingState::new();
+
+        let res = full_expression(&state).parse(input);
+
+        if let Err(e) = res.as_ref() {
+            println!("{e}");
+        }
 
         assert_eq!(res, Ok(output));
     }
