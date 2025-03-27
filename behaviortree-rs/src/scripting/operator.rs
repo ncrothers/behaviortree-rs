@@ -72,3 +72,54 @@ pub(super) enum Operator {
         identifier: String,
     },
 }
+
+impl Operator {
+    pub(crate) fn is_atomic(&self) -> bool {
+        matches!(self, Self::VariableIdentifierRead { .. }
+                | Self::BlackboardKeyIdentifierRead { .. }
+                | Self::Const { .. }
+                | Self::FunctionIdentifier { .. }
+                | Self::RootNode)
+    }
+
+    pub(crate) fn is_unary(&self) -> bool {
+        matches!(self, Self::Neg | Self::Not)
+    }
+
+    pub(crate) fn is_binary(&self) -> bool {
+        !self.is_unary() && !self.is_atomic() && !matches!(self, Self::Chain | Self::VariableIdentifierWrite { .. } | Self::BlackboardKeyIdentifierWrite { .. })
+    }
+
+    /// Returns the precedence of the operator.
+    /// A high precedence means that the operator has priority to be deeper in the tree.
+    pub(crate) const fn precedence(&self) -> i32 {
+        use Operator::*;
+        match self {
+            RootNode => 200,
+
+            Add | Sub => 95,
+            Neg => 110,
+            Mul | Div | Mod => 100,
+            Exp => 120,
+
+            Eq | Neq | Gt | Lt | Geq | Leq => 80,
+            And => 75,
+            Or => 70,
+            Not => 110,
+
+            Assign => 50,
+            Walrus => 50,
+
+            Chain => 0,
+
+            Const { .. } => 200,
+
+            VariableIdentifierWrite { .. }
+            | VariableIdentifierRead { .. }
+            | BlackboardKeyIdentifierWrite { .. }
+            | BlackboardKeyIdentifierRead { .. } => 200,
+
+            FunctionIdentifier { .. } => 190,
+        }
+    }
+}

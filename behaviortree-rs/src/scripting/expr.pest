@@ -1,0 +1,63 @@
+WHITESPACE = _{ " " }
+
+una_op = _{ neg | not }
+    neg = { "-" }
+    not = { "!" }
+
+bin_op = _{ add | subtract | multiply | divide | modulo | exponentiation | eq | neq | gt | geq | lt | leq | and | or }
+    add = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide = { "/" }
+    modulo = { "%" }
+    exponentiation = { "^" }
+    eq = { "==" }
+    neq = { "!=" }
+    gt = { ">" }
+    geq = { ">=" }
+    lt = { "<" }
+    leq = { "<=" }
+    and = { "&&" }
+    or = { "||" }
+
+const = _{ numeric | boolean | string }
+    integer = @{ ASCII_DIGIT+ }
+    float = @{ float_scientific }
+    float_simple = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+    float_scientific = @{ float_simple ~ ((^"e") ~ ("+" | "-")? ~ ASCII_DIGIT+)? }
+    boolean = { "true" | "false" }
+    numeric = _{ float | integer }
+
+    quotation_mark = _{ "\"" | "'" }
+    not_quote = _{ !(quotation_mark) ~ ANY }
+    string_inner = @{ not_quote* }
+    string = ${ quotation_mark ~ #name = string_inner ~ quotation_mark }
+
+variable = @{ variable_first_char ~ variable_char* }
+    variable_first_char = _{ ASCII_ALPHA | "_" }
+    variable_char = _{ variable_first_char | ASCII_DIGIT }
+
+bb_pointer = ${ "{" ~ #name = variable ~ "}" }
+
+variable_assign_s = { "=" }
+bb_assign_s = { "=" }
+bb_walrus_s = { ":=" }
+
+assignment = _{ assign_var | assign_bb | walrus_bb }
+    assign_var = _{ variable ~ variable_assign_s ~ value_expr }
+    assign_bb = _{ bb_pointer ~ bb_assign_s ~ value_expr }
+    walrus_bb = _{ bb_pointer ~ bb_walrus_s ~ value_expr }
+
+function_call = ${ #name = variable ~ function_args_wrapped }
+    function_args_wrapped = _{ "(" ~ function_args ~ ")" }
+    function_args = !{ function_arg_single? ~ ("," ~ function_arg_single)* }
+    function_arg_single = { value_expr }
+
+atom = _{ una_op? ~ (function_call | const | variable | bb_pointer | "(" ~ value_expr ~ ")") }
+
+value_expr = { atom ~ (bin_op ~ atom)* }
+single_expr = _{ assignment | value_expr }
+
+expression = _{ single_expr ~ (";" ~ single_expr)* ~ ";"? }
+
+root = _{ SOI ~ single_expr ~ EOI }

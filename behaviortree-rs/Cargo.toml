@@ -19,6 +19,7 @@ log = "0.4.22"
 ouroboros = "0.18.5"
 parking_lot = "0.12.3"
 quick-xml = { version = "0.37.2", features = ["serde", "serialize"] }
+smallvec = "1.14.0"
 thiserror = "1.0.47"
 typed-builder = "0.20.0"
 winnow = "0.7.3"

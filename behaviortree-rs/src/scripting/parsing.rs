@@ -1,11 +1,11 @@
 use std::{cell::RefCell, str::FromStr};
 
 use winnow::{
-    ascii::{dec_int, float},
-    combinator::{alt, cut_err, separated, trace},
+    ascii::{dec_int, float, multispace0},
+    combinator::{alt, cut_err, not, peek, separated, terminated, trace},
     error::{ContextError, ErrMode},
     stream::{AsChar, Stream},
-    token::{one_of, take_till, take_while},
+    token::{one_of, take_till, take_until, take_while},
     ModalResult, Parser,
 };
 
@@ -43,10 +43,111 @@ fn ident<'s>(input: &mut &'s str) -> ModalResult<&'s str> {
         // If it is, now parse the entire thing
         input.reset(&start);
         let ident = take_while(1.., is_valid).parse_next(input)?;
-
+        
         Ok(ident)
     })
     .parse_next(input)
+}
+
+fn variable_name<'s>(input: &mut &'s str) -> ModalResult<&'s str> {
+    trace("variable_name", |input: &mut _| {
+        let name = ident(input)?;
+        // Make sure it's not a function call
+        peek(not('(')).parse_next(input)?;
+
+        Ok(name)
+    })
+    .parse_next(input)
+}
+
+fn bb_pointer<'s>(input: &mut &'s str) -> ModalResult<&'s str> {
+    "{".parse_next(input)?;
+
+    let inner_ident = cut_err(ident).parse_next(input)?;
+
+    cut_err("}").parse_next(input)?;
+
+    Ok(inner_ident)
+}
+
+fn unit_operand<'a, 's: 'a>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
+    |input: &mut _| {
+        trace("unit_operand", |input: &mut _| {
+            let operator = alt((
+                ident.map(|name| Operator::VariableIdentifierRead { identifier: name.into() }),
+                bb_pointer.map(|name| Operator::BlackboardKeyIdentifierRead { identifier: name.into() }),
+                literal_op,
+            )).parse_next(input)?;
+
+            Ok(Node::empty(operator))
+        })
+        .parse_next(input)
+    }
+}
+
+fn function_args<'a, 's: 'a>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Vec<Node>, ErrMode<ContextError>> + 'a {
+    |input: &mut _| {
+        trace("function_args", |input: &mut _| {
+            whitespace_all(input)?;
+            
+            let args: Vec<Vec<Node>> = separated(0.., expression(state), ',').parse_next(input)?;
+
+            Ok(args.into_iter().map(|expr| Node::new(Operator::RootNode, expr)).collect())
+        })
+        .parse_next(input)
+    }
+}
+
+fn function_name<'a, 's: 'a>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, &'s str, ErrMode<ContextError>> + 'a {
+    |input: &mut _| {
+        trace("function", |input: &mut _| {
+            whitespace_all(input)?;
+            
+            terminated(ident, '(').parse_next(input)
+        })
+        .parse_next(input)
+    }
+}
+
+fn operator<'a, 's: 'a>(
+    state: &'a ParsingState<'s>,
+) -> impl Parser<&'s str, Operator, ErrMode<ContextError>> + 'a {
+    |input: &mut _| {
+        trace("operator", |input: &mut _| {
+            alt((
+                // Split alt because tuple was too long
+                alt((
+                    "==".map(|_| Operator::Eq),
+                    "!=".map(|_| Operator::Neq),
+                    ">".map(|_| Operator::Gt),
+                    ">=".map(|_| Operator::Geq),
+                    "<".map(|_| Operator::Lt),
+                    "<=".map(|_| Operator::Leq),
+                    "&&".map(|_| Operator::And),
+                    "||".map(|_| Operator::Or),
+                    "!".map(|_| Operator::Not),
+                    "=".map(|_| Operator::Assign),
+                    ":=".map(|_| Operator::Walrus),
+                )),
+                alt((
+                    '+'.map(|_| Operator::Add),
+                    '-'.map(|_| Operator::Sub),
+                    '*'.map(|_| Operator::Mul),
+                    '/'.map(|_| Operator::Div),
+                    '%'.map(|_| Operator::Mod),
+                    '-'.map(|_| Operator::Neg), // TODO
+                    '^'.map(|_| Operator::Exp),
+                ))
+            )).parse_next(input)
+        })
+        .parse_next(input)
+    }
 }
 
 fn parse_to_scalar<T>(input: &mut &str) -> ModalResult<T>
@@ -75,16 +176,64 @@ pub(super) fn variable_assignment<'a, 's: 'a>(
 
             whitespace_all(input)?;
 
+            // TODO
             todo!()
         })
         .parse_next(input)
     }
 }
 
+// pub(super) fn addition<'a, 's: 'a>(
+//     state: &'a ParsingState<'s>,
+// ) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
+//     |input: &mut _| {
+//         trace("variable_assignment", |input: &mut _| {
+//             let mut left = take_until(1.., '+').parse_next(input)?;
+//             let left = cut_err(expression(state)).parse_next(&mut left)?;
+
+//             "+".parse_next(input)?;
+
+//             let right = cut_err(expression(state)).parse_next(input)?;
+
+//             Ok(Node {
+//                 operator: Operator::Add,
+//                 children: vec![left, right],
+//             })
+//         })
+//         .parse_next(input)
+//     }
+// }
+
 pub(super) fn expression<'a, 's>(
     state: &'a ParsingState<'s>,
-) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
-    move |input: &mut _| alt((parentheses_wrapped_expression(state), literal)).parse_next(input)
+) -> impl Parser<&'s str, Vec<Node>, ErrMode<ContextError>> + 'a {
+    move |input: &mut &'s str| {
+        let mut children = Vec::new();
+
+        while !input.is_empty() {
+            multispace0.parse_next(input)?;
+
+            let item = alt((
+                parentheses_wrapped_expression(state),
+                variable_name.map(|name| Node::empty(Operator::VariableIdentifierRead { identifier: name.into() })),
+                function_name(state).map(|name| Node::empty(Operator::FunctionIdentifier { identifier: name.into() })),
+                operator(state).map(Node::empty),
+                literal,
+                ';'.map(|_| Node::empty(Operator::Chain)),
+            )).parse_next(input)?;
+
+            if matches!(item.operator, Operator::FunctionIdentifier { .. }) {
+                let args = cut_err(function_args(state)).parse_next(input)?;
+                
+                children.push(item);
+                children.push(Node::new(Operator::RootNode, args));
+            } else {
+                children.push(item);
+            }
+        }
+
+        Ok(children)
+    }
 }
 
 pub(super) fn parentheses_wrapped_expression<'a, 's>(
@@ -102,14 +251,20 @@ pub(super) fn parentheses_wrapped_expression<'a, 's>(
         // If this inner expression is invalid, need to cut
         let inner = cut_err(expression(state)).parse_next(&mut inner)?;
 
-        Ok(Node {
-            operator: Operator::Chain,
-            children: vec![inner],
-        })
+        Ok(Node::new(Operator::RootNode, inner))
     }
 }
 
 pub(super) fn literal(input: &mut &str) -> ModalResult<Node> {
+    let operator = literal_op.parse_next(input)?;
+
+    Ok(Node {
+        operator,
+        children: Vec::new(),
+    })
+}
+
+pub(super) fn literal_op(input: &mut &str) -> ModalResult<Operator> {
     trace("literal", |input: &mut _| {
         // Parse either a float or int
         let value = alt((
@@ -118,36 +273,26 @@ pub(super) fn literal(input: &mut &str) -> ModalResult<Node> {
         ))
         .parse_next(input)?;
 
-        Ok(Node {
-            operator: Operator::Const { value },
-            children: Vec::new(),
-        })
+        Ok(Operator::Const { value })
     })
     .parse_next(input)
 }
 
-pub(super) fn full_expression<'a, 's>(
+pub(super) fn parse_expression<'a, 's>(
     state: &'a ParsingState<'s>,
-) -> impl Parser<&'s str, Node, ErrMode<ContextError>> + 'a {
-    move |input: &mut _| {
-        let mut statements: Vec<Node> = separated(1.., expression(state), ";").parse_next(input)?;
+    expr: &'s str,
+) -> anyhow::Result<Node> {
+    let mut input = expr;
+    let mut statements: Vec<Node> = expression(state).parse(&mut input).map_err(|e| anyhow::format_err!("{}", e.to_string()))?;
 
-        // If more than 1 statement is parsed, means it's a chain
-        if statements.len() > 1 {
-            Ok(Node {
-                operator: Operator::RootNode,
-                children: vec![Node {
-                    operator: Operator::Chain,
-                    children: statements,
-                }],
-            })
-        } else {
-            Ok(Node {
-                operator: Operator::RootNode,
-                children: vec![statements.pop().unwrap()],
-            })
+    if let Some(end) = statements.iter().next_back() {
+        // Return an error if the expression doesn't end by returning a value
+        if matches!(end.operator, Operator::Chain) {
+            return Err(anyhow::format_err!("Expressions must return a value."));
         }
     }
+
+    Ok(Node::new(Operator::RootNode, statements))
 }
 
 #[cfg(test)]
@@ -187,16 +332,16 @@ mod tests {
     fn literal(#[case] input: &'static str, #[case] output: Node) {
         let state = ParsingState::new();
 
-        let res = full_expression(&state).parse(input);
+        let res = parse_expression(&state, input);
 
-        assert_eq!(res, Ok(output));
+        assert!(matches!(res, Ok(output)));
     }
 
     #[rstest]
     #[case::one_float("(1.0)", Node {
         operator: Operator::RootNode,
         children: vec![Node {
-            operator: Operator::Chain,
+            operator: Operator::RootNode,
             children: vec![Node {
                 operator: Operator::Const {
                     value: Value::Float(1.0)
@@ -208,12 +353,12 @@ mod tests {
     fn parentheses(#[case] input: &'static str, #[case] output: Node) {
         let state = ParsingState::new();
 
-        let res = full_expression(&state).parse(input);
+        let res = parse_expression(&state, input);
 
         if let Err(e) = res.as_ref() {
             println!("{e}");
         }
 
-        assert_eq!(res, Ok(output));
+        assert!(matches!(res, Ok(output)));
     }
 }
