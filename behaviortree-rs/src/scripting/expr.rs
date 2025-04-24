@@ -1,23 +1,28 @@
-use std::{any::Any, collections::HashMap, ops::Deref, sync::OnceLock};
+use std::{collections::HashMap, ops::Deref, sync::OnceLock};
 
 use pest::{
-    Parser,
     iterators::{Pair, Pairs},
     pratt_parser::{PrattParser, PrattParserMap},
+    Parser,
 };
 use pest_derive::Parser;
 
-use crate::blackboard::{Blackboard, EntryRef};
+use crate::blackboard::Blackboard;
+
+use super::{
+    operator::Op,
+    value::{Value, ValueOrAny, ValuePointer},
+};
 
 #[derive(Parser)]
-#[grammar = "expr.pest"]
+#[grammar = "scripting/expr.pest"]
 pub struct ExprParser;
 
 static PRATT_PARSER: OnceLock<PrattParser<Rule>> = OnceLock::new();
 
 fn pratt_parser_base() -> PrattParser<Rule> {
-    use Rule::*;
     use pest::pratt_parser::{Assoc::*, Op};
+    use Rule::*;
 
     // Precedence is defined lowest to highest
     PrattParser::new()
@@ -48,12 +53,19 @@ fn pratt_parser_base() -> PrattParser<Rule> {
 
 fn pratt_parser<'pratt, 'a, 'b>(
     pratt: &'pratt PrattParser<Rule>,
-) -> PrattParserMap<'pratt, 'a, 'b, Rule, impl FnMut(Pair<'b, Rule>) -> Expr, Expr> {
+) -> PrattParserMap<'pratt, 'a, 'b, Rule, impl FnMut(Pair<'b, Rule>) -> Expr + 'pratt, Expr> {
     pratt
         .map_primary(|primary| match primary.as_rule() {
             Rule::integer => Expr::Value(Value::Integer(primary.as_str().parse::<i64>().unwrap())),
             Rule::float => Expr::Value(Value::Float(primary.as_str().parse::<f64>().unwrap())),
-            Rule::string => Expr::Value(Value::String(primary.into_inner().find_first_tagged("name").expect("string should have a \"name\"-tagged child").as_str().into())),
+            Rule::string => Expr::Value(Value::String(
+                primary
+                    .into_inner()
+                    .find_first_tagged("name")
+                    .expect("string should have a \"name\"-tagged child")
+                    .as_str()
+                    .into(),
+            )),
             Rule::boolean => Expr::Value(Value::Boolean(primary.as_str() == "true")),
             Rule::variable => {
                 Expr::ValuePointer(ValuePointer::LocalVariable(primary.as_str().into()))
@@ -124,97 +136,9 @@ fn pratt_parser<'pratt, 'a, 'b>(
 
             Expr::UnaryOp {
                 op,
-                value: Box::new(rhs)
+                value: Box::new(rhs),
             }
         })
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    /// A string value.
-    String(String),
-    /// A float value.
-    Float(f64),
-    /// An integer value.
-    Integer(i64),
-    /// A boolean value.
-    Boolean(bool),
-    /// An empty value.
-    Empty,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValueType {
-    /// A string value.
-    String,
-    /// A float value.
-    Float,
-    /// An integer value.
-    Integer,
-    /// A boolean value.
-    Boolean,
-    /// An empty value.
-    Empty,
-}
-
-#[derive(Debug)]
-pub enum ValueOrAny {
-    /// Expression value
-    Value(Value),
-    /// Value from the Blackboard
-    Any(EntryRef),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ValuePointer {
-    LocalVariable(String),
-    BlackboardPointer(String),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Op {
-    /// A binary addition operator.
-    Add,
-    /// A binary subtraction operator.
-    Sub,
-    /// A unary negation operator.
-    Neg,
-    /// A binary multiplication operator.
-    Mul,
-    /// A binary division operator.
-    Div,
-    /// A binary modulo operator.
-    Mod,
-    /// A binary exponentiation operator.
-    Exp,
-
-    /// A binary equality comparator.
-    Eq,
-    /// A binary inequality comparator.
-    Neq,
-    /// A binary greater-than comparator.
-    Gt,
-    /// A binary lower-than comparator.
-    Lt,
-    /// A binary greater-than-or-equal comparator.
-    Geq,
-    /// A binary lower-than-or-equal comparator.
-    Leq,
-    /// A binary logical and operator.
-    And,
-    /// A binary logical or operator.
-    Or,
-    /// A binary logical not operator.
-    Not,
-
-    /// Assign an Expr to a local variable
-    VariableAssign,
-    /// Assign an Expr to a Blackboard key
-    BlackboardAssign {
-        /// Whether to create the BB key if it doesn't already exist. Set to `true`
-        /// when using the `:=` operator, otherwise `false`.
-        create: bool,
-    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -237,42 +161,62 @@ pub enum Expr {
     },
 }
 
-impl Value {
-    pub fn as_type(&self) -> ValueType {
-        match self {
-            Value::String(_) => ValueType::String,
-            Value::Float(_) => ValueType::Float,
-            Value::Integer(_) => ValueType::Integer,
-            Value::Boolean(_) => ValueType::Boolean,
-            Value::Empty => ValueType::Empty,
-        }
-    }
-}
-
-impl ValuePointer {
-    pub fn as_variable(&self) -> Option<&str> {
-        match self {
-            Self::LocalVariable(name) => Some(name),
-            _ => None,
-        }
-    }
-}
-
 impl Expr {
-    pub fn validate(&self) -> anyhow::Result<()> {
+    /// Parse a string into an `Expr`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::scripting::Expr;
+    ///
+    /// let expr_str = "1 + 2";
+    ///
+    /// let expr = Expr::parse(expr_str);
+    ///
+    /// assert!(expr.is_ok());
+    /// ```
+    pub fn parse(text: &str) -> anyhow::Result<Expr> {
+        let mut statements = text
+            .split(';')
+            .map(|stmt| {
+                if stmt.is_empty() {
+                    Ok(Expr::Value(Value::Empty))
+                } else {
+                    let stmt = stmt.trim();
+                    let pairs = lex_expr(stmt)?.filter(|pair| pair.as_rule() != Rule::EOI);
+
+                    Ok(pairs_to_expr(pairs))
+                }
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let expr = if statements.len() > 1 {
+            Expr::Chain(statements)
+        } else if statements.is_empty() {
+            return Err(anyhow::format_err!("No expressions found"));
+        } else {
+            statements.pop().unwrap()
+        };
+
+        expr.validate()?;
+
+        Ok(expr)
+    }
+
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
         let mut variables = Vec::new();
 
         Self::validate_recursive(self, &mut variables)
     }
 
-    pub fn as_value(&self) -> Option<&Value> {
+    pub(crate) fn as_value(&self) -> Option<&Value> {
         match self {
             Self::Value(value) => Some(value),
             _ => None,
         }
     }
 
-    pub fn as_value_pointer(&self) -> Option<&ValuePointer> {
+    pub(crate) fn as_value_pointer(&self) -> Option<&ValuePointer> {
         match self {
             Self::ValuePointer(value) => Some(value),
             _ => None,
@@ -315,12 +259,16 @@ impl Expr {
                         // Negation operator not allowed on string or boolean literals
                         match value.deref() {
                             Expr::Value(Value::String(_)) => {
-                                return Err(anyhow::format_err!("Negation operator not allowed on strings."))
+                                return Err(anyhow::format_err!(
+                                    "Negation operator not allowed on strings."
+                                ))
                             }
                             Expr::Value(Value::Boolean(_)) => {
-                                return Err(anyhow::format_err!("Negation operator not allowed on booleans."))
+                                return Err(anyhow::format_err!(
+                                    "Negation operator not allowed on booleans."
+                                ))
                             }
-                            _ => ()
+                            _ => (),
                         }
                     }
                     Op::Not => {
@@ -328,12 +276,14 @@ impl Expr {
                         match value.deref() {
                             Expr::Value(Value::Boolean(_)) | Expr::Value(Value::Integer(_)) => (),
                             Expr::Value(_) => {
-                                return Err(anyhow::format_err!("NOT operator only allowed on booleans and integers."))
+                                return Err(anyhow::format_err!(
+                                    "NOT operator only allowed on booleans and integers."
+                                ))
                             }
-                            _ => ()
+                            _ => (),
                         }
                     }
-                    _ => return Err(anyhow::format_err!("Expected unary operator, found {op:?}"))
+                    _ => return Err(anyhow::format_err!("Expected unary operator, found {op:?}")),
                 }
 
                 Self::validate_recursive(value, variables)?;
@@ -354,25 +304,68 @@ impl Expr {
             context,
             variables: HashMap::new(),
         };
-        
+
         Self::eval_with_context_recursive(self, &mut context)
     }
 
-    fn eval_with_context_recursive(expr: &Expr, context: &mut ContextInternal) -> ExprResult<Value> {
+    fn eval_with_context_recursive(
+        expr: &Expr,
+        context: &mut ContextInternal,
+    ) -> ExprResult<Value> {
         match expr {
             Expr::Value(value) => Ok(value.clone()),
             Expr::ValuePointer(value_pointer) => {
                 match value_pointer {
-                    ValuePointer::LocalVariable(name) => {
-                        context
-                            .context
-                            .get_value(name)
-                            .or_else(|| context.variables.get(name))
-                            .cloned()
-                            .ok_or_else(|| anyhow::format_err!("Context didn't contain variable"))
-                    }
+                    ValuePointer::LocalVariable(name) => context
+                        .context
+                        .get_value(name)
+                        .or_else(|| context.variables.get(name))
+                        .cloned()
+                        .ok_or_else(|| anyhow::format_err!("Context didn't contain variable")),
                     ValuePointer::BlackboardPointer(key) => {
-                        todo!()
+                        let entry =
+                            context
+                                .context
+                                .blackboard
+                                .get_entry_ref(key)
+                                .ok_or_else(|| {
+                                    anyhow::format_err!("Blackboard key \"{key}\" did not exist")
+                                })?;
+
+                        // Try to downcast the type to one that can be put into a Value
+                        let value = if let Some(val) = entry.downcast_clone::<Value>() {
+                            val
+                        } else if let Some(val) = entry.downcast_clone::<i64>() {
+                            Value::Integer(val)
+                        } else if let Some(val) = entry.downcast_clone::<u64>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<i32>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<u32>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<i16>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<u16>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<i8>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<u8>() {
+                            Value::Integer(val as i64)
+                        } else if let Some(val) = entry.downcast_clone::<bool>() {
+                            Value::Boolean(val)
+                        } else if let Some(val) = entry.downcast_clone::<String>() {
+                            Value::String(val)
+                        } else if let Some(val) = entry.downcast_clone::<f64>() {
+                            Value::Float(val)
+                        } else if let Some(val) = entry.downcast_clone::<f32>() {
+                            Value::Float(val as f64)
+                        } else if entry.downcast_clone::<()>().is_some() {
+                            Value::Empty
+                        } else {
+                            return Err(anyhow::format_err!("Blackboard value at key \"{key}\" could not be converted into a Value"));
+                        };
+
+                        Ok(value)
                     }
                 }
             }
@@ -385,485 +378,77 @@ impl Expr {
 
                 Ok(result)
             }
-            Expr::BinaryOp { lhs, op, rhs } => {
-                match op {
-                    Op::VariableAssign => {
-                        if let Expr::ValuePointer(ValuePointer::LocalVariable(name)) = lhs.as_ref() {
-                            let rhs = Self::eval_with_context_recursive(rhs, context)?;
-
-                            context.variables.insert(name.clone(), rhs);
-                            Ok(Value::Empty)
-                        } else {
-                            unreachable!("VariableAssign should have LocalVariable as LHS")
-                        }
-                    }
-                    Op::BlackboardAssign { create } => {
-                        if let Expr::ValuePointer(ValuePointer::BlackboardPointer(key)) = lhs.as_ref() {
-                            if !create && !context.context.blackboard.contains_key(key) {
-                                return Err(anyhow::format_err!("Blackboard key \"{key}\" doesn't exist, and the walrus operator wasn't used to assign"));
-                            }
-                            
-                            todo!()
-                        } else {
-                            unreachable!("BlackboardAssign should have BlackboardPointer as LHS")
-                        }
-                    }
-                    op => {
-                        let lhs = Self::eval_with_context_recursive(lhs, context)?;
+            Expr::BinaryOp { lhs, op, rhs } => match op {
+                Op::VariableAssign => {
+                    if let Expr::ValuePointer(ValuePointer::LocalVariable(name)) = lhs.as_ref() {
                         let rhs = Self::eval_with_context_recursive(rhs, context)?;
-        
-                        op.binary(&lhs, &rhs)
+
+                        context.variables.insert(name.clone(), rhs);
+                        Ok(Value::Empty)
+                    } else {
+                        unreachable!("VariableAssign should have LocalVariable as LHS")
                     }
                 }
-            }
+                Op::BlackboardAssign { create } => {
+                    if let Expr::ValuePointer(ValuePointer::BlackboardPointer(key)) = lhs.as_ref() {
+                        if !create && !context.context.blackboard.contains_key(key) {
+                            return Err(anyhow::format_err!("Blackboard key \"{key}\" doesn't exist, and the walrus operator wasn't used to assign"));
+                        }
+
+                        // Evaluate the right hand side
+                        let rhs = Self::eval_with_context_recursive(rhs, context)?;
+
+                        // Assign the value into the blackboard, stripping the outer Value
+                        match rhs {
+                            Value::String(val) => context.context.blackboard.set(key, val),
+                            Value::Float(val) => context.context.blackboard.set(key, val),
+                            Value::Integer(val) => context.context.blackboard.set(key, val),
+                            Value::Boolean(val) => context.context.blackboard.set(key, val),
+                            Value::Empty => context.context.blackboard.set(key, ()),
+                        }
+
+                        Ok(Value::Empty)
+                    } else {
+                        unreachable!("BlackboardAssign should have BlackboardPointer as LHS")
+                    }
+                }
+                op => {
+                    let lhs = Self::eval_with_context_recursive(lhs, context)?;
+                    let rhs = Self::eval_with_context_recursive(rhs, context)?;
+
+                    op.binary(&lhs, &rhs)
+                }
+            },
             Expr::UnaryOp { op, value } => {
                 let value = Self::eval_with_context_recursive(value, context)?;
 
                 op.unary(&value)
             }
             Expr::FunctionCall { name, args } => {
-                let args = args
-                    .iter()
-                    .map(|arg| {
-                        match arg {
-                            Expr::ValuePointer(ValuePointer::BlackboardPointer(key)) => {
-                                context
-                                    .context
-                                    .blackboard
-                                    .get_entry_ref(key)
-                                    .map(ValueOrAny::Any)
-                                    .ok_or_else(|| anyhow::format_err!("Blackboard key {key} doesn't exist."))
-                            }
-                            expr => {
-                                Self::eval_with_context_recursive(expr, context)
-                                    .map(ValueOrAny::Value)
-                            }
-                        }
-                    })
-                    .collect::<ExprResult<Vec<_>>>()?;
-                
-                context.context.call_function(name, &args)
+                let args =
+                    args.iter()
+                        .map(|arg| match arg {
+                            Expr::ValuePointer(ValuePointer::BlackboardPointer(key)) => context
+                                .context
+                                .blackboard
+                                .get_entry_ref(key)
+                                .map(ValueOrAny::Any)
+                                .ok_or_else(|| {
+                                    anyhow::format_err!("Blackboard key {key} doesn't exist.")
+                                }),
+                            expr => Self::eval_with_context_recursive(expr, context)
+                                .map(ValueOrAny::Value),
+                        })
+                        .collect::<ExprResult<_>>()?;
+
+                context.context.call_function(name, args)
             }
         }
-    }
-}
-
-impl Op {
-    fn binary(&self, lhs: &Value, rhs: &Value) -> ExprResult<Value> {
-        match self {
-            Op::Add => lhs.checked_add(rhs),
-            Op::Sub => lhs.checked_sub(rhs),
-            Op::Mul => lhs.checked_mul(rhs),
-            Op::Div => lhs.checked_div(rhs),
-            Op::Mod => lhs.checked_mod(rhs),
-            Op::Exp => lhs.checked_pow(rhs),
-            Op::Eq => Ok(Value::Boolean(lhs.eq(rhs))),
-            Op::Neq => Ok(Value::Boolean(lhs.neq(rhs))),
-            Op::Gt => Ok(Value::Boolean(lhs.gt(rhs))),
-            Op::Lt => Ok(Value::Boolean(lhs.lt(rhs))),
-            Op::Geq => Ok(Value::Boolean(lhs.geq(rhs))),
-            Op::Leq => Ok(Value::Boolean(lhs.leq(rhs))),
-            Op::And => Ok(Value::Boolean(lhs.and(rhs))),
-            Op::Or => Ok(Value::Boolean(lhs.or(rhs))),
-            name => unreachable!("expected a binary operator, got {name:?}")
-        }
-    }
-
-    fn unary(&self, value: &Value) -> ExprResult<Value> {
-        match self {
-            Op::Neg => value.neg(),
-            Op::Not => Ok(Value::Boolean(value.not())),
-            name => unreachable!("expected a unary operator, got {name:?}"),
-        }
-    }
-}
-
-#[allow(clippy::should_implement_trait)]
-impl Value {
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Value::String(value) => !value.is_empty(),
-            Value::Float(_) => !self.eq(&Value::Float(0.0)),
-            Value::Integer(value) => *value != 0,
-            Value::Boolean(value) => *value,
-            Value::Empty => false,
-        }
-    }
-
-    pub fn as_int(&self) -> ExprResult<i64> {
-        match self {
-            Value::Float(value) => Ok(*value as i64),
-            Value::Integer(value) => Ok(*value),
-            Value::Boolean(value) => if *value { Ok(1) } else { Ok(0) },
-            name => Err(anyhow::format_err!("{name:?} cannot be represented as an integer")),
-        }
-    }
-
-    pub fn as_float(&self) -> ExprResult<f64> {
-        match self {
-            Value::Float(value) => Ok(*value),
-            Value::Integer(value) => Ok(*value as f64),
-            Value::Boolean(value) => if *value { Ok(1.0) } else { Ok(0.0) },
-            name => Err(anyhow::format_err!("{name:?} cannot be represented as a float")),
-        }
-    }
-
-    pub fn checked_add(&self, other: &Value) -> ExprResult<Value> {
-        if !matches!(self.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Addition is not allowed for {self:?}"));
-        }
-
-        if !matches!(other.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Addition is not allowed for {other:?}"));
-        }
-        
-        match self {
-            Value::Float(value) => {
-                let value = match other {
-                    Value::Float(other) => *value + *other,
-                    Value::Integer(other) => *value + (*other as f64),
-                    _ => unreachable!()
-                };
-
-                Ok(Value::Float(value))
-            }
-            Value::Integer(value) => {
-                let value = match other {
-                    Value::Float(other) => Value::Float(*value as f64 + *other),
-                    Value::Integer(other) => Value::Integer(value.checked_add(*other).ok_or_else(|| anyhow::format_err!("Integer overflow during addition"))?),
-                    _ => unreachable!()
-                };
-
-                Ok(value)
-            }
-            _ => unreachable!()
-        }
-    }
-
-    pub fn checked_sub(&self, other: &Value) -> ExprResult<Value> {
-        if !matches!(self.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Subtraction is not allowed for {self:?}"));
-        }
-
-        if !matches!(other.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Subtraction is not allowed for {other:?}"));
-        }
-        
-        match self {
-            Value::Float(value) => {
-                let value = match other {
-                    Value::Float(other) => *value - *other,
-                    Value::Integer(other) => *value - (*other as f64),
-                    _ => unreachable!()
-                };
-
-                Ok(Value::Float(value))
-            }
-            Value::Integer(value) => {
-                let value = match other {
-                    Value::Float(other) => Value::Float(*value as f64 - *other),
-                    Value::Integer(other) => Value::Integer(value.checked_sub(*other).ok_or_else(|| anyhow::format_err!("Integer overflow during subtraction"))?),
-                    _ => unreachable!()
-                };
-
-                Ok(value)
-            }
-            _ => unreachable!()
-        }
-    }
-
-    pub fn checked_mul(&self, other: &Value) -> ExprResult<Value> {
-        if !matches!(self.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Multiplication is not allowed for {self:?}"));
-        }
-
-        if !matches!(other.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Multiplication is not allowed for {other:?}"));
-        }
-        
-        match self {
-            Value::Float(value) => {
-                let value = match other {
-                    Value::Float(other) => *value * *other,
-                    Value::Integer(other) => *value * (*other as f64),
-                    _ => unreachable!()
-                };
-
-                Ok(Value::Float(value))
-            }
-            Value::Integer(value) => {
-                let value = match other {
-                    Value::Float(other) => Value::Float(*value as f64 * *other),
-                    Value::Integer(other) => Value::Integer(value.checked_mul(*other).ok_or_else(|| anyhow::format_err!("Integer overflow during multiplication"))?),
-                    _ => unreachable!()
-                };
-
-                Ok(value)
-            }
-            _ => unreachable!()
-        }
-    }
-
-    pub fn checked_div(&self, other: &Value) -> ExprResult<Value> {
-        if !matches!(self.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Division is not allowed for {self:?}"));
-        }
-
-        if !matches!(other.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Division is not allowed for {other:?}"));
-        }
-        
-        match self {
-            Value::Float(value) => {
-                let value = match other {
-                    Value::Float(other) => *value / *other,
-                    Value::Integer(other) => *value / (*other as f64),
-                    _ => unreachable!()
-                };
-
-                Ok(Value::Float(value))
-            }
-            Value::Integer(value) => {
-                let value = match other {
-                    Value::Float(other) => Value::Float(*value as f64 / *other),
-                    Value::Integer(other) => Value::Integer(value.checked_div(*other).ok_or_else(|| anyhow::format_err!("Integer overflow during division"))?),
-                    _ => unreachable!()
-                };
-
-                Ok(value)
-            }
-            _ => unreachable!()
-        }
-    }
-
-    pub fn checked_mod(&self, other: &Value) -> ExprResult<Value> {
-        if !matches!(self.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Modulo is not allowed for {self:?}"));
-        }
-
-        if !matches!(other.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Modulo is not allowed for {other:?}"));
-        }
-        
-        match self {
-            Value::Float(value) => {
-                let value = match other {
-                    Value::Float(other) => *value % *other,
-                    Value::Integer(other) => *value % (*other as f64),
-                    _ => unreachable!()
-                };
-
-                Ok(Value::Float(value))
-            }
-            Value::Integer(value) => {
-                let value = match other {
-                    Value::Float(other) => Value::Float(*value as f64 % *other),
-                    Value::Integer(other) => Value::Integer(value.checked_rem(*other).ok_or_else(|| anyhow::format_err!("Integer overflow during modulo"))?),
-                    _ => unreachable!()
-                };
-
-                Ok(value)
-            }
-            _ => unreachable!()
-        }
-    }
-
-    pub fn checked_pow(&self, other: &Value) -> ExprResult<Value> {
-        if !matches!(self.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Modulo is not allowed for {self:?}"));
-        }
-
-        if !matches!(other.as_type(), ValueType::Float | ValueType::Integer) {
-            return Err(anyhow::format_err!("Modulo is not allowed for {other:?}"));
-        }
-        
-        match self {
-            Value::Float(value) => {
-                let value = match other {
-                    Value::Float(other) => value.powf(*other),
-                    Value::Integer(other) => value.powi(i32::try_from(*other)?),
-                    _ => unreachable!()
-                };
-
-                Ok(Value::Float(value))
-            }
-            Value::Integer(value) => {
-                let value = match other {
-                    Value::Float(other) => Value::Float((*value as f64).powf(*other)),
-                    Value::Integer(other) => Value::Integer(value.checked_pow(u32::try_from(*other)?).ok_or_else(|| anyhow::format_err!("Integer overflow during exponentiation"))?),
-                    _ => unreachable!()
-                };
-
-                Ok(value)
-            }
-            _ => unreachable!()
-        }
-    }
-
-    pub fn eq(&self, other: &Value) -> bool {
-        match self {
-            Value::String(value) => {
-                if let Value::String(other) = other {
-                    value == other
-                } else {
-                    false
-                }
-            }
-            Value::Float(value) => {
-                match other {
-                    Value::Integer(other) => f64::abs(*value - *other as f64) < f64::EPSILON,
-                    Value::Float(other) => f64::abs(*value - *other) < f64::EPSILON,
-                    Value::Boolean(other) => {
-                        let bool_val = if *other { 1 } else { 0 };
-                        f64::abs(*value - bool_val as f64) < f64::EPSILON
-                    }
-                    _ => false,
-                }
-            }
-            Value::Integer(value) => {
-                match other {
-                    Value::Integer(other) => *value == *other,
-                    Value::Float(other) => f64::abs(*value as f64 - *other) < f64::EPSILON,
-                    Value::Boolean(other) => {
-                        let bool_val = if *other { 1 } else { 0 };
-                        *value == bool_val
-                    }
-                    _ => false,
-                }
-            }
-            Value::Boolean(value) => {
-                *value == other.is_truthy()
-            }
-            Value::Empty => matches!(other, Value::Empty),
-        }
-    }
-
-    pub fn neq(&self, other: &Value) -> bool {
-        !self.eq(other)
-    }
-
-    pub fn gt(&self, other: &Value) -> bool {
-        match self {
-            Value::String(value) => {
-                if let Value::String(other) = other {
-                    value > other
-                } else {
-                    false
-                }
-            }
-            Value::Float(value) => {
-                match other {
-                    Value::Integer(other_val) => self.neq(other) && *value > (*other_val as f64),
-                    Value::Float(other_val) => self.neq(other) && *value > *other_val,
-                    Value::Boolean(other_val) => {
-                        let bool_val = if *other_val { 1 } else { 0 };
-                        self.neq(other) && *value > bool_val as f64
-                    }
-                    _ => false,
-                }
-            }
-            Value::Integer(value) => {
-                match other {
-                    Value::Integer(other) => *value > *other,
-                    Value::Float(other_val) => self.neq(other) && (*value as f64) > *other_val,
-                    Value::Boolean(other_val) => {
-                        let bool_val = if *other_val { 1 } else { 0 };
-                        self.neq(other) && *value > bool_val
-                    }
-                    _ => false,
-                }
-            }
-            Value::Boolean(value) => {
-                if let Value::Boolean(other) = other {
-                    let value = if *value { 1 } else { 0 };
-                    let other = if *other { 1 } else { 0 };
-                    
-                    value > other
-                } else {
-                    false
-                }
-            }
-            Value::Empty => false,
-        }
-    }
-
-    pub fn lt(&self, other: &Value) -> bool {
-        match self {
-            Value::String(value) => {
-                if let Value::String(other) = other {
-                    value < other
-                } else {
-                    false
-                }
-            }
-            Value::Float(value) => {
-                match other {
-                    Value::Integer(other_val) => self.neq(other) && *value < (*other_val as f64),
-                    Value::Float(other_val) => self.neq(other) && *value < *other_val,
-                    Value::Boolean(other_val) => {
-                        let bool_val = if *other_val { 1 } else { 0 };
-                        self.neq(other) && *value < bool_val as f64
-                    }
-                    _ => false,
-                }
-            }
-            Value::Integer(value) => {
-                match other {
-                    Value::Integer(other) => *value < *other,
-                    Value::Float(other_val) => self.neq(other) && (*value as f64) < *other_val,
-                    Value::Boolean(other_val) => {
-                        let bool_val = if *other_val { 1 } else { 0 };
-                        self.neq(other) && *value < bool_val
-                    }
-                    _ => false,
-                }
-            }
-            Value::Boolean(value) => {
-                if let Value::Boolean(other) = other {
-                    let value = if *value { 1 } else { 0 };
-                    let other = if *other { 1 } else { 0 };
-                    
-                    value < other
-                } else {
-                    false
-                }
-            }
-            Value::Empty => false,
-        }
-    }
-
-    pub fn geq(&self, other: &Value) -> bool {
-        self.gt(other) || self.eq(other)
-    }
-
-    pub fn leq(&self, other: &Value) -> bool {
-        self.lt(other) || self.eq(other)
-    }
-
-    pub fn not(&self) -> bool {
-        !self.is_truthy()
-    }
-
-    pub fn neg(&self) -> ExprResult<Value> {
-        match self {
-            Value::Float(value) => Ok(Value::Float(-*value)),
-            Value::Integer(value) => Ok(Value::Integer(-*value)),
-            Value::Boolean(_) => Ok(Value::Integer(-self.as_int()?)),
-            name => Err(anyhow::format_err!("Negation cannot be performed on {name:?}"))
-        }
-    }
-
-    pub fn and(&self, other: &Value) -> bool {
-        self.is_truthy() && other.is_truthy()
-    }
-
-    pub fn or(&self, other: &Value) -> bool {
-        self.is_truthy() || other.is_truthy()
     }
 }
 
 pub type ExprResult<T> = anyhow::Result<T>;
-type FunctionType = dyn Fn(&[ValueOrAny]) -> ExprResult<Value>;
+type FunctionType = dyn Fn(Vec<ValueOrAny>) -> ExprResult<Value>;
 
 pub struct Function {
     f: Box<FunctionType>,
@@ -872,14 +457,12 @@ pub struct Function {
 impl Function {
     pub fn new<F>(f: F) -> Self
     where
-        F: Fn(&[ValueOrAny]) -> ExprResult<Value> + 'static,
+        F: Fn(Vec<ValueOrAny>) -> ExprResult<Value> + 'static,
     {
-        Self {
-            f: Box::new(f),
-        }
+        Self { f: Box::new(f) }
     }
 
-    pub fn call(&self, args: &[ValueOrAny]) -> ExprResult<Value> {
+    pub fn call(&self, args: Vec<ValueOrAny>) -> ExprResult<Value> {
         (self.f)(args)
     }
 }
@@ -887,6 +470,15 @@ impl Function {
 impl std::fmt::Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Function").finish()
+    }
+}
+
+impl<F> From<F> for Function
+where
+    F: Fn(Vec<ValueOrAny>) -> ExprResult<Value> + 'static,
+{
+    fn from(value: F) -> Self {
+        Function::new(value)
     }
 }
 
@@ -903,6 +495,7 @@ pub struct Context {
 }
 
 impl Context {
+    /// Create a new, empty `Context` with the provided [`Blackboard`].
     pub fn new(blackboard: Blackboard) -> Self {
         Self {
             variables: HashMap::new(),
@@ -911,15 +504,44 @@ impl Context {
         }
     }
 
+    /// Get a reference to the variable value of `name`.
     pub fn get_value(&self, name: &str) -> Option<&Value> {
         self.variables.get(name)
     }
 
+    /// Get a mutable reference to the variable value of `name`.
     pub fn get_value_mut(&mut self, name: &str) -> Option<&mut Value> {
         self.variables.get_mut(name)
     }
 
-    pub fn set_value(&mut self, name: String, value: Value) -> ExprResult<()> {
+    /// Set the value of a variable `name`. Note that variables have static types,
+    /// so you cannot change the type of a variable after it has been set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::prelude::*;
+    /// use behaviortree_rs::scripting::Context;
+    ///
+    /// let blackboard = Blackboard::new();
+    ///
+    /// let mut context = Context::new(blackboard);
+    ///
+    /// let res = context.set_value("foo", 123i64);
+    /// assert!(res.is_ok());
+    ///
+    /// // You cannot change the type of "foo", so this will return an error
+    /// let res = context.set_value("foo", true);
+    /// assert!(res.is_err());
+    /// ```
+    pub fn set_value(
+        &mut self,
+        name: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> ExprResult<()> {
+        let name = name.into();
+        let value = value.into();
+
         if let Some(existing) = self.get_value_mut(&name) {
             if existing.as_type() == value.as_type() {
                 *existing = value;
@@ -933,47 +555,17 @@ impl Context {
         Ok(())
     }
 
-    pub fn add_function(&mut self, name: impl Into<String>, f: Function) -> ExprResult<()> {
-        self.functions.insert(name.into(), f);
-
-        Ok(())
+    /// Add a function to be made available in the context.
+    pub fn add_function(&mut self, name: impl Into<String>, f: impl Into<Function>) {
+        self.functions.insert(name.into(), f.into());
     }
 
-    pub fn call_function(&self, name: &str, args: &[ValueOrAny]) -> ExprResult<Value> {
-        self
-            .functions
+    pub fn call_function(&self, name: &str, args: Vec<ValueOrAny>) -> ExprResult<Value> {
+        self.functions
             .get(name)
             .map(|f| f.call(args))
             .ok_or_else(|| anyhow::format_err!("Function {name} not found in context"))?
     }
-}
-
-pub fn parse_expr(text: &str) -> anyhow::Result<Expr> {
-    let mut statements = text
-        .split(';')
-        .map(|stmt| {
-            if stmt.is_empty() {
-                Ok(Expr::Value(Value::Empty))
-            } else {
-                let stmt = stmt.trim();
-                let pairs = lex_expr(stmt)?.filter(|pair| pair.as_rule() != Rule::EOI);
-    
-                Ok(pairs_to_expr(pairs))
-            }
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-
-    let expr = if statements.len() > 1 {
-        Expr::Chain(statements)
-    } else if statements.is_empty() {
-        return Err(anyhow::format_err!("No expressions found"));
-    } else {
-        statements.pop().unwrap()
-    };
-
-    expr.validate()?;
-
-    Ok(expr)
 }
 
 fn lex_expr(text: &str) -> anyhow::Result<Pairs<'_, Rule>> {
@@ -986,3 +578,36 @@ fn pairs_to_expr<'a>(pairs: impl Iterator<Item = Pair<'a, Rule>>) -> Expr {
     pratt_parser(parser).parse(pairs)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rstest::rstest;
+
+    #[rstest]
+    fn set_value() {
+        let blackboard = Blackboard::new();
+
+        let mut context = Context::new(blackboard);
+
+        assert!(context.set_value("int", 10i32).is_ok());
+        assert!(context.set_value("int", 10i8).is_ok());
+
+        assert!(context.set_value("float", 10.0f32).is_ok());
+
+        assert!(context.set_value("bool", true).is_ok());
+
+        assert!(context.set_value("string", String::from("hello")).is_ok());
+    }
+
+    #[rstest]
+    fn set_value_type_check() {
+        let blackboard = Blackboard::new();
+
+        let mut context = Context::new(blackboard);
+
+        context.set_value("int", 10i32).unwrap();
+
+        assert!(context.set_value("int", false).is_err());
+    }
+}

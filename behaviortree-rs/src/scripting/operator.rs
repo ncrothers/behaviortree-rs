@@ -1,9 +1,7 @@
-use super::value::Value;
+use super::{expr::ExprResult, value::Value};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Operator {
-    RootNode,
-
+#[derive(Debug, PartialEq, Eq)]
+pub enum Op {
     /// A binary addition operator.
     Add,
     /// A binary subtraction operator.
@@ -38,88 +36,42 @@ pub(super) enum Operator {
     /// A binary logical not operator.
     Not,
 
-    /// A binary assignment operator.
-    Assign,
-    /// TODO
-    Walrus,
-
-    /// An n-ary subexpression chain.
-    Chain,
-
-    /// A constant value
-    Const {
-        value: Value,
-    },
-
-    /// Identifier of a local variable
-    VariableIdentifierRead {
-        identifier: String,
-    },
-    /// Identifier of a local variable
-    VariableIdentifierWrite {
-        identifier: String,
-    },
-    /// Identifier of a blackboard pointer
-    BlackboardKeyIdentifierRead {
-        identifier: String,
-    },
-    /// Identifier of a blackboard pointer
-    BlackboardKeyIdentifierWrite {
-        identifier: String,
-    },
-    /// A function identifier
-    FunctionIdentifier {
-        identifier: String,
+    /// Assign an Expr to a local variable
+    VariableAssign,
+    /// Assign an Expr to a Blackboard key
+    BlackboardAssign {
+        /// Whether to create the BB key if it doesn't already exist. Set to `true`
+        /// when using the `:=` operator, otherwise `false`.
+        create: bool,
     },
 }
 
-impl Operator {
-    pub(crate) fn is_atomic(&self) -> bool {
-        matches!(self, Self::VariableIdentifierRead { .. }
-                | Self::BlackboardKeyIdentifierRead { .. }
-                | Self::Const { .. }
-                | Self::FunctionIdentifier { .. }
-                | Self::RootNode)
-    }
-
-    pub(crate) fn is_unary(&self) -> bool {
-        matches!(self, Self::Neg | Self::Not)
-    }
-
-    pub(crate) fn is_binary(&self) -> bool {
-        !self.is_unary() && !self.is_atomic() && !matches!(self, Self::Chain | Self::VariableIdentifierWrite { .. } | Self::BlackboardKeyIdentifierWrite { .. })
-    }
-
-    /// Returns the precedence of the operator.
-    /// A high precedence means that the operator has priority to be deeper in the tree.
-    pub(crate) const fn precedence(&self) -> i32 {
-        use Operator::*;
+impl Op {
+    pub(super) fn binary(&self, lhs: &Value, rhs: &Value) -> ExprResult<Value> {
         match self {
-            RootNode => 200,
+            Op::Add => lhs.checked_add(rhs),
+            Op::Sub => lhs.checked_sub(rhs),
+            Op::Mul => lhs.checked_mul(rhs),
+            Op::Div => lhs.checked_div(rhs),
+            Op::Mod => lhs.checked_mod(rhs),
+            Op::Exp => lhs.checked_pow(rhs),
+            Op::Eq => Ok(Value::Boolean(lhs.eq(rhs))),
+            Op::Neq => Ok(Value::Boolean(lhs.neq(rhs))),
+            Op::Gt => Ok(Value::Boolean(lhs.gt(rhs))),
+            Op::Lt => Ok(Value::Boolean(lhs.lt(rhs))),
+            Op::Geq => Ok(Value::Boolean(lhs.geq(rhs))),
+            Op::Leq => Ok(Value::Boolean(lhs.leq(rhs))),
+            Op::And => Ok(Value::Boolean(lhs.and(rhs))),
+            Op::Or => Ok(Value::Boolean(lhs.or(rhs))),
+            name => unreachable!("expected a binary operator, got {name:?}"),
+        }
+    }
 
-            Add | Sub => 95,
-            Neg => 110,
-            Mul | Div | Mod => 100,
-            Exp => 120,
-
-            Eq | Neq | Gt | Lt | Geq | Leq => 80,
-            And => 75,
-            Or => 70,
-            Not => 110,
-
-            Assign => 50,
-            Walrus => 50,
-
-            Chain => 0,
-
-            Const { .. } => 200,
-
-            VariableIdentifierWrite { .. }
-            | VariableIdentifierRead { .. }
-            | BlackboardKeyIdentifierWrite { .. }
-            | BlackboardKeyIdentifierRead { .. } => 200,
-
-            FunctionIdentifier { .. } => 190,
+    pub(super) fn unary(&self, value: &Value) -> ExprResult<Value> {
+        match self {
+            Op::Neg => value.neg(),
+            Op::Not => Ok(Value::Boolean(value.not())),
+            name => unreachable!("expected a unary operator, got {name:?}"),
         }
     }
 }

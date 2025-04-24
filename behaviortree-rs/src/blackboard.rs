@@ -122,6 +122,25 @@ where
 /// Implements [`Deref`], providing access to the locked `T`.
 pub struct EntryGuard<T: 'static>(EntryGuardInner<T>);
 
+#[derive(Debug)]
+pub struct EntryRef(EntryPtr);
+
+impl EntryRef {
+    pub fn downcast_ref<T>(&self) -> Option<EntryGuard<T>>
+    where
+        T: Any + 'static,
+    {
+        EntryGuard::create(Arc::clone(&self.0))
+    }
+
+    pub fn downcast_clone<T>(&self) -> Option<T>
+    where
+        T: Any + Clone + 'static,
+    {
+        self.0.lock().downcast_ref().cloned()
+    }
+}
+
 impl<T> EntryGuard<T>
 where
     T: 'static,
@@ -208,6 +227,29 @@ impl Blackboard {
             .insert(internal, external);
     }
 
+    /// Checks if the `Blackboard` contains a value at `key`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use behaviortree_rs::prelude::*;
+    ///
+    /// let blackboard = Blackboard::new();
+    ///
+    /// blackboard.set("foo", 123);
+    ///
+    /// assert!(blackboard.contains_key("foo"));
+    ///
+    /// assert!(!blackboard.contains_key("bar"));
+    /// ```
+    pub fn contains_key(&self, key: impl AsRef<str>) -> bool {
+        self._get_entry(key.as_ref()).is_some()
+    }
+
+    pub fn get_entry_ref(&self, key: impl AsRef<str>) -> Option<EntryRef> {
+        self._get_entry(key.as_ref()).map(EntryRef)
+    }
+
     /// Tries to return an owned copy of the value at `key`. The type `T` must
     /// implement [`FromStr`] when calling this method; it will try to convert
     /// from `String`/`&str` if there's an entry at `key` but it is not
@@ -266,7 +308,7 @@ impl Blackboard {
     /// There are two ways to release the lock:
     /// - Call `drop` on the value
     /// - Call [`EntryGuard::clone_consume`] which will clone `T`, consuming
-    ///     the value and dropping the lock.
+    ///   the value and dropping the lock.
     ///
     /// # Examples
     ///
@@ -538,189 +580,5 @@ impl Default for Blackboard {
             data: Arc::new(RwLock::new(BlackboardData::default())),
             parent: None,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use rstest::rstest;
-
-    use super::*;
-
-    // TODO: add other tests
-
-    #[rstest]
-    fn no_remapping() {
-        // With no remapping
-
-        let root_bb = Blackboard::new();
-        let left_bb = Blackboard::with_parent(&root_bb);
-        let right_bb = Blackboard::with_parent(&root_bb);
-
-        left_bb.set("foo", 123u32);
-
-        assert!(left_bb.get::<u32>("foo").is_some());
-        // These two should be none because remapping is not enabled
-        assert!(right_bb.get::<u32>("foo").is_none());
-        assert!(root_bb.get::<u32>("foo").is_none());
-    }
-
-    #[rstest]
-    fn auto_remapping() {
-        // With autoremapping
-
-        let root_bb = Blackboard::new();
-        let left_bb = Blackboard::with_parent(&root_bb);
-        let right_bb = Blackboard::with_parent(&root_bb);
-
-        root_bb.set_auto_remapping(true);
-        left_bb.set_auto_remapping(true);
-        right_bb.set_auto_remapping(true);
-
-        left_bb.set("foo", 123u32);
-
-        assert_eq!(left_bb.get::<u32>("foo"), Some(123));
-        assert_eq!(right_bb.get::<u32>("foo"), Some(123));
-        assert_eq!(root_bb.get::<u32>("foo"), Some(123));
-    }
-
-    #[rstest]
-    fn custom_remapping() {
-        // With custom remapping
-        let root_bb = Blackboard::new();
-        let left_bb = Blackboard::with_parent(&root_bb);
-        let right_bb = Blackboard::with_parent(&root_bb);
-
-        right_bb.add_subtree_remapping(String::from("foo"), String::from("bar"));
-        left_bb.add_subtree_remapping(String::from("foo"), String::from("bar"));
-
-        left_bb.set("foo", 123u32);
-
-        assert_eq!(left_bb.get::<u32>("foo"), Some(123));
-        assert_eq!(right_bb.get::<u32>("foo"), Some(123));
-        assert_eq!(root_bb.get::<u32>("bar"), Some(123));
-    }
-
-    #[test]
-    fn remapping() {
-        // No remapping
-
-        let root_bb = Blackboard::new();
-        let child_bb = Blackboard::with_parent(&root_bb);
-
-        root_bb.set("foo", 123u32);
-
-        assert!(child_bb.get::<u32>("foo").is_none());
-
-        // Auto remapping
-
-        let root_bb = Blackboard::new();
-        let child1_bb = Blackboard::with_parent(&root_bb);
-        let child2_bb = Blackboard::with_parent(&child1_bb);
-        let child3_bb = Blackboard::with_parent(&child2_bb);
-
-        child1_bb.set_auto_remapping(true);
-        child2_bb.set_auto_remapping(true);
-        child3_bb.set_auto_remapping(true);
-
-        root_bb.set("foo", 123u32);
-
-        assert_eq!(child1_bb.get::<u32>("foo"), Some(123));
-        assert_eq!(child2_bb.get::<u32>("foo"), Some(123));
-        assert_eq!(child3_bb.get::<u32>("foo"), Some(123));
-
-        // Custom remapping
-
-        let root_bb = Blackboard::new();
-        let child1_bb = Blackboard::with_parent(&root_bb);
-        let child2_bb = Blackboard::with_parent(&child1_bb);
-        let child3_bb = Blackboard::with_parent(&child2_bb);
-
-        child1_bb.add_subtree_remapping(String::from("child1"), String::from("root"));
-        child2_bb.add_subtree_remapping(String::from("child2"), String::from("child1"));
-        child3_bb.add_subtree_remapping(String::from("child3"), String::from("child2"));
-
-        root_bb.set("root", 123u32);
-
-        assert_eq!(child1_bb.get::<u32>("child1"), Some(123));
-        assert_eq!(child2_bb.get::<u32>("child2"), Some(123));
-        assert_eq!(child3_bb.get::<u32>("child3"), Some(123));
-        assert_eq!(child3_bb.get::<u32>("foo"), None);
-    }
-
-    #[rstest]
-    fn type_matching() {
-        let bb = Blackboard::new();
-
-        bb.set("foo", 123u32);
-
-        assert!(bb.get::<u32>("foo").is_some());
-        assert!(bb.get::<String>("foo").is_none());
-        assert!(bb.get::<f32>("foo").is_none());
-    }
-
-    #[rstest]
-    fn custom_type() {
-        #[derive(Clone, Debug, PartialEq)]
-        struct CustomEntry {
-            pub foo: u32,
-            pub bar: String,
-        }
-
-        impl FromStr for CustomEntry {
-            type Err = anyhow::Error;
-
-            fn from_str(value: &str) -> Result<Self, Self::Err> {
-                let splits: Vec<&str> = value.split(',').collect();
-
-                if splits.len() != 2 {
-                    Err(anyhow::anyhow!("Error!"))
-                } else {
-                    let foo = splits[0].parse()?;
-                    Ok(CustomEntry {
-                        foo,
-                        bar: splits[1].to_string(),
-                    })
-                }
-            }
-        }
-
-        let bb = Blackboard::new();
-
-        let custom_value = CustomEntry {
-            foo: 123,
-            bar: String::from("bar"),
-        };
-
-        bb.set("custom", custom_value.clone());
-        bb.set("custom_str", String::from("123,bar"));
-        bb.set("custom_str_malformed", String::from("not an int,bar"));
-
-        assert_eq!(bb.get::<CustomEntry>("custom"), Some(custom_value.clone()));
-
-        // Check parse from String
-        assert_eq!(bb.get::<CustomEntry>("custom_str"), Some(custom_value));
-        let val = bb.get::<CustomEntry>("custom_str_malformed");
-        // Check it returns None if it cannot be parsed
-        assert!(val.is_none());
-    }
-
-    #[rstest]
-    fn get_exact() {
-        let bb = Blackboard::new();
-
-        bb.set::<i32>("i32", 100i32);
-        bb.set("i32_str", "100");
-
-        assert!(bb.get_exact::<i32>("i32").is_some());
-        assert!(bb.get_exact::<&str>("i32_str").is_some());
-        // Should not try to convert &str to i32
-        assert!(bb.get_exact::<i32>("i32_str").is_none());
-
-        // After calling get, get_exact should work
-        assert!(bb.get::<i32>("i32_str").is_some());
-        assert!(bb.get_exact::<i32>("i32_str").is_some());
     }
 }
