@@ -55,22 +55,22 @@ impl Op {
             Op::Div => lhs.checked_div(rhs),
             Op::Mod => lhs.checked_mod(rhs),
             Op::Exp => lhs.checked_pow(rhs),
-            Op::Eq => Ok(Value::Boolean(lhs.eq(rhs))),
-            Op::Neq => Ok(Value::Boolean(lhs.neq(rhs))),
-            Op::Gt => Ok(Value::Boolean(lhs.gt(rhs))),
-            Op::Lt => Ok(Value::Boolean(lhs.lt(rhs))),
-            Op::Geq => Ok(Value::Boolean(lhs.geq(rhs))),
-            Op::Leq => Ok(Value::Boolean(lhs.leq(rhs))),
-            Op::And => Ok(Value::Boolean(lhs.and(rhs))),
-            Op::Or => Ok(Value::Boolean(lhs.or(rhs))),
+            Op::Eq => Ok(Value::Boolean(lhs._eq(rhs))),
+            Op::Neq => Ok(Value::Boolean(lhs._neq(rhs))),
+            Op::Gt => Ok(Value::Boolean(lhs._gt(rhs)?)),
+            Op::Lt => Ok(Value::Boolean(lhs._lt(rhs)?)),
+            Op::Geq => Ok(Value::Boolean(lhs._geq(rhs)?)),
+            Op::Leq => Ok(Value::Boolean(lhs._leq(rhs)?)),
+            Op::And => Ok(Value::Boolean(lhs._and(rhs))),
+            Op::Or => Ok(Value::Boolean(lhs._or(rhs))),
             name => unreachable!("expected a binary operator, got {name:?}"),
         }
     }
 
     pub(super) fn unary(&self, value: &Value) -> ExprResult<Value> {
         match self {
-            Op::Neg => value.neg(),
-            Op::Not => Ok(Value::Boolean(value.not())),
+            Op::Neg => value._neg(),
+            Op::Not => Ok(Value::Boolean(value._not())),
             name => unreachable!("expected a unary operator, got {name:?}"),
         }
     }

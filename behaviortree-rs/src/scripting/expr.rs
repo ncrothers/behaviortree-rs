@@ -7,16 +7,18 @@ use pest::{
 };
 use pest_derive::Parser;
 
-use crate::blackboard::Blackboard;
-
 use super::{
+    context::ContextInternal,
     operator::Op,
     value::{Value, ValueOrAny, ValuePointer},
+    Context,
 };
 
 #[derive(Parser)]
 #[grammar = "scripting/expr.pest"]
 pub struct ExprParser;
+
+pub type ExprResult<T> = anyhow::Result<T>;
 
 static PRATT_PARSER: OnceLock<PrattParser<Rule>> = OnceLock::new();
 
@@ -207,13 +209,6 @@ impl Expr {
         let mut variables = Vec::new();
 
         Self::validate_recursive(self, &mut variables)
-    }
-
-    pub(crate) fn as_value(&self) -> Option<&Value> {
-        match self {
-            Self::Value(value) => Some(value),
-            _ => None,
-        }
     }
 
     pub(crate) fn as_value_pointer(&self) -> Option<&ValuePointer> {
@@ -447,7 +442,6 @@ impl Expr {
     }
 }
 
-pub type ExprResult<T> = anyhow::Result<T>;
 type FunctionType = dyn Fn(Vec<ValueOrAny>) -> ExprResult<Value>;
 
 pub struct Function {
@@ -482,92 +476,6 @@ where
     }
 }
 
-struct ContextInternal<'a> {
-    context: &'a Context,
-    variables: HashMap<String, Value>,
-}
-
-#[derive(Debug, Default)]
-pub struct Context {
-    variables: HashMap<String, Value>,
-    functions: HashMap<String, Function>,
-    blackboard: Blackboard,
-}
-
-impl Context {
-    /// Create a new, empty `Context` with the provided [`Blackboard`].
-    pub fn new(blackboard: Blackboard) -> Self {
-        Self {
-            variables: HashMap::new(),
-            functions: HashMap::new(),
-            blackboard,
-        }
-    }
-
-    /// Get a reference to the variable value of `name`.
-    pub fn get_value(&self, name: &str) -> Option<&Value> {
-        self.variables.get(name)
-    }
-
-    /// Get a mutable reference to the variable value of `name`.
-    pub fn get_value_mut(&mut self, name: &str) -> Option<&mut Value> {
-        self.variables.get_mut(name)
-    }
-
-    /// Set the value of a variable `name`. Note that variables have static types,
-    /// so you cannot change the type of a variable after it has been set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use behaviortree_rs::prelude::*;
-    /// use behaviortree_rs::scripting::Context;
-    ///
-    /// let blackboard = Blackboard::new();
-    ///
-    /// let mut context = Context::new(blackboard);
-    ///
-    /// let res = context.set_value("foo", 123i64);
-    /// assert!(res.is_ok());
-    ///
-    /// // You cannot change the type of "foo", so this will return an error
-    /// let res = context.set_value("foo", true);
-    /// assert!(res.is_err());
-    /// ```
-    pub fn set_value(
-        &mut self,
-        name: impl Into<String>,
-        value: impl Into<Value>,
-    ) -> ExprResult<()> {
-        let name = name.into();
-        let value = value.into();
-
-        if let Some(existing) = self.get_value_mut(&name) {
-            if existing.as_type() == value.as_type() {
-                *existing = value;
-            } else {
-                return Err(anyhow::format_err!("Can't change the type of a variable"));
-            }
-        } else {
-            self.variables.insert(name, value);
-        }
-
-        Ok(())
-    }
-
-    /// Add a function to be made available in the context.
-    pub fn add_function(&mut self, name: impl Into<String>, f: impl Into<Function>) {
-        self.functions.insert(name.into(), f.into());
-    }
-
-    pub fn call_function(&self, name: &str, args: Vec<ValueOrAny>) -> ExprResult<Value> {
-        self.functions
-            .get(name)
-            .map(|f| f.call(args))
-            .ok_or_else(|| anyhow::format_err!("Function {name} not found in context"))?
-    }
-}
-
 fn lex_expr(text: &str) -> anyhow::Result<Pairs<'_, Rule>> {
     Ok(ExprParser::parse(Rule::root, text)?)
 }
@@ -580,6 +488,8 @@ fn pairs_to_expr<'a>(pairs: impl Iterator<Item = Pair<'a, Rule>>) -> Expr {
 
 #[cfg(test)]
 mod tests {
+    use crate::Blackboard;
+
     use super::*;
 
     use rstest::rstest;
