@@ -3,7 +3,7 @@ use behaviortree_rs::{
     blackboard::Blackboard,
     node_registry::NodeRegistry,
     nodes::ToBoxed,
-    tree::{Tree, TreeConfig},
+    tree::Tree,
 };
 use rstest::rstest;
 
@@ -50,9 +50,7 @@ fn registering() {
         NodeType::Action,
     );
 
-    let config = TreeConfig::builder().registry(&registry).xml(&xml).build();
-
-    let tree = Tree::from_config(&config);
+    let tree = Tree::builder(&xml, &registry).build();
 
     assert!(tree.is_ok());
 
@@ -74,13 +72,9 @@ fn registering() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_err());
 
@@ -98,13 +92,9 @@ fn registering() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 }
@@ -131,13 +121,9 @@ fn main_tree_attr() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 
@@ -159,13 +145,9 @@ fn main_tree_attr() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_err());
 
@@ -183,13 +165,9 @@ fn main_tree_attr() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 }
@@ -220,13 +198,9 @@ fn subtrees() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::new();
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();
@@ -257,13 +231,9 @@ fn node_not_registered() {
     // Don't register StatusNode
 
     let blackboard = Blackboard::new();
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_err());
 }
@@ -290,13 +260,9 @@ fn ignore_treenodesmodel() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::new();
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -333,13 +299,9 @@ fn load_adjacent_controls() {
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::new();
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -376,13 +338,9 @@ fn async_test() {
     registry.insert("EchoNode", || EchoNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::new();
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     if tree.is_err() {
         log::error!("{}", tree.as_ref().err().unwrap());
@@ -418,13 +376,9 @@ fn condition() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard.clone())
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
 
@@ -604,13 +558,9 @@ fn parsing(#[case] xml: &str, #[case] is_ok: bool) {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
 
     let blackboard = Blackboard::new();
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert_eq!(tree.is_ok(), is_ok);
 }

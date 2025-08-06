@@ -38,14 +38,13 @@ fn fallback() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("{status:?}"),

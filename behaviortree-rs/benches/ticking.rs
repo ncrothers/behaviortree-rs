@@ -22,9 +22,7 @@ fn deep_tree_n(depth: u32) -> Tree {
 
     let registry = registry();
 
-    let config = TreeConfig::builder().registry(&registry).xml(&xml).build();
-
-    Tree::from_config(&config).unwrap()
+    Tree::builder(&xml, &registry).build().unwrap()
 }
 
 fn shallow_tree() -> Tree {
@@ -32,9 +30,7 @@ fn shallow_tree() -> Tree {
 
     let registry = registry();
 
-    let config = TreeConfig::builder().registry(&registry).xml(&xml).build();
-
-    Tree::from_config(&config).unwrap()
+    Tree::builder(&xml, &registry).build().unwrap()
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

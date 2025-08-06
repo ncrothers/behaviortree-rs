@@ -33,5 +33,5 @@ pub mod prelude {
     pub use crate::node_registry::NodeRegistry;
     pub use crate::nodes::*;
     pub use crate::scripting::*;
-    pub use crate::tree::{Tree, TreeConfig};
+    pub use crate::tree::{Tree, TreeBuilder};
 }

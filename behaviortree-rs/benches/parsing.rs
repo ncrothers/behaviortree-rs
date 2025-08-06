@@ -17,12 +17,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         &(deep_tree, registry),
         |b, (xml, registry)| {
             b.iter_custom(|iters| {
-                let config = TreeConfig::builder().registry(registry).xml(xml).build();
+                let config = Tree::builder(xml, registry);
 
                 let start = Instant::now();
 
                 for _ in 0..iters {
-                    black_box(Tree::from_config(&config).unwrap());
+                    black_box(config.build().unwrap());
                 }
 
                 start.elapsed()

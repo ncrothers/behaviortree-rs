@@ -3,7 +3,7 @@ use behaviortree_rs::{
     blackboard::Blackboard,
     node_registry::NodeRegistry,
     nodes::ToBoxed,
-    tree::{Tree, TreeConfig},
+    tree::Tree,
 };
 
 mod nodes;
@@ -33,14 +33,13 @@ fn force_failure() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -73,14 +72,13 @@ fn force_success() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -113,14 +111,13 @@ fn inverter() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -160,14 +157,13 @@ fn keep_running_until_failure() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -208,14 +204,13 @@ fn repeat() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -260,14 +255,13 @@ fn retry() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {
@@ -310,14 +304,13 @@ fn run_once() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => {

@@ -2,7 +2,7 @@ use behaviortree_rs::{
     basic_types::NodeType,
     node_registry::NodeRegistry,
     nodes::{NodeStatus, ToBoxed},
-    tree::{Tree, TreeConfig},
+    tree::Tree,
     Blackboard,
 };
 use nodes::StatusNode;
@@ -24,13 +24,9 @@ async fn check_send_sync() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
     let mut tree = tree.unwrap();

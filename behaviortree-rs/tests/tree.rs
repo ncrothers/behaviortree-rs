@@ -1,9 +1,5 @@
 use behaviortree_rs::{
-    basic_types::NodeType,
-    node_registry::NodeRegistry,
-    nodes::ToBoxed,
-    tree::{Tree, TreeConfig},
-    Blackboard,
+    basic_types::NodeType, node_registry::NodeRegistry, nodes::ToBoxed, tree::Tree, Blackboard,
 };
 use nodes::StatusNode;
 
@@ -36,13 +32,9 @@ fn visitor() {
     registry.insert("StatusNode", || StatusNode.to_boxed(), NodeType::Action);
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .build();
-
-    let tree = Tree::from_config(&config);
 
     assert!(tree.is_ok());
     let tree = tree.unwrap();

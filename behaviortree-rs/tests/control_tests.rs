@@ -1,9 +1,6 @@
 use behaviortree_rs::{
-    basic_types::NodeType,
-    blackboard::Blackboard,
-    node_registry::NodeRegistry,
-    nodes::ToBoxed,
-    tree::{Tree, TreeConfig},
+    basic_types::NodeType, blackboard::Blackboard, node_registry::NodeRegistry, nodes::ToBoxed,
+    tree::Tree,
 };
 
 mod nodes;
@@ -37,14 +34,13 @@ fn if_then_else() {
 
     let blackboard = Blackboard::default();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -77,14 +73,13 @@ fn parallel_all() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -119,14 +114,13 @@ fn parallel() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -158,14 +152,13 @@ fn reactive_fallback() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -203,14 +196,13 @@ fn reactive_sequence() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -248,14 +240,13 @@ fn sequence_star() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -293,14 +284,13 @@ fn sequence_vanilla() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),
@@ -337,14 +327,13 @@ fn while_do_else() {
 
     let blackboard = Blackboard::new();
 
-    let config = TreeConfig::builder()
+    let tree = Tree::builder(&xml, &registry)
         .blackboard(blackboard)
-        .registry(&registry)
-        .xml(&xml)
         .tree_name("main")
         .build();
 
-    let mut tree = Tree::from_config(&config).unwrap();
+    assert!(tree.is_ok());
+    let mut tree = tree.unwrap();
 
     match tree.tick_while_running() {
         Ok(status) => log::info!("Final status: {status:?}"),

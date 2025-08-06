@@ -16,8 +16,6 @@ use std::{
     sync::Arc,
 };
 
-use typed_builder::TypedBuilder;
-
 use crate::{
     basic_types::{get_remapped_key, NodeType, PortDirection, TreeNodeManifest},
     blackboard::BlackboardString,
@@ -247,12 +245,12 @@ impl NodeDataGeneric {
     }
 
     /// Get a mutable reference to the [`NodeMetadata`]
-    pub fn metadata_mut(&mut self) -> &mut NodeMetadata {
+    pub(crate) fn metadata_mut(&mut self) -> &mut NodeMetadata {
         &mut self.meta
     }
 
     /// Get a reference to the [`NodeMetadata`]
-    pub fn metadata(&self) -> &NodeMetadata {
+    pub(crate) fn metadata(&self) -> &NodeMetadata {
         &self.meta
     }
 
@@ -397,9 +395,8 @@ pub enum PostCond {
 // =========================================
 
 /// Contains all common configuration that all types of nodes use.
-#[derive(Clone, Debug, TypedBuilder)]
-pub struct NodeMetadata {
-    #[builder(default)]
+#[derive(Clone, Debug)]
+pub(crate) struct NodeMetadata {
     pub(crate) uid: u16,
     /// Name of the node as registered in the `Factory`
     pub(crate) name: String,
@@ -408,18 +405,33 @@ pub struct NodeMetadata {
     /// The type of this node
     pub(crate) node_type: NodeType,
     /// Values of ports set in the node XML attributes
-    #[builder(default)]
     pub(crate) port_values: HashMap<String, (PortDirection, String)>,
     pub(crate) manifest: Arc<TreeNodeManifest>,
     /// TODO: not used
-    #[builder(default)]
     pub(crate) _pre_conditions: HashMap<PreCond, String>,
     /// TODO: not used
-    #[builder(default)]
     pub(crate) _post_conditions: HashMap<PostCond, String>,
 }
 
 impl NodeMetadata {
+    pub(crate) fn new(
+        name: String,
+        path: String,
+        node_type: NodeType,
+        manifest: Arc<TreeNodeManifest>,
+    ) -> Self {
+        Self {
+            uid: 0,
+            name,
+            path,
+            node_type,
+            port_values: HashMap::new(),
+            manifest,
+            _pre_conditions: HashMap::new(),
+            _post_conditions: HashMap::new(),
+        }
+    }
+
     /// Sets the value of a port. Used in XML parsing to set the value of a port
     /// using the string value of the XML attribute.
     pub(crate) fn set_port_value(&mut self, direction: PortDirection, name: String, value: String) {

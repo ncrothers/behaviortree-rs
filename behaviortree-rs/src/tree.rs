@@ -1,5 +1,3 @@
-use typed_builder::TypedBuilder;
-
 use crate::{
     basic_types::NodeStatus,
     blackboard::Blackboard,
@@ -48,21 +46,16 @@ pub struct NodeIter<'a> {
 /// </root>
 /// "#;
 ///
-/// let config = TreeConfig::builder()
-///     .registry(&registry)
-///     .xml(xml)
+/// let tree = Tree::builder(xml, &registry)
 ///     // Optional
 ///     .tree_name("main-tree")
 ///     // Optional
 ///     .blackboard(Blackboard::new())
 ///     .build();
 ///
-/// let tree = Tree::from_config(&config);
-///
 /// assert!(tree.is_ok());
 /// ```
-#[derive(TypedBuilder)]
-pub struct TreeConfig<'a> {
+pub struct TreeBuilder<'a> {
     /// Holds all registered nodes
     pub(crate) registry: &'a NodeRegistry,
     /// XML text to parse the tree from
@@ -72,11 +65,16 @@ pub struct TreeConfig<'a> {
     /// When this is `None`, the `main_tree_to_execute` value will be used if set.
     /// If there is no `main_tree_to_execute` attribute set, there must be only
     /// one behavior tree defined in the XML text, otherwise the build will fail.
-    #[builder(default, setter(strip_option))]
     pub(crate) tree_name: Option<&'a str>,
     /// Optional. Provide an external [`Blackboard`] to use as the root for this
     /// tree. If not provided, a new one will be allocated and used as the root.
-    #[builder(default)]
+    pub(crate) blackboard: Option<Blackboard>,
+}
+
+pub(crate) struct TreeConfig<'a> {
+    pub(crate) registry: &'a NodeRegistry,
+    pub(crate) xml: &'a str,
+    pub(crate) tree_name: Option<&'a str>,
     pub(crate) blackboard: Blackboard,
 }
 
@@ -110,16 +108,12 @@ pub struct TreeConfig<'a> {
 /// </root>
 /// "#;
 ///
-/// let config = TreeConfig::builder()
-///     .registry(&registry)
-///     .xml(xml)
+/// let tree = Tree::builder(xml, &registry)
 ///     // Optional
 ///     .tree_name("main-tree")
 ///     // Optional
 ///     .blackboard(Blackboard::default())
 ///     .build();
-///
-/// let tree = Tree::from_config(&config);
 ///
 /// assert!(tree.is_ok());
 /// ```
@@ -128,16 +122,51 @@ pub struct Tree {
     root: TreeNode,
 }
 
+impl<'a> TreeBuilder<'a> {
+    pub fn tree_name(self, name: &'a str) -> Self {
+        TreeBuilder {
+            tree_name: Some(name),
+            ..self
+        }
+    }
+
+    pub fn blackboard(self, blackboard: Blackboard) -> Self {
+        TreeBuilder {
+            blackboard: Some(blackboard),
+            ..self
+        }
+    }
+
+    pub fn build(&self) -> Result<Tree, ParseError> {
+        let config = TreeConfig {
+            xml: self.xml,
+            registry: self.registry,
+            tree_name: self.tree_name,
+            blackboard: self
+                .blackboard
+                .as_ref()
+                .map(|bb| bb.clone())
+                .unwrap_or_default(),
+        };
+
+        let mut parser = Parser::new(&config);
+
+        parser.create_tree()
+    }
+}
+
 impl Tree {
     pub(crate) fn new(root: TreeNode) -> Tree {
         Self { root }
     }
 
-    /// Creates a behavior tree from the [`TreeConfig`].
-    pub fn from_config(config: &TreeConfig) -> Result<Self, ParseError> {
-        let mut parser = Parser::new(config);
-
-        parser.create_tree()
+    pub fn builder<'a>(xml: &'a str, node_registry: &'a NodeRegistry) -> TreeBuilder<'a> {
+        TreeBuilder {
+            registry: node_registry,
+            xml,
+            tree_name: None,
+            blackboard: None,
+        }
     }
 
     fn tick_root(&mut self, opt: TickOption) -> NodeResult {

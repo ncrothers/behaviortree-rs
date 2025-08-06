@@ -321,17 +321,17 @@ impl<'a> Parser<'a> {
                     .build_node(&node_name)
                     .ok_or_else(|| ParseError::UnknownNode(node_name.clone()))?;
 
-                let node_meta = NodeMetadata::builder()
-                    .name(node_name.clone())
-                    .node_type(node_type)
-                    .path(path.clone())
-                    .manifest(Arc::new(TreeNodeManifest::new(
+                let node_meta = NodeMetadata::new(
+                    node_name.clone(),
+                    path.clone(),
+                    node_type,
+                    Arc::new(TreeNodeManifest::new(
                         node_type,
                         node_name.clone(),
                         node.ports(),
                         String::new(),
-                    )))
-                    .build();
+                    )),
+                );
 
                 let node = match node_type {
                     NodeType::Control => {
@@ -487,17 +487,17 @@ impl<'a> Parser<'a> {
 
                         let node = SubTreeNode.to_boxed();
 
-                        let node_meta = NodeMetadata::builder()
-                            .name(id.to_owned())
-                            .node_type(NodeType::SubTree)
-                            .path(path)
-                            .manifest(Arc::new(TreeNodeManifest::new(
+                        let node_meta = NodeMetadata::new(
+                            id.to_owned(),
+                            path,
+                            NodeType::SubTree,
+                            Arc::new(TreeNodeManifest::new(
                                 NodeType::Control,
                                 node_name.clone(),
                                 node.ports(),
                                 String::new(),
-                            )))
-                            .build();
+                            )),
+                        );
 
                         let node_data = NodeDataGeneric {
                             meta: node_meta,
@@ -525,17 +525,17 @@ impl<'a> Parser<'a> {
 
                         let path = path_prefix.to_owned() + &node_name;
 
-                        let node_meta = NodeMetadata::builder()
-                            .name(node_name.clone())
-                            .node_type(node_type)
-                            .path(path)
-                            .manifest(Arc::new(TreeNodeManifest::new(
+                        let node_meta = NodeMetadata::new(
+                            node_name.clone(),
+                            path,
+                            node_type,
+                            Arc::new(TreeNodeManifest::new(
                                 node_type,
                                 node_name.clone(),
                                 node.ports(),
                                 String::new(),
-                            )))
-                            .build();
+                            )),
+                        );
 
                         let node_data = NodeDataGeneric {
                             meta: node_meta,
